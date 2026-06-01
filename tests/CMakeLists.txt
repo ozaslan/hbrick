@@ -137,3 +137,52 @@ target_link_libraries(
 )
 
 add_test(NAME test_scc_dag COMMAND test_scc_dag)
+
+add_executable(test_csr_baselines unit/test_csr_baselines.cpp)
+
+target_link_libraries(
+    test_csr_baselines
+    PRIVATE
+        hbrick_baselines
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_csr_baselines COMMAND test_csr_baselines)
+
+add_executable(test_svg_canvas unit/test_svg_canvas.cpp)
+
+target_link_libraries(
+    test_svg_canvas
+    PRIVATE
+        hbrick_viz
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_svg_canvas COMMAND test_svg_canvas)
+
+add_executable(test_bench unit/test_bench.cpp)
+
+target_link_libraries(
+    test_bench
+    PRIVATE
+        hbrick_bench
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_bench COMMAND test_bench)
+
+add_executable(test_correctness_harness integration/test_correctness_harness.cpp)
+
+target_link_libraries(
+    test_correctness_harness
+    PRIVATE
+        hbrick_baselines
+        hbrick_bench
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_correctness_harness COMMAND test_correctness_harness)

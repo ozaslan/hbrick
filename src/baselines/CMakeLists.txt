@@ -3,6 +3,9 @@ add_library(
     closure_matrix_builder.cpp
     scc_dag_search_baseline.cpp
     scc_dag_closure_baseline.cpp
+    csr_bfs_baseline.cpp
+    csr_dfs_baseline.cpp
+    full_closure_baseline.cpp
 )
 
 target_include_directories(
