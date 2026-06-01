@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+
+      - name: Configure
+        run: cmake --preset dev -DHBRICK_WARNINGS_AS_ERRORS=ON -DHBRICK_BUILD_DOCS=ON
+
+      - name: Build
+        run: cmake --build --preset dev
+
+      - name: Build docs
+        run: cmake --build --preset dev --target hbrick_docs
+
+      - name: Test
+        run: ctest --preset dev --output-on-failure

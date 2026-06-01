@@ -10,6 +10,26 @@ if(NOT GTest_FOUND)
     FetchContent_MakeAvailable(googletest)
 endif()
 
+add_library(
+    hbrick_test_support
+    support/maze_generator.cpp
+    support/reachability_oracle.cpp
+)
+
+target_include_directories(
+    hbrick_test_support
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/support
+)
+
+target_link_libraries(
+    hbrick_test_support
+    PUBLIC
+        hbrick_baselines
+        GTest::gtest
+        hbrick_project_warnings
+)
+
 add_executable(test_placeholder unit/test_placeholder.cpp)
 
 target_link_libraries(
@@ -179,10 +199,57 @@ add_executable(test_correctness_harness integration/test_correctness_harness.cpp
 target_link_libraries(
     test_correctness_harness
     PRIVATE
-        hbrick_baselines
-        hbrick_bench
+        hbrick_test_support
         GTest::gtest_main
         hbrick_project_warnings
 )
 
 add_test(NAME test_correctness_harness COMMAND test_correctness_harness)
+
+add_executable(test_maze_reachability integration/test_maze_reachability.cpp)
+
+target_link_libraries(
+    test_maze_reachability
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_maze_reachability COMMAND test_maze_reachability)
+
+add_executable(test_dag_reachability unit/test_dag_reachability.cpp)
+
+target_link_libraries(
+    test_dag_reachability
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_dag_reachability COMMAND test_dag_reachability)
+
+add_executable(test_hot_path_allocations unit/test_hot_path_allocations.cpp)
+
+target_link_libraries(
+    test_hot_path_allocations
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_hot_path_allocations COMMAND test_hot_path_allocations)
+
+add_executable(test_maze_generator unit/test_maze_generator.cpp)
+
+target_link_libraries(
+    test_maze_generator
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_maze_generator COMMAND test_maze_generator)

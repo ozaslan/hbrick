@@ -53,7 +53,7 @@ void carveWallBetween(
 
 void shuffleDirections(std::array<std::size_t, 4>& order, std::mt19937_64& rng) {
     for (std::size_t index = order.size(); index > 1U; --index) {
-        const std::uniform_int_distribution<std::size_t> dist(0U, index - 1U);
+        std::uniform_int_distribution<std::size_t> dist(0U, index - 1U);
         const std::size_t swap_index = dist(rng);
         std::swap(order[index - 1U], order[swap_index]);
     }
@@ -122,8 +122,6 @@ void carvePerfectMaze(
 
 void addExtraPassages(
     PassableGrid& grid,
-    const uint32_t logical_width,
-    const uint32_t logical_height,
     std::mt19937_64& rng,
     const uint32_t extra_openings
 ) {
@@ -157,9 +155,6 @@ void addExtraPassages(
         const std::array<uint32_t, 2> wall = candidate_walls[static_cast<std::size_t>(index)];
         grid.setPassable(wall[0U], wall[1U], true);
     }
-
-    static_cast<void>(logical_width);
-    static_cast<void>(logical_height);
 }
 
 }  // namespace
@@ -189,13 +184,7 @@ PassableGrid generateMazeWithExtraPassages(
     }
 
     std::mt19937_64 opening_rng{opening_seed};
-    addExtraPassages(
-        grid,
-        params.logical_width,
-        params.logical_height,
-        opening_rng,
-        extra_openings
-    );
+    addExtraPassages(grid, opening_rng, extra_openings);
     return grid;
 }
 

@@ -1,3 +1,10 @@
 build/
 .cache/
 compile_commands.json
+
+# Generated Doxygen output (sources live in docs/*.md, docs/Doxyfile.in, etc.)
+docs/html/
+docs/latex/
+docs/xml/
+docs/man/
+docs/rtf/

@@ -1,3 +1,9 @@
+/**
+ * @file scc_decomposition.hpp
+ * @ingroup hbrick_graph
+ * @brief Strongly connected component decomposition of directed graphs.
+ */
+
 #pragma once
 
 #include <cstdint>
@@ -8,17 +14,44 @@
 
 namespace hbrick {
 
+/**
+ * @brief Strongly connected component (SCC) labeling of a directed graph.
+ * @ingroup hbrick_graph
+ *
+ * Produced by @ref compute using Tarjan's algorithm. Each vertex maps to a
+ * dense component id in @c [0, numComponents()). Component ids are stable for
+ * the lifetime of the decomposition object.
+ */
 class SccDecomposition {
 public:
+    /** @brief Constructs an empty decomposition. @ingroup hbrick_graph */
     SccDecomposition() = default;
 
+    /**
+     * @brief Computes SCCs for @p graph.
+     * @ingroup hbrick_graph
+     *
+     * @param graph Input directed graph.
+     * @param scratch Reusable workspace; resized internally as needed.
+     * @return Decomposition assigning each vertex a component id.
+     */
     [[nodiscard]] static SccDecomposition compute(
         const CsrGraph& graph,
         GraphSearchScratch& scratch
     );
 
+    /** @brief Returns the vertex count of the decomposed graph. @return The vertex count of the decomposed graph. @ingroup hbrick_graph */
     [[nodiscard]] uint32_t numVertices() const noexcept { return num_vertices_; }
+    /** @brief Returns the number of strongly connected components found. @return The number of strongly connected components found. @ingroup hbrick_graph */
     [[nodiscard]] uint32_t numComponents() const noexcept { return num_components_; }
+
+    /**
+     * @brief Returns the component id of @p vertex.
+     * @ingroup hbrick_graph
+     *
+     * @param vertex Zero-based vertex index.
+     * @return Dense component id in @c [0, numComponents()).
+     */
     [[nodiscard]] uint32_t componentOf(uint32_t vertex) const noexcept;
 
 private:

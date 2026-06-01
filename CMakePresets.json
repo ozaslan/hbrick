@@ -12,7 +12,7 @@
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build/dev",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CXX_STANDARD": "20",
                 "HBRICK_WARNINGS_AS_ERRORS": "ON"
             }
