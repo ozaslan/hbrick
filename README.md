@@ -129,7 +129,7 @@ Hot traversal and query paths are optimized for predictable performance:
 - **No heap allocations** inside traversal, search, or query functions
 - **No associative containers** on hot paths — contiguous arrays and bit-parallel words instead
 - **No virtual dispatch** — flat, statically dispatched code
-- **Scratch reuse** via `GraphSearchScratch` with visited-mark stamping and overflow handling
+- **Scratch reuse** via `GraphSearchScratch` with visited-mark stamping and overflow handling — see [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) for design details
 
 Closure-based baselines estimate memory **before** allocation and return `SkippedByPolicy` when a configured limit would be exceeded.
 
