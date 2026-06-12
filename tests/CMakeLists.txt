@@ -54,17 +54,17 @@ target_link_libraries(
 
 add_test(NAME test_core_types COMMAND test_core_types)
 
-add_executable(test_passable_grid unit/test_passable_grid.cpp)
+add_executable(test_maze_layout unit/test_maze_layout.cpp)
 
 target_link_libraries(
-    test_passable_grid
+    test_maze_layout
     PRIVATE
         hbrick_grid
         GTest::gtest_main
         hbrick_project_warnings
 )
 
-add_test(NAME test_passable_grid COMMAND test_passable_grid)
+add_test(NAME test_maze_layout COMMAND test_maze_layout)
 
 add_executable(test_csr_graph unit/test_csr_graph.cpp)
 

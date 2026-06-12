@@ -30,7 +30,7 @@ The library is split into target-based CMake modules:
 | CMake target | Namespace | Purpose |
 |--------------|-----------|---------|
 | `hbrick_core` | `hbrick::` | Shared types, vertex IDs, reachability answers, status reporting |
-| `hbrick_grid` | `hbrick::` | Rectangular passable grids and cardinal directions |
+| `hbrick_grid` | `hbrick::` | Maze layouts and cardinal directions |
 | `hbrick_graph` | `hbrick::` | CSR storage, BFS/DFS, SCC decomposition, condensation DAG, DAG reachability |
 | `hbrick_bit` | `hbrick::` | Bit vectors, bit matrices, boolean closure (pure bit logic) |
 | `hbrick_baselines` | `hbrick::` | Reference preprocess/query algorithms for correctness and benchmarking |
@@ -39,7 +39,7 @@ The library is split into target-based CMake modules:
 
 Typical workflow:
 
-1. Build or load a `PassableGrid` or `CsrGraph`.
+1. Build or load a `MazeLayout` or `CsrGraph`.
 2. Optionally convert a grid with `DirectedGridGraphBuilder` (acyclic east/south, bidirectional, or seeded random-asymmetric edges).
 3. Answer reachability via search (`Bfs`, `Dfs`), condensation (`SccDecomposition`, `CondensationGraph`, `DagReachability`), or a baseline for comparison.
 

@@ -53,11 +53,11 @@ Shared identifiers, query descriptors, and status types.
 
 ## hbrick_grid
 
-Rectangular passable grids — the primary **input** format for maze-embedded graphs.
+Rectangular maze layouts — the primary **input** format for maze-embedded graphs.
 
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
-| [`PassableGrid`](../include/hbrick/grid/passable_grid.hpp) | `grid/passable_grid.hpp` | Dense bitmap of passable/blocked cells | Mutable grid with coord ↔ vertex mapping and east/south adjacency enumeration | Building or loading maze layouts before graph conversion |
+| [`MazeLayout`](../include/hbrick/grid/maze_layout.hpp) | `grid/maze_layout.hpp` | Dense bitmap of passable/blocked cells | Mutable grid with coord ↔ vertex mapping and east/south adjacency enumeration | Building or loading maze layouts before graph conversion |
 | [`GridDimensions`](../include/hbrick/grid/grid_dimensions.hpp) | `grid/grid_dimensions.hpp` | Width/height metadata | Bounds checking and cell count (`width × height`) | Grid sizing without storing cell data |
 | [`Direction`](../include/hbrick/grid/direction.hpp) | `grid/direction.hpp` | Cardinal step (E/S/W/N) | Delta offsets for 4-connected neighbor queries | Walking the grid from a cell |
 
@@ -85,7 +85,7 @@ Graph topology representations and construction utilities.
 | [`CsrGraphBuilder`](../include/hbrick/graph/csr_graph_builder.hpp) | `graph/csr_graph_builder.hpp` | Mutable edge collector | Accumulates `Edge32`, sorts, compacts into CSR | Building any directed graph (grid-derived or hand-crafted) |
 | [`CsrGraph`](../include/hbrick/graph/csr_graph.hpp) | `graph/csr_graph.hpp` | Immutable directed graph (CSR) | `row_ptrs` + `col_indices`; allocation-free `outNeighbors()` spans | **Canonical** algorithmic graph representation |
 | [`DirectedGridGraph`](../include/hbrick/graph/directed_grid_graph.hpp) | `graph/directed_grid_graph.hpp` | CSR graph + grid metadata | Wraps `CsrGraph` with `width`/`height` and coord helpers | When you need both adjacency lists and grid coordinates |
-| [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_builder.hpp) | `graph/directed_grid_graph_builder.hpp` | Grid-to-graph factory | Converts `PassableGrid` adjacencies into directed edges | Primary entry point for maze/grid → graph conversion |
+| [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_builder.hpp) | `graph/directed_grid_graph_builder.hpp` | Grid-to-graph factory | Converts `MazeLayout` adjacencies into directed edges | Primary entry point for maze/grid → graph conversion |
 | [`GridEdgeConversionMode`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | Edge-orientation policy enum | `RandomAsymmetric`, `BidirectionalAll`, `AcyclicEastSouth` | Choose how undirected corridors become directed arcs |
 | [`RandomAsymmetricParams`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | RNG seed and probabilities | Controls seeded random edge orientation | Parameterize `RandomAsymmetric` conversion mode |
 
@@ -179,7 +179,7 @@ SVG rendering for debugging and test artifacts.
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
 | [`MazeParams`](../tests/support/maze_generator.hpp) | `tests/support/maze_generator.hpp` | Maze generation config | Logical room count and carving seed | Parameterize deterministic maze fixtures |
-| [`generatePerfectMaze`](../tests/support/maze_generator.hpp) | `tests/support/maze_generator.hpp` | Maze generator | Recursive backtracking → tree maze as `PassableGrid` | Integration tests needing acyclic undirected topology |
+| [`generatePerfectMaze`](../tests/support/maze_generator.hpp) | `tests/support/maze_generator.hpp` | Maze generator | Recursive backtracking → tree maze as `MazeLayout` | Integration tests needing acyclic undirected topology |
 | [`generateMazeWithExtraPassages`](../tests/support/maze_generator.hpp) | `tests/support/maze_generator.hpp` | Cyclic maze generator | Adds extra wall removals to introduce cycles | Tests requiring cyclic undirected topology |
 | [`buildGridGraph`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Grid-to-CSR wrapper | `DirectedGridGraphBuilder::build(...).csrGraph()` | Convenience in tests |
 | [`bfsReference`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BFS oracle | Ground-truth reachability for test comparison | Validate baselines against BFS |

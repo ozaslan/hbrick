@@ -15,7 +15,7 @@ namespace hbrick {
  * @ingroup hbrick_core
  *
  * Coordinates use zero-based indexing with @c x increasing to the east and
- * @c y increasing to the south, matching the layout used by @ref hbrick::PassableGrid
+ * @c y increasing to the south, matching the layout used by @ref hbrick::MazeLayout
  * and @ref hbrick::DirectedGridGraph.
  */
 struct GridCoord {

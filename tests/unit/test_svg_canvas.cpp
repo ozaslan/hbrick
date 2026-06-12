@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/viz/grid_graph_renderer.hpp"
 #include "hbrick/viz/svg_canvas.hpp"
 
@@ -55,7 +55,7 @@ TEST(SvgCanvas, ToStringProducesSvgRoot) {
 }
 
 TEST(GridGraphRenderer, RendersGridCellsAndEdges) {
-    const hbrick::PassableGrid grid(2U, 2U);
+    const hbrick::MazeLayout grid(2U, 2U);
     const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::AcyclicEastSouth
@@ -72,7 +72,7 @@ TEST(GridGraphRenderer, RendersGridCellsAndEdges) {
 }
 
 TEST(GridGraphRenderer, EscapesUnsafeLabelsInRenderedOutput) {
-    hbrick::PassableGrid grid(1U, 1U);
+    hbrick::MazeLayout grid(1U, 1U);
     const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::AcyclicEastSouth

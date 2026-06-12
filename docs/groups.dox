@@ -5,7 +5,7 @@
 
 /**
  * @defgroup hbrick_grid Grid utilities
- * @brief Passable grids and coordinate helpers for maze inputs.
+ * @brief Maze layouts and coordinate helpers for grid inputs.
  */
 
 /**

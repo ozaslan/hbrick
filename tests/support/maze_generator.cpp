@@ -26,12 +26,12 @@ constexpr std::array<std::array<int32_t, 2>, 4> kDirections{{
         + static_cast<std::size_t>(x);
 }
 
-void setPassableRoom(PassableGrid& grid, const uint32_t logical_x, const uint32_t logical_y) {
+void setPassableRoom(MazeLayout& grid, const uint32_t logical_x, const uint32_t logical_y) {
     grid.setPassable(2U * logical_x + 1U, 2U * logical_y + 1U, true);
 }
 
 void carveWallBetween(
-    PassableGrid& grid,
+    MazeLayout& grid,
     const uint32_t from_x,
     const uint32_t from_y,
     const uint32_t to_x,
@@ -60,7 +60,7 @@ void shuffleDirections(std::array<std::size_t, 4>& order, std::mt19937_64& rng) 
 }
 
 void carvePerfectMaze(
-    PassableGrid& grid,
+    MazeLayout& grid,
     const uint32_t logical_width,
     const uint32_t logical_height,
     std::mt19937_64& rng
@@ -121,7 +121,7 @@ void carvePerfectMaze(
 }
 
 void addExtraPassages(
-    PassableGrid& grid,
+    MazeLayout& grid,
     std::mt19937_64& rng,
     const uint32_t extra_openings
 ) {
@@ -159,10 +159,10 @@ void addExtraPassages(
 
 }  // namespace
 
-PassableGrid generatePerfectMaze(const MazeParams& params) {
+MazeLayout generatePerfectMaze(const MazeParams& params) {
     const uint32_t physical_width = 2U * params.logical_width + 1U;
     const uint32_t physical_height = 2U * params.logical_height + 1U;
-    PassableGrid grid(physical_width, physical_height, false);
+    MazeLayout grid(physical_width, physical_height, false);
 
     if (params.logical_width == 0U || params.logical_height == 0U) {
         return grid;
@@ -173,12 +173,12 @@ PassableGrid generatePerfectMaze(const MazeParams& params) {
     return grid;
 }
 
-PassableGrid generateMazeWithExtraPassages(
+MazeLayout generateMazeWithExtraPassages(
     const MazeParams& params,
     const uint64_t opening_seed,
     const uint32_t extra_openings
 ) {
-    PassableGrid grid = generatePerfectMaze(params);
+    MazeLayout grid = generatePerfectMaze(params);
     if (extra_openings == 0U) {
         return grid;
     }

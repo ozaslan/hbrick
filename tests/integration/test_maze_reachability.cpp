@@ -20,7 +20,7 @@ struct GraphModeScenario {
     hbrick::RandomAsymmetricParams random_params{};
 };
 
-[[nodiscard]] hbrick::PassableGrid buildMaze(const MazeScenario& scenario) {
+[[nodiscard]] hbrick::MazeLayout buildMaze(const MazeScenario& scenario) {
     if (scenario.extra_openings == 0U) {
         return hbrick::test_support::generatePerfectMaze(scenario.params);
     }
@@ -36,7 +36,7 @@ void runOracleOnMaze(
     const MazeScenario& maze_scenario,
     const GraphModeScenario& mode_scenario
 ) {
-    const hbrick::PassableGrid maze = buildMaze(maze_scenario);
+    const hbrick::MazeLayout maze = buildMaze(maze_scenario);
     const hbrick::CsrGraph graph = hbrick::test_support::buildGridGraph(
         maze,
         mode_scenario.mode,
@@ -180,7 +180,7 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 TEST(MazeReachabilityOracle, ClosureBaselinesMatchBfsOnSmallBidirectionalMaze) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generatePerfectMaze(
+    const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{8U, 8U, 0xB1D1EC011ULL}
     );
     const hbrick::CsrGraph graph = hbrick::test_support::buildGridGraph(

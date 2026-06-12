@@ -15,7 +15,7 @@ namespace hbrick {
  * @ingroup hbrick_graph
  *
  * Probabilities apply independently per candidate adjacency when converting a
- * @ref hbrick::PassableGrid into a directed graph.
+ * @ref hbrick::MazeLayout into a directed graph.
  */
 struct RandomAsymmetricParams {
     /** @brief Seed for the deterministic pseudo-random edge-orientation process. @ingroup hbrick_graph */
@@ -45,7 +45,7 @@ enum class GridEdgeConversionMode : uint8_t {
      * @ingroup hbrick_graph
      *
      * Matches the east/south scan order of
-     * @ref hbrick::PassableGrid::forEachPassableAdjacentPairEastSouth.
+     * @ref hbrick::MazeLayout::forEachPassableAdjacentPairEastSouth.
      */
     AcyclicEastSouth
 };

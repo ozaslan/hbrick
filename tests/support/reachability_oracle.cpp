@@ -21,7 +21,7 @@ ReachabilityAnswer bfsReference(
 }
 
 CsrGraph buildGridGraph(
-    const PassableGrid& grid,
+    const MazeLayout& grid,
     const GridEdgeConversionMode mode,
     RandomAsymmetricParams params
 ) {

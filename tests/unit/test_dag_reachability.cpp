@@ -82,7 +82,7 @@ TEST(DagReachability, MatchesBfsOnCondensationDag) {
 }
 
 TEST(DagReachability, MatchesBfsOnAllPairsForAcyclicMazeDag) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generatePerfectMaze(
+    const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{12U, 10U, 0xDABBAD00ULL}
     );
     const hbrick::CsrGraph graph = hbrick::test_support::buildGridGraph(
@@ -94,7 +94,7 @@ TEST(DagReachability, MatchesBfsOnAllPairsForAcyclicMazeDag) {
 }
 
 TEST(DagReachability, MatchesBfsOnCondensationOfCyclicMaze) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generateMazeWithExtraPassages(
+    const hbrick::MazeLayout maze = hbrick::test_support::generateMazeWithExtraPassages(
         hbrick::test_support::MazeParams{10U, 8U, 0xFACEFEEDULL},
         0x0A115A115ULL,
         24U

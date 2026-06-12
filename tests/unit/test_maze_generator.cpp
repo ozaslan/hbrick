@@ -6,7 +6,7 @@
 
 namespace {
 
-void expectUndirectedConnectivity(const hbrick::PassableGrid& grid) {
+void expectUndirectedConnectivity(const hbrick::MazeLayout& grid) {
     uint32_t start_vertex = hbrick::kInvalidVertexId;
     for (uint32_t y = 0U; y < grid.height(); ++y) {
         for (uint32_t x = 0U; x < grid.width(); ++x) {
@@ -66,7 +66,7 @@ void expectUndirectedConnectivity(const hbrick::PassableGrid& grid) {
 }  // namespace
 
 TEST(MazeGenerator, PerfectMazeHasExpectedDimensionsAndConnectivity) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generatePerfectMaze(
+    const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{8U, 6U, 0x8A2E5EED1ULL}
     );
 
@@ -78,8 +78,8 @@ TEST(MazeGenerator, PerfectMazeHasExpectedDimensionsAndConnectivity) {
 
 TEST(MazeGenerator, SameSeedProducesIdenticalMaze) {
     const hbrick::test_support::MazeParams params{9U, 7U, 0x8A2E5EED2ULL};
-    const hbrick::PassableGrid first = hbrick::test_support::generatePerfectMaze(params);
-    const hbrick::PassableGrid second = hbrick::test_support::generatePerfectMaze(params);
+    const hbrick::MazeLayout first = hbrick::test_support::generatePerfectMaze(params);
+    const hbrick::MazeLayout second = hbrick::test_support::generatePerfectMaze(params);
 
     EXPECT_EQ(first.width(), second.width());
     EXPECT_EQ(first.height(), second.height());
@@ -94,8 +94,8 @@ TEST(MazeGenerator, SameSeedProducesIdenticalMaze) {
 
 TEST(MazeGenerator, ExtraPassagesIncreasePassableCells) {
     const hbrick::test_support::MazeParams params{10U, 10U, 0x8A2E5EED3ULL};
-    const hbrick::PassableGrid perfect = hbrick::test_support::generatePerfectMaze(params);
-    const hbrick::PassableGrid cyclic = hbrick::test_support::generateMazeWithExtraPassages(
+    const hbrick::MazeLayout perfect = hbrick::test_support::generatePerfectMaze(params);
+    const hbrick::MazeLayout cyclic = hbrick::test_support::generateMazeWithExtraPassages(
         params,
         0x0A115A115ULL,
         20U

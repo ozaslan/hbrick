@@ -1,13 +1,13 @@
 /**
  * @file grid_graph_renderer.hpp
  * @ingroup hbrick_viz
- * @brief SVG rendering of passable grids and their directed graphs.
+ * @brief SVG rendering of maze layouts and their directed graphs.
  */
 
 #pragma once
 
 #include "hbrick/graph/directed_grid_graph.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/viz/svg_canvas.hpp"
 
 namespace hbrick {
@@ -31,7 +31,7 @@ public:
      * @return Populated SVG canvas ready for @ref hbrick::SvgCanvas::toString.
      */
     [[nodiscard]] static SvgCanvas render(
-        const PassableGrid& grid,
+        const MazeLayout& grid,
         const DirectedGridGraph& graph,
         double cell_size = 24.0
     );

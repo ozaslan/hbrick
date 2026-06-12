@@ -18,7 +18,7 @@
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace hbrick::test_support {
 
@@ -42,7 +42,7 @@ namespace hbrick::test_support {
 );
 
 /**
- * @brief Builds a CSR graph from a passable grid using the given conversion mode.
+ * @brief Builds a CSR graph from a maze layout using the given conversion mode.
  * @ingroup hbrick_test_support
  *
  * Convenience wrapper around @ref hbrick::DirectedGridGraphBuilder::build that returns
@@ -54,7 +54,7 @@ namespace hbrick::test_support {
  * @return CSR graph suitable for baseline and oracle tests.
  */
 [[nodiscard]] CsrGraph buildGridGraph(
-    const PassableGrid& grid,
+    const MazeLayout& grid,
     GridEdgeConversionMode mode,
     RandomAsymmetricParams params = {}
 );

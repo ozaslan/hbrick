@@ -13,7 +13,7 @@ double cellCenter(const double cell_size, const uint32_t index) {
 }  // namespace
 
 SvgCanvas GridGraphRenderer::render(
-    const PassableGrid& grid,
+    const MazeLayout& grid,
     const DirectedGridGraph& graph,
     const double cell_size
 ) {

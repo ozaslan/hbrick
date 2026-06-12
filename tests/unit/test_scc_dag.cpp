@@ -11,7 +11,7 @@
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/scc_decomposition.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace {
 
@@ -96,7 +96,7 @@ TEST(SccDagBaselines, SearchAndClosureAgreeWithBfsOnKnownGraph) {
 }
 
 TEST(SccDagBaselines, SearchAndClosureAgreeWithBfsOnRandomSmallGraph) {
-    const hbrick::PassableGrid grid(4U, 3U);
+    const hbrick::MazeLayout grid(4U, 3U);
     const hbrick::DirectedGridGraph directed = hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::RandomAsymmetric,

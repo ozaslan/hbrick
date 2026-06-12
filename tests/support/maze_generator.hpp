@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace hbrick::test_support {
 
@@ -36,9 +36,9 @@ struct MazeParams {
  * Odd coordinates are rooms; carved wall cells connect neighboring rooms.
  *
  * @param params Logical dimensions and carving seed.
- * @return Passable grid representing the maze layout.
+ * @return Maze layout representing the carved maze.
  */
-[[nodiscard]] PassableGrid generatePerfectMaze(const MazeParams& params);
+[[nodiscard]] MazeLayout generatePerfectMaze(const MazeParams& params);
 
 /**
  * @brief Introduces extra openings into a perfect maze to create cycles.
@@ -50,9 +50,9 @@ struct MazeParams {
  * @param params Logical dimensions and base maze seed.
  * @param opening_seed Seed controlling which extra walls are removed.
  * @param extra_openings Number of additional passages to carve.
- * @return Passable grid with cycles added beyond a perfect maze.
+ * @return Maze layout with cycles added beyond a perfect maze.
  */
-[[nodiscard]] PassableGrid generateMazeWithExtraPassages(
+[[nodiscard]] MazeLayout generateMazeWithExtraPassages(
     const MazeParams& params,
     uint64_t opening_seed,
     uint32_t extra_openings

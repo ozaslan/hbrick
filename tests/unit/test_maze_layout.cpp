@@ -6,7 +6,7 @@
 
 #include "hbrick/grid/direction.hpp"
 #include "hbrick/grid/grid_dimensions.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace {
 
@@ -24,8 +24,8 @@ std::string pairKey(const RecordedPair& pair) {
 
 }  // namespace
 
-TEST(PassableGrid, DimensionsAndPassableCount) {
-    const hbrick::PassableGrid grid(4U, 3U);
+TEST(MazeLayout, DimensionsAndPassableCount) {
+    const hbrick::MazeLayout grid(4U, 3U);
     EXPECT_EQ(grid.width(), 4U);
     EXPECT_EQ(grid.height(), 3U);
     EXPECT_EQ(grid.numVertices(), 12U);
@@ -33,8 +33,8 @@ TEST(PassableGrid, DimensionsAndPassableCount) {
     EXPECT_EQ(grid.passableCount(), 12U);
 }
 
-TEST(PassableGrid, SetAndQueryPassability) {
-    hbrick::PassableGrid grid(3U, 2U);
+TEST(MazeLayout, SetAndQueryPassability) {
+    hbrick::MazeLayout grid(3U, 2U);
     const hbrick::GridCoord blocked{1U, 0U};
 
     EXPECT_TRUE(grid.isPassable(blocked));
@@ -44,8 +44,8 @@ TEST(PassableGrid, SetAndQueryPassability) {
     EXPECT_EQ(grid.passableCount(), 5U);
 }
 
-TEST(PassableGrid, VertexIdRoundTrip) {
-    const hbrick::PassableGrid grid(5U, 4U);
+TEST(MazeLayout, VertexIdRoundTrip) {
+    const hbrick::MazeLayout grid(5U, 4U);
     const hbrick::GridCoord coord{3U, 2U};
     const hbrick::VertexId vertex = grid.vertexId(coord);
 
@@ -54,8 +54,8 @@ TEST(PassableGrid, VertexIdRoundTrip) {
     EXPECT_EQ(grid.coordFromVertex(vertex), coord);
 }
 
-TEST(PassableGrid, TryNeighborRespectsBounds) {
-    const hbrick::PassableGrid grid(2U, 2U);
+TEST(MazeLayout, TryNeighborRespectsBounds) {
+    const hbrick::MazeLayout grid(2U, 2U);
     hbrick::GridCoord neighbor{};
 
     EXPECT_TRUE(grid.tryNeighbor(hbrick::GridCoord{0U, 0U}, hbrick::Direction::East, neighbor));
@@ -66,8 +66,8 @@ TEST(PassableGrid, TryNeighborRespectsBounds) {
     EXPECT_EQ(neighbor, hbrick::GridCoord(0U, 1U));
 }
 
-TEST(PassableGrid, EastSouthPairEnumerationIsRowMajor) {
-    const hbrick::PassableGrid grid(3U, 2U);
+TEST(MazeLayout, EastSouthPairEnumerationIsRowMajor) {
+    const hbrick::MazeLayout grid(3U, 2U);
     std::vector<RecordedPair> pairs;
 
     grid.forEachPassableAdjacentPairEastSouth([&pairs](
@@ -95,8 +95,8 @@ TEST(PassableGrid, EastSouthPairEnumerationIsRowMajor) {
     }
 }
 
-TEST(PassableGrid, ImpassableCellsBreakAdjacentPairs) {
-    hbrick::PassableGrid grid(3U, 2U);
+TEST(MazeLayout, ImpassableCellsBreakAdjacentPairs) {
+    hbrick::MazeLayout grid(3U, 2U);
     grid.setPassable(hbrick::GridCoord{1U, 0U}, false);
 
     std::vector<RecordedPair> pairs;
@@ -115,8 +115,8 @@ TEST(PassableGrid, ImpassableCellsBreakAdjacentPairs) {
     EXPECT_EQ(pairKey(pairs[3]), "1,1->2,1:0");
 }
 
-TEST(PassableGrid, ZeroSizeGridHasNoVertices) {
-    const hbrick::PassableGrid grid(0U, 0U);
+TEST(MazeLayout, ZeroSizeGridHasNoVertices) {
+    const hbrick::MazeLayout grid(0U, 0U);
     EXPECT_EQ(grid.numVertices(), 0U);
     EXPECT_EQ(grid.passableCount(), 0U);
     EXPECT_FALSE(grid.dimensions().isValid());

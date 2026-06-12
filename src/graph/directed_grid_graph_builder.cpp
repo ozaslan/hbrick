@@ -17,7 +17,7 @@ void addBidirectionalEdge(CsrGraphBuilder& builder, const uint32_t from, const u
     builder.addEdge(to, from);
 }
 
-void buildBidirectionalAll(const PassableGrid& grid, CsrGraphBuilder& builder) {
+void buildBidirectionalAll(const MazeLayout& grid, CsrGraphBuilder& builder) {
     grid.forEachPassableAdjacentPairEastSouth([&builder, &grid](
         const GridCoord from,
         const GridCoord to,
@@ -29,7 +29,7 @@ void buildBidirectionalAll(const PassableGrid& grid, CsrGraphBuilder& builder) {
     });
 }
 
-void buildAcyclicEastSouth(const PassableGrid& grid, CsrGraphBuilder& builder) {
+void buildAcyclicEastSouth(const MazeLayout& grid, CsrGraphBuilder& builder) {
     grid.forEachPassableAdjacentPairEastSouth([&builder, &grid](
         const GridCoord from,
         const GridCoord to,
@@ -42,7 +42,7 @@ void buildAcyclicEastSouth(const PassableGrid& grid, CsrGraphBuilder& builder) {
 }
 
 void buildRandomAsymmetric(
-    const PassableGrid& grid,
+    const MazeLayout& grid,
     CsrGraphBuilder& builder,
     const RandomAsymmetricParams& params
 ) {
@@ -82,7 +82,7 @@ void buildRandomAsymmetric(
 }  // namespace
 
 DirectedGridGraph DirectedGridGraphBuilder::build(
-    const PassableGrid& grid,
+    const MazeLayout& grid,
     const GridEdgeConversionMode mode,
     RandomAsymmetricParams params
 ) {

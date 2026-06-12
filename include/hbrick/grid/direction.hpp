@@ -15,7 +15,7 @@ namespace hbrick {
  * @ingroup hbrick_grid
  *
  * Directions follow screen coordinates: east increases @c x, south increases
- * @c y. Used by @ref hbrick::PassableGrid::tryNeighbor and maze-generation utilities.
+ * @c y. Used by @ref hbrick::MazeLayout::tryNeighbor and maze-generation utilities.
  */
 enum class Direction : uint8_t {
     /** @brief One cell to the right (+x). @ingroup hbrick_grid */

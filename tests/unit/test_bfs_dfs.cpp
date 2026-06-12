@@ -10,7 +10,7 @@
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace hbrick {
 
@@ -88,7 +88,7 @@ TEST(BfsDfs, AgreeOnKnownGraph) {
 }
 
 TEST(BfsDfs, AgreeOnRandomSmallGridGraphs) {
-    const hbrick::PassableGrid grid(4U, 3U);
+    const hbrick::MazeLayout grid(4U, 3U);
     const hbrick::DirectedGridGraph directed = hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::RandomAsymmetric,

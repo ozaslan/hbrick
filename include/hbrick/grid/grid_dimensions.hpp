@@ -16,7 +16,7 @@ namespace hbrick {
  * @brief Width and height of a rectangular cell grid.
  * @ingroup hbrick_grid
  *
- * Provides bounds checks and cell-count helpers shared by @ref hbrick::PassableGrid
+ * Provides bounds checks and cell-count helpers shared by @ref hbrick::MazeLayout
  * and grid-to-graph conversion utilities.
  */
 struct GridDimensions {

@@ -5,18 +5,18 @@
 
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/edge32.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace {
 
-std::vector<hbrick::Edge32> buildAcyclicEdges(const hbrick::PassableGrid& grid) {
+std::vector<hbrick::Edge32> buildAcyclicEdges(const hbrick::MazeLayout& grid) {
     return hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::AcyclicEastSouth
     ).edges();
 }
 
-std::vector<hbrick::Edge32> buildBidirectionalEdges(const hbrick::PassableGrid& grid) {
+std::vector<hbrick::Edge32> buildBidirectionalEdges(const hbrick::MazeLayout& grid) {
     return hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::BidirectionalAll
@@ -24,7 +24,7 @@ std::vector<hbrick::Edge32> buildBidirectionalEdges(const hbrick::PassableGrid& 
 }
 
 std::vector<hbrick::Edge32> buildRandomEdges(
-    const hbrick::PassableGrid& grid,
+    const hbrick::MazeLayout& grid,
     const hbrick::RandomAsymmetricParams& params
 ) {
     return hbrick::DirectedGridGraphBuilder::build(
@@ -37,7 +37,7 @@ std::vector<hbrick::Edge32> buildRandomEdges(
 }  // namespace
 
 TEST(DirectedGridGraph, OutNeighborsMatchesCsrStorage) {
-    const hbrick::PassableGrid grid(3U, 2U);
+    const hbrick::MazeLayout grid(3U, 2U);
     const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
         grid,
         hbrick::GridEdgeConversionMode::AcyclicEastSouth
@@ -56,7 +56,7 @@ TEST(DirectedGridGraph, OutNeighborsMatchesCsrStorage) {
 }
 
 TEST(DirectedGridGraph, AcyclicEastSouthIsDeterministicAndRowMajor) {
-    const hbrick::PassableGrid grid(3U, 2U);
+    const hbrick::MazeLayout grid(3U, 2U);
     const std::vector<hbrick::Edge32> first = buildAcyclicEdges(grid);
     const std::vector<hbrick::Edge32> second = buildAcyclicEdges(grid);
 
@@ -73,7 +73,7 @@ TEST(DirectedGridGraph, AcyclicEastSouthIsDeterministicAndRowMajor) {
 }
 
 TEST(DirectedGridGraph, BidirectionalModeDoesNotUseRng) {
-    const hbrick::PassableGrid grid(2U, 2U);
+    const hbrick::MazeLayout grid(2U, 2U);
     const std::vector<hbrick::Edge32> first = buildBidirectionalEdges(grid);
     const std::vector<hbrick::Edge32> second = buildBidirectionalEdges(grid);
 
@@ -90,7 +90,7 @@ TEST(DirectedGridGraph, BidirectionalModeDoesNotUseRng) {
 }
 
 TEST(DirectedGridGraph, SameSeedProducesIdenticalRandomGraph) {
-    const hbrick::PassableGrid grid(4U, 3U);
+    const hbrick::MazeLayout grid(4U, 3U);
     const hbrick::RandomAsymmetricParams params{
         0x123456789ABCDEF0ULL,
         0.25L,
@@ -105,7 +105,7 @@ TEST(DirectedGridGraph, SameSeedProducesIdenticalRandomGraph) {
 }
 
 TEST(DirectedGridGraph, DifferentSeedUsuallyProducesDifferentGraph) {
-    const hbrick::PassableGrid grid(5U, 4U);
+    const hbrick::MazeLayout grid(5U, 4U);
     const hbrick::RandomAsymmetricParams first_params{1ULL, 0.2L, 0.3L};
     const hbrick::RandomAsymmetricParams second_params{2ULL, 0.2L, 0.3L};
 
@@ -116,7 +116,7 @@ TEST(DirectedGridGraph, DifferentSeedUsuallyProducesDifferentGraph) {
 }
 
 TEST(DirectedGridGraph, RandomProcedureUsesIntegerThresholdsDocumentedInTest) {
-    const hbrick::PassableGrid grid(2U, 1U);
+    const hbrick::MazeLayout grid(2U, 1U);
     const hbrick::RandomAsymmetricParams always_bidirectional{99ULL, 1.0L, 0.0L};
     const hbrick::RandomAsymmetricParams always_one_way{99ULL, 0.0L, 1.0L};
     const hbrick::RandomAsymmetricParams never_add{99ULL, 0.0L, 0.0L};
@@ -132,7 +132,7 @@ TEST(DirectedGridGraph, RandomProcedureUsesIntegerThresholdsDocumentedInTest) {
 }
 
 TEST(DirectedGridGraph, ImpassableCellsRemoveIncidentPairs) {
-    hbrick::PassableGrid grid(3U, 2U);
+    hbrick::MazeLayout grid(3U, 2U);
     grid.setPassable(hbrick::GridCoord{1U, 0U}, false);
 
     const std::vector<hbrick::Edge32> edges = buildAcyclicEdges(grid);

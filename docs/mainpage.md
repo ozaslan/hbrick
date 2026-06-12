@@ -8,7 +8,7 @@ grid-embedded mazes, and high-performance query paths.
 | Module | Purpose |
 |--------|---------|
 | @ref hbrick_core | Shared types, vertex ids, and query descriptors |
-| @ref hbrick_grid | Rectangular passable grids and cardinal directions |
+| @ref hbrick_grid | Maze layouts and cardinal directions |
 | @ref hbrick_bit | Bit vectors, bit matrices, and boolean closure |
 | @ref hbrick_graph | CSR graphs, search, SCC decomposition, and DAG reachability |
 | @ref hbrick_baselines | Reference preprocess/query algorithms for correctness and benchmarking |
@@ -18,7 +18,7 @@ grid-embedded mazes, and high-performance query paths.
 
 ## Typical workflow
 
-1. Build or load a @ref hbrick::PassableGrid or @ref hbrick::CsrGraph.
+1. Build or load a @ref hbrick::MazeLayout or @ref hbrick::CsrGraph.
 2. Optionally convert the grid with @ref hbrick::DirectedGridGraphBuilder.
 3. Answer reachability using search (@ref hbrick::Bfs, @ref hbrick::Dfs,
    condensation (@ref hbrick::CondensationGraph, @ref hbrick::DagReachability),

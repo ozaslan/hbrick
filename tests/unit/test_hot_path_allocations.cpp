@@ -51,7 +51,7 @@ void expectCapacitiesUnchanged(
 }  // namespace
 
 TEST(HotPathAllocations, BfsAndDfsReachableDoNotResizeScratch) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generatePerfectMaze(
+    const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{8U, 8U, 0xA110C8FEULL}
     );
     const hbrick::CsrGraph graph = hbrick::test_support::buildGridGraph(
@@ -96,7 +96,7 @@ TEST(HotPathAllocations, DagReachabilityDoesNotResizeScratch) {
 }
 
 TEST(HotPathAllocations, BaselineQueriesDoNotResizeScratch) {
-    const hbrick::PassableGrid maze = hbrick::test_support::generatePerfectMaze(
+    const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{7U, 7U, 0xCAFEBABEULL}
     );
     const hbrick::CsrGraph graph = hbrick::test_support::buildGridGraph(

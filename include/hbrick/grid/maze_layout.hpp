@@ -1,7 +1,7 @@
 /**
- * @file passable_grid.hpp
+ * @file maze_layout.hpp
  * @ingroup hbrick_grid
- * @brief Mutable rectangular grid of passable and blocked cells.
+ * @brief Mutable rectangular maze layout of passable and blocked cells.
  */
 
 #pragma once
@@ -17,26 +17,26 @@
 namespace hbrick {
 
 /**
- * @brief Dense bitmap of passable cells on a rectangular grid.
+ * @brief Dense bitmap maze layout on a rectangular grid.
  * @ingroup hbrick_grid
  *
- * Each cell maps to a vertex index via row-major ordering. The grid is the
+ * Each cell maps to a vertex index via row-major ordering. The layout is the
  * primary input for @ref hbrick::DirectedGridGraphBuilder and maze-based integration
  * tests. Hot neighbor queries are allocation-free.
  *
- * @see docs/representations.md for how PassableGrid relates to directed graphs.
+ * @see docs/representations.md for how MazeLayout relates to directed graphs.
  */
-class PassableGrid {
+class MazeLayout {
 public:
     /**
-     * @brief Constructs a grid of the given size.
+     * @brief Constructs a layout of the given size.
      * @ingroup hbrick_grid
      *
      * @param width Number of columns.
      * @param height Number of rows.
      * @param initially_passable When @c true, every cell starts passable.
      */
-    PassableGrid(uint32_t width, uint32_t height, bool initially_passable = true);
+    MazeLayout(uint32_t width, uint32_t height, bool initially_passable = true);
 
     /** @brief Returns the grid width in cells. @return The grid width in cells. @ingroup hbrick_grid */
     [[nodiscard]] uint32_t width() const noexcept { return dimensions_.width; }

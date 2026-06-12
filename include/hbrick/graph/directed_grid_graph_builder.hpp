@@ -1,19 +1,19 @@
 /**
  * @file directed_grid_graph_builder.hpp
  * @ingroup hbrick_graph
- * @brief Factory for building @ref hbrick::DirectedGridGraph from @ref hbrick::PassableGrid inputs.
+ * @brief Factory for building @ref hbrick::DirectedGridGraph from @ref hbrick::MazeLayout inputs.
  */
 
 #pragma once
 
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
-#include "hbrick/grid/passable_grid.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace hbrick {
 
 /**
- * @brief Converts passable grid adjacencies into a directed grid graph.
+ * @brief Converts maze layout adjacencies into a directed grid graph.
  * @ingroup hbrick_graph
  *
  * Supports several edge-orientation policies selected by @ref hbrick::GridEdgeConversionMode,
@@ -35,7 +35,7 @@ public:
      * @return Grid graph with CSR storage and coordinate metadata.
      */
     [[nodiscard]] static DirectedGridGraph build(
-        const PassableGrid& grid,
+        const MazeLayout& grid,
         GridEdgeConversionMode mode,
         RandomAsymmetricParams params = {}
     );

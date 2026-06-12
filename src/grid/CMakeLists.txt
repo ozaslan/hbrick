@@ -1,4 +1,4 @@
-add_library(hbrick_grid passable_grid.cpp)
+add_library(hbrick_grid maze_layout.cpp)
 
 target_include_directories(
     hbrick_grid
