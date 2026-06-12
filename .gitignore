@@ -2,6 +2,10 @@ build/
 .cache/
 compile_commands.json
 
+# MovingAI benchmark data: zips are committed as the archival copy,
+# the extracted tree is regenerated via datasets/movingai/fetch_movingai.sh
+datasets/movingai/extracted/
+
 # Generated Doxygen output (sources live in docs/*.md, docs/Doxyfile.in, etc.)
 docs/html/
 docs/latex/
