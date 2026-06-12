@@ -14,6 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(HBRICK_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(HBRICK_ENABLE_LTO "Enable link-time optimization for non-Debug builds" ON)
+option(HBRICK_BUILD_TOOLS "Build developer tools (dataset browser GUI)" OFF)
 
 # ---------------------------------------------------------------------------
 # API documentation (Doxygen)
@@ -121,6 +122,10 @@ enable_testing()
 
 add_subdirectory(src)
 add_subdirectory(tests)
+
+if(HBRICK_BUILD_TOOLS)
+    add_subdirectory(tools)
+endif()
 
 if(HBRICK_BUILD_DOCS)
     add_subdirectory(docs)

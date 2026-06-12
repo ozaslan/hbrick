@@ -253,3 +253,21 @@ target_link_libraries(
 )
 
 add_test(NAME test_maze_generator COMMAND test_maze_generator)
+
+add_executable(test_movingai_loader unit/test_movingai_loader.cpp)
+
+target_compile_definitions(
+    test_movingai_loader
+    PRIVATE
+        HBRICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(
+    test_movingai_loader
+    PRIVATE
+        hbrick_io
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+add_test(NAME test_movingai_loader COMMAND test_movingai_loader)

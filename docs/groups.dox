@@ -9,6 +9,11 @@
  */
 
 /**
+ * @defgroup hbrick_io Dataset io
+ * @brief Adapters that load external datasets (MovingAI) into maze layouts.
+ */
+
+/**
  * @defgroup hbrick_bit Bit-parallel primitives
  * @brief Bit vectors, matrices, and transitive closure algorithms.
  */
