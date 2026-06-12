@@ -2,7 +2,7 @@
 
 How mazes, grids, and graphs relate — and why the library converts between them.
 
-**See also:** [Atlas](atlas.md) — quick reference for every type and algorithm.
+**See also:** [Atlas](atlas.md) — quick reference for every type and algorithm. [Traversal storage](traversal_storage.md) and [Closure storage](closure_storage.md) explain why CSR and BitMatrix are the chosen representations.
 
 ---
 
@@ -56,7 +56,7 @@ flowchart TD
 
 4. **Further transforms** (optional, same underlying graph)  
    - Cyclic directed graph → [`SccDecomposition`](../include/hbrick/graph/scc_decomposition.hpp) → [`CondensationGraph`](../include/hbrick/graph/condensation_graph.hpp) → [`DagReachability`](../include/hbrick/graph/dag_reachability.hpp)  
-   - All-pairs closure → [`ClosureMatrixBuilder`](../include/hbrick/baselines/closure_matrix_builder.hpp) → [`BitMatrix`](../include/hbrick/bit/bit_matrix.hpp) → [`BooleanClosure`](../include/hbrick/bit/boolean_closure.hpp)
+   - All-pairs closure → [`ClosureMatrixBuilder`](../include/hbrick/baselines/closure_matrix_builder.hpp) → [`BitMatrix`](../include/hbrick/bit/bit_matrix.hpp) → [`BooleanClosure`](../include/hbrick/bit/boolean_closure.hpp) — see [Closure storage](closure_storage.md) for why closure uses a dense bit matrix rather than a sparse format
 
 ---
 
@@ -64,7 +64,7 @@ flowchart TD
 
 1. **Directed vs undirected.** hbrick targets **directed** reachability. A `MazeLayout` only records that two cells are adjacent (undirected). An explicit orientation policy must choose which direction(s) each corridor becomes an arc.
 
-2. **Algorithmic representation.** CSR adjacency lists give cache-friendly, allocation-free [`outNeighbors()`](../include/hbrick/graph/csr_graph.hpp) spans — required by the hot-path performance rules for BFS, DFS, and SCC.
+2. **Algorithmic representation.** CSR adjacency lists give cache-friendly, allocation-free [`outNeighbors()`](../include/hbrick/graph/csr_graph.hpp) spans — required by the hot-path performance rules for BFS, DFS, and SCC. See [Traversal storage](traversal_storage.md) for the full rationale (CSR as sparse matrix, comparison with hash-based adjacency, and hot-path constraints).
 
 3. **Downstream transforms.** SCC condensation and boolean transitive closure need graph topology (edges between vertex indices), not a cell bitmap.
 

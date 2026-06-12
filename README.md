@@ -51,6 +51,8 @@ Typical workflow:
 |-------|-------------|
 | [`docs/atlas.md`](docs/atlas.md) | Quick reference for every type, data structure, and algorithm |
 | [`docs/representations.md`](docs/representations.md) | How mazes, grids, and graphs relate; why conversion happens |
+| [`docs/traversal_storage.md`](docs/traversal_storage.md) | Rationale for CSR graph storage and search (BFS/DFS/SCC) |
+| [`docs/closure_storage.md`](docs/closure_storage.md) | Rationale for dense BitMatrix closure and memory policy |
 | [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) | Design notes for reusable traversal workspace |
 | [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
 

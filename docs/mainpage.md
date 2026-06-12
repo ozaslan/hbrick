@@ -28,6 +28,8 @@ grid-embedded mazes, and high-performance query paths.
 
 - [Atlas](atlas.md) — quick reference for every type, data structure, and algorithm
 - [Representations guide](representations.md) — how mazes, grids, and graphs relate and why conversion happens
+- [Traversal storage](traversal_storage.md) — why CSR is used for BFS, DFS, and SCC; sparse formats vs hash tables
+- [Closure storage](closure_storage.md) — why reachability oracles use dense BitMatrix and Warshall
 - [GraphSearchScratch design notes](graph_search_scratch.md) — reusable traversal workspace details
 
 ## Generating this documentation

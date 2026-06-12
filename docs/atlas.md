@@ -2,7 +2,7 @@
 
 A quick reference for every major type, data structure, and algorithm in the library.
 
-**See also:** [Representations guide](representations.md) — how mazes, grids, and graphs relate and why conversion happens.
+**See also:** [Representations guide](representations.md) — how mazes, grids, and graphs relate and why conversion happens. Design rationale: [Traversal storage](traversal_storage.md), [Closure storage](closure_storage.md).
 
 ---
 
@@ -70,7 +70,7 @@ Bit-parallel boolean vectors and transitive closure.
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
 | [`BitVector`](../include/hbrick/bit/bit_vector.hpp) | `bit/bit_vector.hpp` | Fixed-width bitset (`uint64_t` words) | `test` / `set` / `reset` / `rowOr` without hot-path allocation | Single reachability row or boolean flag set |
-| [`BitMatrix`](../include/hbrick/bit/bit_matrix.hpp) | `bit/bit_matrix.hpp` | Dense V×V boolean matrix | One `BitVector` per row; row-wise bit-parallel access | Adjacency or reachability matrix storage |
+| [`BitMatrix`](../include/hbrick/bit/bit_matrix.hpp) | `bit/bit_matrix.hpp` | Dense V×V boolean matrix | One `BitVector` per row; row-wise bit-parallel access | Adjacency or reachability matrix storage — see [Closure storage](closure_storage.md) |
 | [`BooleanClosure`](../include/hbrick/bit/boolean_closure.hpp) | `bit/boolean_closure.hpp` | Transitive-closure algorithm | Warshall's algorithm on `BitMatrix` (`transitiveClosureWarshall`) | Precomputing all-pairs reachability into a bit matrix |
 
 ---
@@ -83,7 +83,7 @@ Graph topology representations and construction utilities.
 |------|--------|------------|---------|-------------|
 | [`Edge32`](../include/hbrick/graph/edge32.hpp) | `graph/edge32.hpp` | Directed edge `(from, to)` | Lightweight pair of `uint32_t` indices | Ephemeral edge during graph construction |
 | [`CsrGraphBuilder`](../include/hbrick/graph/csr_graph_builder.hpp) | `graph/csr_graph_builder.hpp` | Mutable edge collector | Accumulates `Edge32`, sorts, compacts into CSR | Building any directed graph (grid-derived or hand-crafted) |
-| [`CsrGraph`](../include/hbrick/graph/csr_graph.hpp) | `graph/csr_graph.hpp` | Immutable directed graph (CSR) | `row_ptrs` + `col_indices`; allocation-free `outNeighbors()` spans | **Canonical** algorithmic graph representation |
+| [`CsrGraph`](../include/hbrick/graph/csr_graph.hpp) | `graph/csr_graph.hpp` | Immutable directed graph (CSR) | `row_ptrs` + `col_indices`; allocation-free `outNeighbors()` spans | **Canonical** algorithmic graph representation — see [Traversal storage](traversal_storage.md) |
 | [`DirectedGridGraph`](../include/hbrick/graph/directed_grid_graph.hpp) | `graph/directed_grid_graph.hpp` | CSR graph + grid metadata | Wraps `CsrGraph` with `width`/`height` and coord helpers | When you need both adjacency lists and grid coordinates |
 | [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_builder.hpp) | `graph/directed_grid_graph_builder.hpp` | Grid-to-graph factory | Converts `MazeLayout` adjacencies into directed edges | Primary entry point for maze/grid → graph conversion |
 | [`GridEdgeConversionMode`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | Edge-orientation policy enum | `RandomAsymmetric`, `BidirectionalAll`, `AcyclicEastSouth` | Choose how undirected corridors become directed arcs |

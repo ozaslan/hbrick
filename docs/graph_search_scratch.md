@@ -48,7 +48,7 @@ Two naive approaches fail at scale:
 | Allocate queue/stack/visited on every call | Heap allocation + deallocation |
 | Reuse buffers but `memset` the visited array | O(V) even when the frontier is small |
 
-hbrick runs many reachability queries in benchmarks, baselines, and correctness oracles. Predictable, allocation-free hot paths are a core design requirement (see `.cursorrules` and [`tests/unit/test_hot_path_allocations.cpp`](../tests/unit/test_hot_path_allocations.cpp)).
+hbrick runs many reachability queries in benchmarks, baselines, and correctness oracles. Predictable, allocation-free hot paths are a core design requirement (see `.cursorrules` and [`tests/unit/test_hot_path_allocations.cpp`](../tests/unit/test_hot_path_allocations.cpp)). For why CSR is the chosen graph format, see [Traversal storage](traversal_storage.md).
 
 ---
 
