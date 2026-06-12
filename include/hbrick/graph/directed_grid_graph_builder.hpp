@@ -19,6 +19,8 @@ namespace hbrick {
  * Supports several edge-orientation policies selected by @ref hbrick::GridEdgeConversionMode,
  * including fully bidirectional corridors, east/south acyclic orientations, and
  * seeded random asymmetric routing.
+ *
+ * @see docs/representations.md for the grid-to-graph conversion pipeline.
  */
 class DirectedGridGraphBuilder {
 public:

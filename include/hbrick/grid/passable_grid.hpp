@@ -23,6 +23,8 @@ namespace hbrick {
  * Each cell maps to a vertex index via row-major ordering. The grid is the
  * primary input for @ref hbrick::DirectedGridGraphBuilder and maze-based integration
  * tests. Hot neighbor queries are allocation-free.
+ *
+ * @see docs/representations.md for how PassableGrid relates to directed graphs.
  */
 class PassableGrid {
 public:

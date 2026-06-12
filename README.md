@@ -45,6 +45,21 @@ Typical workflow:
 
 ---
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [`docs/atlas.md`](docs/atlas.md) | Quick reference for every type, data structure, and algorithm |
+| [`docs/representations.md`](docs/representations.md) | How mazes, grids, and graphs relate; why conversion happens |
+| [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) | Design notes for reusable traversal workspace |
+| [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
+
+**API reference:** build with `-DHBRICK_BUILD_DOCS=ON`, then open [`docs/html/index.html`](docs/html/index.html).
+
+**Implementation spec:** [`codex_implementation_spec.md`](codex_implementation_spec.md) describes staged requirements, acceptance criteria, and the roadmap through H-BRICK.
+
+---
+
 ## Requirements
 
 - **C++20** compiler (GCC 11+, Clang 14+, or equivalent)
@@ -148,13 +163,6 @@ Reference algorithms live under `hbrick_baselines` and share a common preprocess
 | `FullClosureBaseline` | Full boolean transitive closure of the graph |
 
 These are used for correctness checking and future benchmarking, not as the final H-BRICK index.
-
----
-
-## Documentation
-
-- **API reference**: build with `-DHBRICK_BUILD_DOCS=ON`, then open `docs/html/index.html`
-- **Implementation spec**: [`codex_implementation_spec.md`](codex_implementation_spec.md) describes staged requirements, acceptance criteria, and the roadmap through H-BRICK
 
 ---
 

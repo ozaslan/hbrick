@@ -20,9 +20,15 @@ grid-embedded mazes, and high-performance query paths.
 
 1. Build or load a @ref hbrick::PassableGrid or @ref hbrick::CsrGraph.
 2. Optionally convert the grid with @ref hbrick::DirectedGridGraphBuilder.
-3. Answer reachability using search (@ref hbrick::Bfs, @ref hbrick::Dfs),
+3. Answer reachability using search (@ref hbrick::Bfs, @ref hbrick::Dfs,
    condensation (@ref hbrick::CondensationGraph, @ref hbrick::DagReachability),
    or a baseline for comparison.
+
+## Further reading
+
+- [Atlas](atlas.md) — quick reference for every type, data structure, and algorithm
+- [Representations guide](representations.md) — how mazes, grids, and graphs relate and why conversion happens
+- [GraphSearchScratch design notes](graph_search_scratch.md) — reusable traversal workspace details
 
 ## Generating this documentation
 
