@@ -73,6 +73,9 @@ int main(const int argc, const char** argv) {
             ImGui::NewFrame();
 
             app.drawFrame();
+            if (app.quitRequested()) {
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            }
 
             ImGui::Render();
             int display_w = 0;

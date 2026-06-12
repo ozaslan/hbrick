@@ -1,6 +1,7 @@
 #include "map_render.hpp"
 
 #include <GL/gl.h>
+#include <GLFW/glfw3.h>
 
 #ifndef GL_CLAMP_TO_EDGE
 #define GL_CLAMP_TO_EDGE 0x812F
@@ -106,25 +107,54 @@ std::vector<uint8_t> downsamplePixels(
     out_width = scaled(width);
     out_height = scaled(height);
 
+    // Area averaging (the equivalent of OpenCV INTER_AREA): every source cell
+    // contributes to exactly one destination pixel, so single-cell corridors
+    // and walls shade the result instead of vanishing as they would with
+    // nearest sampling.
     std::vector<uint8_t> small(
         static_cast<std::size_t>(out_width) * out_height * 4U
     );
     for (uint32_t y = 0; y < out_height; ++y) {
-        const uint32_t src_y = static_cast<uint32_t>(
+        const uint32_t src_y0 = static_cast<uint32_t>(
             (static_cast<uint64_t>(y) * height) / out_height
         );
+        uint32_t src_y1 = static_cast<uint32_t>(
+            (static_cast<uint64_t>(y + 1U) * height) / out_height
+        );
+        if (src_y1 <= src_y0) {
+            src_y1 = src_y0 + 1U;
+        }
         for (uint32_t x = 0; x < out_width; ++x) {
-            const uint32_t src_x = static_cast<uint32_t>(
+            const uint32_t src_x0 = static_cast<uint32_t>(
                 (static_cast<uint64_t>(x) * width) / out_width
             );
-            const std::size_t src_offset =
-                (static_cast<std::size_t>(src_y) * width + src_x) * 4U;
+            uint32_t src_x1 = static_cast<uint32_t>(
+                (static_cast<uint64_t>(x + 1U) * width) / out_width
+            );
+            if (src_x1 <= src_x0) {
+                src_x1 = src_x0 + 1U;
+            }
+
+            uint64_t sum[4] = {0U, 0U, 0U, 0U};
+            for (uint32_t sy = src_y0; sy < src_y1; ++sy) {
+                for (uint32_t sx = src_x0; sx < src_x1; ++sx) {
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(sy) * width + sx) * 4U;
+                    sum[0] += pixels[offset + 0U];
+                    sum[1] += pixels[offset + 1U];
+                    sum[2] += pixels[offset + 2U];
+                    sum[3] += pixels[offset + 3U];
+                }
+            }
+
+            const uint64_t count =
+                static_cast<uint64_t>(src_y1 - src_y0) * (src_x1 - src_x0);
             const std::size_t dst_offset =
                 (static_cast<std::size_t>(y) * out_width + x) * 4U;
-            small[dst_offset + 0U] = pixels[src_offset + 0U];
-            small[dst_offset + 1U] = pixels[src_offset + 1U];
-            small[dst_offset + 2U] = pixels[src_offset + 2U];
-            small[dst_offset + 3U] = pixels[src_offset + 3U];
+            small[dst_offset + 0U] = static_cast<uint8_t>(sum[0] / count);
+            small[dst_offset + 1U] = static_cast<uint8_t>(sum[1] / count);
+            small[dst_offset + 2U] = static_cast<uint8_t>(sum[2] / count);
+            small[dst_offset + 3U] = static_cast<uint8_t>(sum[3] / count);
         }
     }
     return small;
@@ -138,13 +168,17 @@ void uploadTexture(
 ) {
     destroyTexture(texture);
 
+    // glGenerateMipmap is GL 3.0; resolve it once through GLFW so the legacy
+    // GL/gl.h header suffices. Falls back to bilinear minification when the
+    // driver does not expose it.
+    using GenerateMipmapFn = void (*)(GLenum);
+    static const auto generate_mipmap = reinterpret_cast<GenerateMipmapFn>(
+        glfwGetProcAddress("glGenerateMipmap")
+    );
+
     GLuint id = 0;
     glGenTextures(1, &id);
     glBindTexture(GL_TEXTURE_2D, id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(
         GL_TEXTURE_2D,
@@ -157,6 +191,21 @@ void uploadTexture(
         GL_UNSIGNED_BYTE,
         pixels.data()
     );
+
+    // Photoshop-style sampling: averaged detail when zoomed out (mipmapped
+    // trilinear minification), crisp square cells when zoomed in (nearest
+    // magnification).
+    if (generate_mipmap != nullptr) {
+        generate_mipmap(GL_TEXTURE_2D);
+        glTexParameteri(
+            GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+        );
+    } else {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     texture.id = id;
