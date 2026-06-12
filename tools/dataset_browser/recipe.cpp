@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 
@@ -237,6 +239,91 @@ std::vector<std::filesystem::path> listRecipes(
     }
     std::sort(files.begin(), files.end());
     return files;
+}
+
+std::string formatRecipeSavedAt(const std::filesystem::path& file) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(file, ec) || ec) {
+        return "null";
+    }
+
+    const std::filesystem::file_time_type write_time =
+        std::filesystem::last_write_time(file, ec);
+    if (ec) {
+        return "null";
+    }
+
+    const auto system_time = std::chrono::time_point_cast<
+        std::chrono::system_clock::duration>(
+        write_time - std::filesystem::file_time_type::clock::now()
+        + std::chrono::system_clock::now()
+    );
+    const std::time_t seconds =
+        std::chrono::system_clock::to_time_t(system_time);
+
+    std::tm local_time{};
+#if defined(_WIN32)
+    if (localtime_s(&local_time, &seconds) != 0) {
+        return "null";
+    }
+#else
+    if (localtime_r(&seconds, &local_time) == nullptr) {
+        return "null";
+    }
+#endif
+
+    char buffer[32];
+    if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local_time)
+        == 0) {
+        return "null";
+    }
+    return buffer;
+}
+
+bool deleteRecipe(const std::filesystem::path& file) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(file, ec) || ec) {
+        return false;
+    }
+    std::filesystem::remove(file, ec);
+    return !ec;
+}
+
+std::vector<SavedRecipeEntry> listRecipesForMap(
+    const std::filesystem::path& directory,
+    const std::string& set_name,
+    const std::string& map_name
+) {
+    std::vector<SavedRecipeEntry> entries;
+    for (const std::filesystem::path& file : listRecipes(directory)) {
+        std::optional<Recipe> recipe = loadRecipe(file);
+        if (!recipe.has_value()) {
+            continue;
+        }
+        if (recipe->set_name != set_name || recipe->map_name != map_name) {
+            continue;
+        }
+        entries.push_back(SavedRecipeEntry{
+            file,
+            std::move(*recipe),
+            formatRecipeSavedAt(file),
+        });
+    }
+
+    std::sort(
+        entries.begin(),
+        entries.end(),
+        [](const SavedRecipeEntry& left, const SavedRecipeEntry& right) {
+            if (left.saved_at == "null") {
+                return false;
+            }
+            if (right.saved_at == "null") {
+                return true;
+            }
+            return left.saved_at > right.saved_at;
+        }
+    );
+    return entries;
 }
 
 }  // namespace hbrick::tools

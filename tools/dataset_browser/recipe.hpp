@@ -51,4 +51,30 @@ struct Recipe {
     const std::filesystem::path& directory
 );
 
+/**
+ * @brief Local calendar timestamp of @p file's last write time.
+ *
+ * @return @c "YYYY-MM-DD HH:MM:SS" in local time, or the literal @c "null"
+ *         when the path is missing or the timestamp cannot be read.
+ */
+[[nodiscard]] std::string formatRecipeSavedAt(const std::filesystem::path& file);
+
+/** @brief Deletes a recipe file from disk. @return @c true on success. */
+[[nodiscard]] bool deleteRecipe(const std::filesystem::path& file);
+
+/** @brief One saved recipe row shown in the orientation editor. */
+struct SavedRecipeEntry {
+    std::filesystem::path path;
+    Recipe recipe;
+    /** @brief Local save time from the filesystem, or @c "null". */
+    std::string saved_at;
+};
+
+/** @brief Lists parsed recipes for one map, newest first. */
+[[nodiscard]] std::vector<SavedRecipeEntry> listRecipesForMap(
+    const std::filesystem::path& directory,
+    const std::string& set_name,
+    const std::string& map_name
+);
+
 }  // namespace hbrick::tools

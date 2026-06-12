@@ -76,8 +76,10 @@ struct MapPanel {
     OrientationState orient;
 
     // Saved recipes for this exact map, shown inside the orientation editor.
-    std::vector<std::pair<std::filesystem::path, Recipe>> map_recipes;
+    std::vector<SavedRecipeEntry> map_recipes;
     bool recipes_dirty = true;
+    std::filesystem::path recipe_delete_pending_;
+    bool recipe_delete_modal_requested_ = false;
 };
 
 /** @brief Dataset browser application; owns all UI state. Strictly read-only. */
@@ -149,6 +151,8 @@ private:
     void setProbe(MapPanel& panel, uint32_t x, uint32_t y);
     void setComponentProbe(MapPanel& panel, uint32_t component);
     void savePanelRecipe(MapPanel& panel);
+    void deletePanelRecipe(MapPanel& panel, const std::filesystem::path& file);
+    void markMapRecipesDirty(const std::string& set_name, const std::string& map_name);
 
     void openMap(std::size_t set_index, std::size_t map_index, bool pinned);
     void closePanel(MapPanel& panel);

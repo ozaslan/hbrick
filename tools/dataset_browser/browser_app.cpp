@@ -80,6 +80,74 @@ void itemTooltip(const char* text) {
     }
 }
 
+/** @brief True when held modifier keys match @p ctrl / @p shift / @p alt exactly. */
+bool modsMatch(
+    const ImGuiIO& io,
+    const bool ctrl,
+    const bool shift,
+    const bool alt
+) {
+    return io.KeyCtrl == ctrl && io.KeyShift == shift && io.KeyAlt == alt;
+}
+
+/**
+ * @brief Key press with an exact modifier chord (no extra modifiers).
+ *
+ * Without this, @c Ctrl+G also matches @c Ctrl+Shift+G because ImGui only
+ * checks that Ctrl is held, not that Shift is absent.
+ */
+bool chordPressed(
+    const ImGuiIO& io,
+    const ImGuiKey key,
+    const bool ctrl,
+    const bool shift,
+    const bool alt
+) {
+    return modsMatch(io, ctrl, shift, alt) && ImGui::IsKeyPressed(key, false);
+}
+
+/** @brief Unmodified key press (no Ctrl, Shift, or Alt). */
+bool chordPressed(const ImGuiIO& io, const ImGuiKey key) {
+    return chordPressed(io, key, false, false, false);
+}
+
+/** @brief Ctrl + key (Shift and Alt must be up). */
+bool chordPressed(
+    const ImGuiIO& io,
+    const ImGuiKey key,
+    const bool ctrl
+) {
+    return chordPressed(io, key, ctrl, false, false);
+}
+
+/** @brief Ctrl+Shift + key (Alt must be up). */
+bool chordPressed(
+    const ImGuiIO& io,
+    const ImGuiKey key,
+    const bool ctrl,
+    const bool shift
+) {
+    return chordPressed(io, key, ctrl, shift, false);
+}
+
+/**
+ * @brief @c Ctrl+plus style chord; Shift may be held because @c + shares the
+ *        @c = key on US layouts.
+ */
+bool ctrlPlusPressed(const ImGuiIO& io) {
+    if (!io.KeyCtrl || io.KeyAlt) {
+        return false;
+    }
+    return ImGui::IsKeyPressed(ImGuiKey_Equal, false)
+        || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false);
+}
+
+/** @brief @c Ctrl+minus style chord with no other modifiers besides Ctrl. */
+bool ctrlMinusPressed(const ImGuiIO& io) {
+    return chordPressed(io, ImGuiKey_Minus, true, false, false)
+        || chordPressed(io, ImGuiKey_KeypadSubtract, true, false, false);
+}
+
 /**
  * @brief One-shot menu row that does not collapse the parent menu.
  *
@@ -579,51 +647,46 @@ void BrowserApp::handleGlobalShortcuts() {
     if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) {
         show_shortcuts_ = !show_shortcuts_;
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Q, false)) {
+    if (chordPressed(io, ImGuiKey_Q, true)) {
         quit_requested_ = true;
     }
 
-    if (io.KeyCtrl
-        && (ImGui::IsKeyPressed(ImGuiKey_Equal, false)
-            || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false))) {
+    if (ctrlPlusPressed(io)) {
         adjustUiFont(1.0F);
     }
-    if (io.KeyCtrl
-        && (ImGui::IsKeyPressed(ImGuiKey_Minus, false)
-            || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false))) {
+    if (ctrlMinusPressed(io)) {
         adjustUiFont(-1.0F);
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) {
+    if (chordPressed(io, ImGuiKey_0, true)) {
         ui_font_size_ = 16.0F;
         ui_font_dirty_ = true;
     }
 
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_1, false)) {
+    if (chordPressed(io, ImGuiKey_1, true, true)) {
         pending_preset_ = LayoutPreset::Browse;
         preset_pending_ = true;
     }
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_2, false)) {
+    if (chordPressed(io, ImGuiKey_2, true, true)) {
         pending_preset_ = LayoutPreset::Focus;
         preset_pending_ = true;
     }
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_3, false)) {
+    if (chordPressed(io, ImGuiKey_3, true, true)) {
         pending_preset_ = LayoutPreset::Compare;
         preset_pending_ = true;
     }
 
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_G, false)) {
+    if (chordPressed(io, ImGuiKey_G, true, true)) {
+        show_grid_ = !show_grid_;
+    } else if (chordPressed(io, ImGuiKey_G, true)) {
         show_gallery_ = !show_gallery_;
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_I, false)) {
+    if (chordPressed(io, ImGuiKey_I, true)) {
         show_inspector_ = !show_inspector_;
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) {
+    if (chordPressed(io, ImGuiKey_L, true)) {
         show_loupe_ = !show_loupe_;
     }
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_G, false)) {
-        show_grid_ = !show_grid_;
-    }
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false)) {
+    if (chordPressed(io, ImGuiKey_R, true, true)) {
         filter_recipes_only_ = !filter_recipes_only_;
     }
 }
@@ -631,55 +694,53 @@ void BrowserApp::handleGlobalShortcuts() {
 void BrowserApp::handleMapShortcuts(MapPanel& panel) {
     const ImGuiIO& io = ImGui::GetIO();
 
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+    if (chordPressed(io, ImGuiKey_W, true)) {
         panel.open = false;
         return;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+    if (chordPressed(io, ImGuiKey_F)) {
         panel.fit_requested = true;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_1, false)) {
+    if (chordPressed(io, ImGuiKey_1)) {
         panel.zoom = 1.0F;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket, false)) {
+    if (chordPressed(io, ImGuiKey_LeftBracket)) {
         panel.zoom = std::clamp(panel.zoom / 1.25F, kMinZoom, kMaxZoom);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_RightBracket, false)) {
+    if (chordPressed(io, ImGuiKey_RightBracket)) {
         panel.zoom = std::clamp(panel.zoom * 1.25F, kMinZoom, kMaxZoom);
     }
 
-    if ((ImGui::IsKeyPressed(ImGuiKey_Escape, false)
-         || ImGui::IsKeyPressed(ImGuiKey_Space, false))
+    if ((chordPressed(io, ImGuiKey_Escape) || chordPressed(io, ImGuiKey_Space))
         && panel.orient.probe_valid) {
         clearProbe(panel.orient);
         status_ = "Probe cleared";
     }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+    if (chordPressed(io, ImGuiKey_O)) {
         panel.orient.editor_open = !panel.orient.editor_open;
         if (panel.orient.editor_open) {
             panel.recipes_dirty = true;
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !panel.pinned) {
+    if (chordPressed(io, ImGuiKey_P) && !panel.pinned) {
         panel.pinned = true;
     }
 
-    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_1, false)) {
+    if (chordPressed(io, ImGuiKey_1, false, false, true)) {
         panel.view_mode = ViewMode::Terrain;
         rebuildPanelTexture(panel);
     }
-    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_2, false)) {
+    if (chordPressed(io, ImGuiKey_2, false, false, true)) {
         panel.view_mode = ViewMode::Passability;
         rebuildPanelTexture(panel);
     }
-    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_3, false)
-        && panel.orient.scc_valid) {
+    if (chordPressed(io, ImGuiKey_3, false, false, true) && panel.orient.scc_valid) {
         panel.view_mode = ViewMode::Scc;
         rebuildPanelTexture(panel);
     }
 
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
+    if (chordPressed(io, ImGuiKey_P, true, true)) {
         panel.orient.probe_mode = panel.orient.probe_mode == ProbeMode::Reachability
             ? ProbeMode::Component
             : ProbeMode::Reachability;
@@ -689,14 +750,14 @@ void BrowserApp::handleMapShortcuts(MapPanel& panel) {
         return;
     }
 
-    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+    if (chordPressed(io, ImGuiKey_Enter, true, true)) {
         regenerateGraph(panel.orient, panel.layout);
         if (panel.view_mode == ViewMode::Scc) {
             panel.view_mode = ViewMode::Passability;
         }
         rebuildPanelTexture(panel);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+    if (chordPressed(io, ImGuiKey_D)) {
         panel.orient.seed = rollSeed();
         if (panel.orient.auto_generate) {
             regenerateGraph(panel.orient, panel.layout);
@@ -706,13 +767,12 @@ void BrowserApp::handleMapShortcuts(MapPanel& panel) {
             rebuildPanelTexture(panel);
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_C, false) && panel.orient.generated) {
+    if (chordPressed(io, ImGuiKey_C) && panel.orient.generated) {
         computeScc(panel.orient, panel.layout);
         panel.view_mode = ViewMode::Scc;
         rebuildPanelTexture(panel);
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)
-        && panel.orient.generated) {
+    if (chordPressed(io, ImGuiKey_S, true) && panel.orient.generated) {
         savePanelRecipe(panel);
     }
 }
@@ -1880,17 +1940,19 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
 
     // Saved recipes for this exact map, refreshed lazily.
     if (panel.recipes_dirty) {
-        panel.map_recipes.clear();
-        for (const std::filesystem::path& file : listRecipes(recipes_dir_)) {
-            std::optional<Recipe> recipe = loadRecipe(file);
-            if (recipe.has_value()
-                && recipe->set_name == panel.set_name
-                && recipe->map_name == panel.map_name) {
-                panel.map_recipes.emplace_back(file, std::move(*recipe));
-            }
-        }
+        panel.map_recipes = listRecipesForMap(
+            recipes_dir_, panel.set_name, panel.map_name
+        );
         panel.recipes_dirty = false;
     }
+
+    char popup_id[96];
+    std::snprintf(
+        popup_id,
+        sizeof(popup_id),
+        "Confirm delete recipe###recipe_delete_%llu",
+        static_cast<unsigned long long>(panel.id)
+    );
 
     if (panel.map_recipes.empty()) {
         ImGui::TextDisabled("No saved recipes for this map");
@@ -1898,14 +1960,40 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         ImGui::TextWrapped(
             "%zu saved recipe(s) for this map:", panel.map_recipes.size()
         );
+        constexpr float kRecipeButtonWidth = 64.0F;
         for (std::size_t i = 0; i < panel.map_recipes.size(); ++i) {
-            const Recipe& saved = panel.map_recipes[i].second;
+            const SavedRecipeEntry& entry = panel.map_recipes[i];
+            const Recipe& saved = entry.recipe;
             ImGui::PushID(static_cast<int>(i));
-            if (ImGui::Button("Load")) {
+
+            ImGui::BeginGroup();
+            if (ImGui::Button("Load", ImVec2(kRecipeButtonWidth, 0.0F))) {
                 applyRecipeToPanel(panel, saved);
             }
-            itemTooltip(panel.map_recipes[i].first.filename().string().c_str());
+            if (ImGui::Button("Delete", ImVec2(kRecipeButtonWidth, 0.0F))) {
+                panel.recipe_delete_pending_ = entry.path;
+                panel.recipe_delete_modal_requested_ = true;
+            }
+            ImGui::EndGroup();
+
             ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::TextUnformatted(entry.path.filename().string().c_str());
+            if (entry.saved_at == "null") {
+                ImGui::PushStyleColor(
+                    ImGuiCol_Text,
+                    ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
+                );
+            } else {
+                ImGui::PushStyleColor(
+                    ImGuiCol_Text,
+                    ImVec4(0.55F, 0.60F, 0.68F, 1.0F)
+                );
+            }
+            ImGui::SetWindowFontScale(0.82F);
+            ImGui::TextUnformatted(entry.saved_at.c_str());
+            ImGui::SetWindowFontScale(1.0F);
+            ImGui::PopStyleColor();
             ImGui::TextWrapped(
                 "%s, seed %llu, one-way %.2f, bi %.2f, angle %.0f, against %.2f",
                 modeLabel(saved.mode),
@@ -1915,8 +2003,55 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
                 static_cast<double>(saved.gradient_angle_degrees),
                 static_cast<double>(saved.p_against_gradient)
             );
+            ImGui::EndGroup();
+
             ImGui::PopID();
+            ImGui::Spacing();
         }
+    }
+
+    // OpenPopup must run at the same ID stack depth as BeginPopupModal below.
+    // Calling it from inside PushID(i) above would never match.
+    if (panel.recipe_delete_modal_requested_) {
+        ImGui::OpenPopup(popup_id);
+        panel.recipe_delete_modal_requested_ = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(420.0F, 0.0F), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal(
+            popup_id,
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Are you sure you want to delete this recipe?");
+        if (!panel.recipe_delete_pending_.empty()) {
+            ImGui::TextUnformatted(
+                panel.recipe_delete_pending_.filename().string().c_str()
+            );
+            const std::string saved_at = formatRecipeSavedAt(panel.recipe_delete_pending_);
+            ImGui::PushStyleColor(
+                ImGuiCol_Text,
+                saved_at == "null"
+                    ? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
+                    : ImVec4(0.55F, 0.60F, 0.68F, 1.0F)
+            );
+            ImGui::SetWindowFontScale(0.82F);
+            ImGui::TextUnformatted(saved_at.c_str());
+            ImGui::SetWindowFontScale(1.0F);
+            ImGui::PopStyleColor();
+        }
+        ImGui::Separator();
+        if (ImGui::Button("Delete", ImVec2(120.0F, 0.0F))
+            && !panel.recipe_delete_pending_.empty()) {
+            deletePanelRecipe(panel, panel.recipe_delete_pending_);
+            panel.recipe_delete_pending_.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120.0F, 0.0F))) {
+            panel.recipe_delete_pending_.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::End();
@@ -1979,11 +2114,32 @@ void BrowserApp::savePanelRecipe(MapPanel& panel) {
     }
 
     status_ = "Saved recipe " + written.filename().string();
-    for (const std::unique_ptr<MapPanel>& other : panels_) {
-        if (other->set_name == panel.set_name && other->map_name == panel.map_name) {
-            other->recipes_dirty = true;
+    markMapRecipesDirty(panel.set_name, panel.map_name);
+    refreshRecipeIndex();
+}
+
+void BrowserApp::markMapRecipesDirty(
+    const std::string& set_name,
+    const std::string& map_name
+) {
+    for (const std::unique_ptr<MapPanel>& panel : panels_) {
+        if (panel->set_name == set_name && panel->map_name == map_name) {
+            panel->recipes_dirty = true;
         }
     }
+}
+
+void BrowserApp::deletePanelRecipe(
+    MapPanel& panel,
+    const std::filesystem::path& file
+) {
+    if (!deleteRecipe(file)) {
+        status_ = "Recipe delete failed: " + file.filename().string();
+        return;
+    }
+
+    status_ = "Deleted recipe " + file.filename().string();
+    markMapRecipesDirty(panel.set_name, panel.map_name);
     refreshRecipeIndex();
 }
 
