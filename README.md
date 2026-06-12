@@ -54,6 +54,7 @@ Typical workflow:
 | [`docs/traversal_storage.md`](docs/traversal_storage.md) | Rationale for CSR graph storage and search (BFS/DFS/SCC) |
 | [`docs/closure_storage.md`](docs/closure_storage.md) | Rationale for dense BitMatrix closure and memory policy |
 | [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) | Design notes for reusable traversal workspace |
+| [`docs/dataset_browser.md`](docs/dataset_browser.md) | Interactive GUI for MovingAI maps, directed graphs, and orientation recipes |
 | [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
 
 **API reference:** build with `-DHBRICK_BUILD_DOCS=ON`, then open [`docs/html/index.html`](docs/html/index.html).
