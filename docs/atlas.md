@@ -12,21 +12,21 @@ A quick reference for every major type, data structure, and algorithm in the lib
 flowchart TB
     core[hbrick_core]
     bit[hbrick_bit]
-    graph[hbrick_graph]
+    graphMod[hbrick_graph]
     baselines[hbrick_baselines]
     grid[hbrick_grid]
     bench[hbrick_bench]
     viz[hbrick_viz]
 
     core --> bit
-    core --> graph
-    grid --> graph
+    core --> graphMod
+    grid --> graphMod
     core --> baselines
     bit --> baselines
-    graph --> baselines
+    graphMod --> baselines
     grid --> baselines
     core --> viz
-    graph --> viz
+    graphMod --> viz
     grid --> viz
     core --> bench
 ```
