@@ -68,6 +68,13 @@ int main(const int argc, const char** argv) {
         while (glfwWindowShouldClose(window) == GLFW_FALSE) {
             glfwPollEvents();
 
+            app.prepareFrame();
+            if (app.fontGpuRefreshNeeded()) {
+                ImGui_ImplOpenGL3_DestroyDeviceObjects();
+                ImGui_ImplOpenGL3_CreateDeviceObjects();
+                app.clearFontGpuRefreshNeeded();
+            }
+
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();

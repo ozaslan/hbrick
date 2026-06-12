@@ -24,6 +24,22 @@ struct RandomAsymmetricParams {
     long double p_bidirectional = 0.0L;
     /** @brief Probability of orienting an adjacency as a single directed arc. @ingroup hbrick_graph */
     long double p_one_way = 0.0L;
+    /**
+     * @brief Flow direction in degrees for @ref hbrick::GridEdgeConversionMode::GradientFlow.
+     * @ingroup hbrick_graph
+     *
+     * Grid convention: 0 points east (+x), 90 points south (+y, increasing row).
+     */
+    double gradient_angle_degrees = 45.0;
+    /**
+     * @brief Probability of flipping a one-way arc against the gradient in
+     *        @ref hbrick::GridEdgeConversionMode::GradientFlow.
+     * @ingroup hbrick_graph
+     *
+     * Small backflow noise creates local cycles and therefore non-singleton
+     * SCCs inside an otherwise DAG-like flow field.
+     */
+    long double p_against_gradient = 0.02L;
 };
 
 /**
@@ -47,7 +63,19 @@ enum class GridEdgeConversionMode : uint8_t {
      * Matches the east/south scan order of
      * @ref hbrick::MazeLayout::forEachPassableAdjacentPairEastSouth.
      */
-    AcyclicEastSouth
+    AcyclicEastSouth,
+    /**
+     * @brief Orient adjacencies along a global flow direction with noise.
+     * @ingroup hbrick_graph
+     *
+     * Every passable adjacency yields at least one arc: bidirectional with
+     * @ref hbrick::RandomAsymmetricParams::p_bidirectional, otherwise a single arc pointing
+     * along the projection of @ref hbrick::RandomAsymmetricParams::gradient_angle_degrees,
+     * flipped against the flow with
+     * @ref hbrick::RandomAsymmetricParams::p_against_gradient. Produces coherent
+     * "downhill" reachability with a tunable amount of backflow cycles.
+     */
+    GradientFlow
 };
 
 }  // namespace hbrick

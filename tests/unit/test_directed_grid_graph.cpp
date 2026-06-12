@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,10 @@ std::vector<hbrick::Edge32> buildRandomEdges(
         hbrick::GridEdgeConversionMode::RandomAsymmetric,
         params
     ).edges();
+}
+
+bool edgeLess(const hbrick::Edge32 lhs, const hbrick::Edge32 rhs) {
+    return lhs.from != rhs.from ? lhs.from < rhs.from : lhs.to < rhs.to;
 }
 
 }  // namespace
@@ -129,6 +134,105 @@ TEST(DirectedGridGraph, RandomProcedureUsesIntegerThresholdsDocumentedInTest) {
     EXPECT_EQ(one_way.size(), 1U);
     EXPECT_TRUE(one_way[0U] == hbrick::Edge32(0U, 1U) || one_way[0U] == hbrick::Edge32(1U, 0U));
     EXPECT_TRUE(none.empty());
+}
+
+TEST(DirectedGridGraph, GradientFlowWithoutNoiseMatchesAcyclicEastSouth) {
+    const hbrick::MazeLayout grid(4U, 3U);
+
+    hbrick::RandomAsymmetricParams params;
+    params.seed = 7ULL;
+    params.gradient_angle_degrees = 45.0;  // both east and south point downhill
+    params.p_bidirectional = 0.0L;
+    params.p_against_gradient = 0.0L;
+
+    std::vector<hbrick::Edge32> gradient = hbrick::DirectedGridGraphBuilder::build(
+        grid, hbrick::GridEdgeConversionMode::GradientFlow, params
+    ).edges();
+    std::vector<hbrick::Edge32> acyclic = buildAcyclicEdges(grid);
+
+    std::sort(gradient.begin(), gradient.end(), edgeLess);
+    std::sort(acyclic.begin(), acyclic.end(), edgeLess);
+    EXPECT_EQ(gradient, acyclic);
+}
+
+TEST(DirectedGridGraph, GradientFlowReversedAngleReversesEveryArc) {
+    const hbrick::MazeLayout grid(3U, 3U);
+
+    hbrick::RandomAsymmetricParams params;
+    params.seed = 11ULL;
+    params.gradient_angle_degrees = 225.0;  // both axes point uphill
+    params.p_bidirectional = 0.0L;
+    params.p_against_gradient = 0.0L;
+
+    std::vector<hbrick::Edge32> reversed = hbrick::DirectedGridGraphBuilder::build(
+        grid, hbrick::GridEdgeConversionMode::GradientFlow, params
+    ).edges();
+
+    std::vector<hbrick::Edge32> expected;
+    for (const hbrick::Edge32& edge : buildAcyclicEdges(grid)) {
+        expected.emplace_back(edge.to, edge.from);
+    }
+
+    std::sort(reversed.begin(), reversed.end(), edgeLess);
+    std::sort(expected.begin(), expected.end(), edgeLess);
+    EXPECT_EQ(reversed, expected);
+}
+
+TEST(DirectedGridGraph, GradientFlowCoversEveryAdjacencyExactlyOnce) {
+    hbrick::MazeLayout grid(5U, 4U);
+    grid.setPassable(hbrick::GridCoord{2U, 1U}, false);
+
+    uint64_t adjacencies = 0;
+    grid.forEachPassableAdjacentPairEastSouth(
+        [&adjacencies](const hbrick::GridCoord, const hbrick::GridCoord, const hbrick::Direction) {
+            ++adjacencies;
+        }
+    );
+
+    hbrick::RandomAsymmetricParams one_way;
+    one_way.seed = 3ULL;
+    one_way.gradient_angle_degrees = 120.0;
+    one_way.p_bidirectional = 0.0L;
+    one_way.p_against_gradient = 0.10L;
+
+    hbrick::RandomAsymmetricParams all_bidirectional = one_way;
+    all_bidirectional.p_bidirectional = 1.0L;
+
+    const hbrick::DirectedGridGraph single = hbrick::DirectedGridGraphBuilder::build(
+        grid, hbrick::GridEdgeConversionMode::GradientFlow, one_way
+    );
+    const hbrick::DirectedGridGraph doubled = hbrick::DirectedGridGraphBuilder::build(
+        grid, hbrick::GridEdgeConversionMode::GradientFlow, all_bidirectional
+    );
+
+    EXPECT_EQ(single.numEdges(), adjacencies);
+    EXPECT_EQ(doubled.numEdges(), 2U * adjacencies);
+}
+
+TEST(DirectedGridGraph, GradientFlowIsDeterministicPerSeed) {
+    const hbrick::MazeLayout grid(6U, 5U);
+
+    hbrick::RandomAsymmetricParams params;
+    params.seed = 0xFEEDFACEULL;
+    params.gradient_angle_degrees = 90.0;
+    params.p_bidirectional = 0.15L;
+    params.p_against_gradient = 0.05L;
+
+    const auto buildEdges = [&grid, &params]() {
+        return hbrick::DirectedGridGraphBuilder::build(
+            grid, hbrick::GridEdgeConversionMode::GradientFlow, params
+        ).edges();
+    };
+
+    EXPECT_EQ(buildEdges(), buildEdges());
+
+    hbrick::RandomAsymmetricParams other = params;
+    other.seed = params.seed + 1U;
+    const std::vector<hbrick::Edge32> different =
+        hbrick::DirectedGridGraphBuilder::build(
+            grid, hbrick::GridEdgeConversionMode::GradientFlow, other
+        ).edges();
+    EXPECT_NE(buildEdges(), different);
 }
 
 TEST(DirectedGridGraph, ImpassableCellsRemoveIncidentPairs) {

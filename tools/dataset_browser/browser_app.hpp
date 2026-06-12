@@ -17,6 +17,8 @@
 
 #include "dataset_index.hpp"
 #include "map_render.hpp"
+#include "orientation.hpp"
+#include "recipe.hpp"
 
 namespace hbrick::tools {
 
@@ -26,6 +28,8 @@ enum class ViewMode : uint8_t {
     Terrain,
     /** @brief Color cells by MazeLayout passability under the active policy. */
     Passability,
+    /** @brief Color passable cells by strongly connected component id. */
+    Scc,
 };
 
 /** @brief Built-in dock layout presets selectable from the menu bar. */
@@ -59,10 +63,21 @@ struct MapPanel {
     bool open = true;
     bool pinned = false;
     bool focus_requested = false;
+    // True while the panel's window content is actually drawn this frame
+    // (false when it is a hidden tab in a dock). Gates the orientation
+    // editor so it never edits a map the user cannot see.
+    bool visible_now = false;
 
     // Loupe anchor corner; only flips when the cursor approaches it.
     bool loupe_right = true;
     bool loupe_bottom = true;
+
+    // Directed-orientation editor state (graph, SCCs, probe).
+    OrientationState orient;
+
+    // Saved recipes for this exact map, shown inside the orientation editor.
+    std::vector<std::pair<std::filesystem::path, Recipe>> map_recipes;
+    bool recipes_dirty = true;
 };
 
 /** @brief Dataset browser application; owns all UI state. Strictly read-only. */
@@ -76,6 +91,19 @@ public:
 
     /** @brief Draws the full UI for one frame. */
     void drawFrame();
+
+    /**
+     * @brief Rebuilds the UI font atlas when the size changed.
+     *
+     * Call once per frame before @c ImGui::NewFrame. When this returns @c true,
+     * the OpenGL backend must destroy and recreate its device objects so the
+     * new font texture is uploaded.
+     */
+    void prepareFrame();
+    [[nodiscard]] bool fontGpuRefreshNeeded() const noexcept {
+        return font_gpu_refresh_needed_;
+    }
+    void clearFontGpuRefreshNeeded() noexcept { font_gpu_refresh_needed_ = false; }
 
     /** @brief True after File > Quit; the main loop closes the window. */
     [[nodiscard]] bool quitRequested() const noexcept { return quit_requested_; }
@@ -94,9 +122,33 @@ private:
         ImVec2 mouse_pos
     ) const;
     void drawInspectorPanel();
+    void drawOrientationEditor(MapPanel& panel);
+    void drawEdgeArrows(
+        ImDrawList* draw_list,
+        const MapPanel& panel,
+        ImVec2 origin,
+        float scale_x,
+        float scale_y,
+        uint32_t x_first,
+        uint32_t x_last,
+        uint32_t y_first,
+        uint32_t y_last
+    ) const;
 
     void applyPreset(LayoutPreset preset, unsigned int dockspace_id);
     void handleShortcuts();
+    void handleGlobalShortcuts();
+    void handleMapShortcuts(MapPanel& panel);
+    void adjustUiFont(float delta_pixels);
+    void rebuildUiFont();
+    void drawShortcutsWindow();
+    void applyRecipe(const Recipe& recipe);
+    void applyRecipeToPanel(MapPanel& panel, const Recipe& recipe);
+    void refreshRecipeIndex();
+    [[nodiscard]] uint32_t recipeCountFor(std::size_t set_index, std::size_t map_index) const;
+    void setProbe(MapPanel& panel, uint32_t x, uint32_t y);
+    void setComponentProbe(MapPanel& panel, uint32_t component);
+    void savePanelRecipe(MapPanel& panel);
 
     void openMap(std::size_t set_index, std::size_t map_index, bool pinned);
     void closePanel(MapPanel& panel);
@@ -119,6 +171,7 @@ private:
     bool show_inspector_ = true;
     bool show_loupe_ = true;
     bool show_grid_ = true;
+    bool show_shortcuts_ = false;
     bool quit_requested_ = false;
 
     bool preset_pending_ = true;
@@ -132,7 +185,17 @@ private:
     uint32_t hover_y_ = 0;
 
     char filter_[64] = {};
+    bool filter_recipes_only_ = false;
     std::string status_;
+
+    std::filesystem::path recipes_dir_;
+    // Recipe counts parallel to index_.sets[i].maps[j]; drives gallery badges
+    // and the recipes-only filter.
+    std::vector<std::vector<uint32_t>> recipe_counts_;
+
+    float ui_font_size_ = 16.0F;
+    bool ui_font_dirty_ = true;
+    bool font_gpu_refresh_needed_ = false;
 };
 
 }  // namespace hbrick::tools

@@ -1,6 +1,8 @@
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 
+#include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 
 #include "hbrick/graph/csr_graph_builder.hpp"
@@ -79,6 +81,62 @@ void buildRandomAsymmetric(
     });
 }
 
+void buildGradientFlow(
+    const MazeLayout& grid,
+    CsrGraphBuilder& builder,
+    const RandomAsymmetricParams& params
+) {
+    std::mt19937_64 rng{params.seed};
+
+    const uint64_t threshold_bi =
+        static_cast<uint64_t>(params.p_bidirectional * kMaxU64AsLongDouble);
+    const uint64_t threshold_flip =
+        static_cast<uint64_t>(params.p_against_gradient * kMaxU64AsLongDouble);
+
+    const double angle_radians =
+        params.gradient_angle_degrees * std::numbers::pi / 180.0;
+    const double flow_x = std::cos(angle_radians);
+    const double flow_y = std::sin(angle_radians);
+
+    grid.forEachPassableAdjacentPairEastSouth([&](
+        const GridCoord from,
+        const GridCoord to,
+        const Direction direction
+    ) {
+        const uint32_t from_vertex = grid.vertexId(from).value;
+        const uint32_t to_vertex = grid.vertexId(to).value;
+
+        if (rng() < threshold_bi) {
+            addBidirectionalEdge(builder, from_vertex, to_vertex);
+            return;
+        }
+
+        // East steps project onto +x, south steps onto +y (row grows downward).
+        const double projection =
+            direction == Direction::East ? flow_x : flow_y;
+
+        bool along_flow;
+        constexpr double kPerpendicularEpsilon = 1e-9;
+        if (projection > kPerpendicularEpsilon) {
+            along_flow = true;
+        } else if (projection < -kPerpendicularEpsilon) {
+            along_flow = false;
+        } else {
+            along_flow = (rng() & 1U) == 0U;
+        }
+
+        if (rng() < threshold_flip) {
+            along_flow = !along_flow;
+        }
+
+        if (along_flow) {
+            builder.addEdge(from_vertex, to_vertex);
+        } else {
+            builder.addEdge(to_vertex, from_vertex);
+        }
+    });
+}
+
 }  // namespace
 
 DirectedGridGraph DirectedGridGraphBuilder::build(
@@ -97,6 +155,9 @@ DirectedGridGraph DirectedGridGraphBuilder::build(
             break;
         case GridEdgeConversionMode::RandomAsymmetric:
             buildRandomAsymmetric(grid, builder, params);
+            break;
+        case GridEdgeConversionMode::GradientFlow:
+            buildGradientFlow(grid, builder, params);
             break;
     }
 

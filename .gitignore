@@ -6,6 +6,9 @@ compile_commands.json
 # the extracted tree is regenerated via datasets/movingai/fetch_movingai.sh
 datasets/movingai/extracted/
 
+# Saved orientation recipes (parameters only); created by the dataset browser.
+recipes/*.json
+
 # Generated Doxygen output (sources live in docs/*.md, docs/Doxyfile.in, etc.)
 docs/html/
 docs/latex/

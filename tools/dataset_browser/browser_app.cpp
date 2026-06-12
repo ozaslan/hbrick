@@ -4,10 +4,15 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <random>
 
 #include <imgui_internal.h>
 
 #include "hbrick/io/movingai_loader.hpp"
+
+#ifndef HBRICK_RECIPES_DIR
+#define HBRICK_RECIPES_DIR "recipes"
+#endif
 
 namespace hbrick::tools {
 
@@ -18,6 +23,7 @@ constexpr float kThumbnailDrawEdge = 52.0F;
 constexpr float kMinZoom = 0.05F;
 constexpr float kMaxZoom = 64.0F;
 constexpr float kGridZoomThreshold = 8.0F;
+constexpr float kArrowZoomThreshold = 10.0F;
 constexpr float kLoupeZoom = 12.0F;
 constexpr float kLoupeMinCanvasW = 340.0F;
 constexpr float kLoupeMinCanvasH = 280.0F;
@@ -41,6 +47,85 @@ ImTextureID toImTexture(const GlTexture& texture) {
     return static_cast<ImTextureID>(static_cast<intptr_t>(texture.id));
 }
 
+const char* modeLabel(const GridEdgeConversionMode mode) {
+    switch (mode) {
+        case GridEdgeConversionMode::RandomAsymmetric:
+            return "Random asymmetric";
+        case GridEdgeConversionMode::BidirectionalAll:
+            return "Bidirectional (baseline)";
+        case GridEdgeConversionMode::AcyclicEastSouth:
+            return "Acyclic east/south (DAG)";
+        case GridEdgeConversionMode::GradientFlow:
+            return "Gradient flow";
+        default:
+            return "?";
+    }
+}
+
+/** @brief Degree on grid graphs is at most 4, so a linear span scan is exact and cheap. */
+bool hasArc(const DirectedGridGraph& graph, const uint32_t from, const uint32_t to) {
+    for (const uint32_t next : graph.outNeighbors(from)) {
+        if (next == to) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** @brief Hover tooltip for the last submitted widget. */
+void itemTooltip(const char* text) {
+    if (ImGui::IsItemHovered(
+            ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("%s", text);
+    }
+}
+
+/**
+ * @brief One-shot menu row that does not collapse the parent menu.
+ *
+ * ImGui closes menus on item activation by default; we disable that so
+ * toggles and layout picks can be applied repeatedly until the user clicks
+ * outside the menu bar.
+ */
+bool menuAction(
+    const char* label,
+    const char* shortcut = nullptr,
+    const bool enabled = true
+) {
+    ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+    const bool clicked = ImGui::MenuItem(label, shortcut, false, enabled);
+    ImGui::PopItemFlag();
+    return clicked;
+}
+
+/** @brief Checkbox menu row that keeps the parent menu open. */
+void menuToggle(const char* label, const char* shortcut, bool* value) {
+    ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+    ImGui::MenuItem(label, shortcut, value);
+    ImGui::PopItemFlag();
+}
+
+uint64_t rollSeed() {
+    std::random_device device;
+    return (static_cast<uint64_t>(device()) << 32U) | device();
+}
+
+/** @brief Clears generated graph/SCC/probe data but keeps the chosen parameters. */
+void resetOrientationData(OrientationState& orient) {
+    clearProbe(orient);
+    orient.generated = false;
+    orient.graph = DirectedGridGraph{};
+    orient.scc_valid = false;
+    orient.num_components = 0;
+    orient.largest_component = 0;
+    orient.condensation_edges = 0;
+    orient.component_of.clear();
+    orient.component_size_of.clear();
+    orient.component_sizes.clear();
+    orient.component_order.clear();
+    orient.density = {};
+}
+
 bool containsCaseInsensitive(const std::string& haystack, const char* needle) {
     if (needle == nullptr || needle[0] == '\0') {
         return true;
@@ -57,6 +142,55 @@ bool containsCaseInsensitive(const std::string& haystack, const char* needle) {
         }
     );
     return it != haystack.end();
+}
+
+/** @brief Case-insensitive glob with `*` (any run) and `?` (any one char). */
+bool wildcardMatch(const std::string_view text, const std::string_view pattern) {
+    std::size_t t = 0;
+    std::size_t p = 0;
+    std::size_t star_p = std::string_view::npos;
+    std::size_t star_t = 0;
+
+    const auto lower = [](const char c) {
+        return std::tolower(static_cast<unsigned char>(c));
+    };
+
+    while (t < text.size()) {
+        if (p < pattern.size()
+            && (pattern[p] == '?' || lower(pattern[p]) == lower(text[t]))) {
+            ++p;
+            ++t;
+        } else if (p < pattern.size() && pattern[p] == '*') {
+            star_p = p++;
+            star_t = t;
+        } else if (star_p != std::string_view::npos) {
+            // Backtrack: let the last star swallow one more character.
+            p = star_p + 1;
+            t = ++star_t;
+        } else {
+            return false;
+        }
+    }
+    while (p < pattern.size() && pattern[p] == '*') {
+        ++p;
+    }
+    return p == pattern.size();
+}
+
+/**
+ * @brief Gallery filter: glob semantics when the user types wildcards,
+ *        otherwise plain substring search.
+ */
+bool filterMatches(const std::string& name, const char* filter) {
+    if (filter == nullptr || filter[0] == '\0') {
+        return true;
+    }
+    const std::string_view pattern(filter);
+    if (pattern.find('*') != std::string_view::npos
+        || pattern.find('?') != std::string_view::npos) {
+        return wildcardMatch(name, pattern);
+    }
+    return containsCaseInsensitive(name, filter);
 }
 
 /** @brief Stable ImGui window name for a panel; title text varies, ID does not. */
@@ -77,11 +211,13 @@ std::string panelWindowName(const MapPanel& panel) {
 }  // namespace
 
 BrowserApp::BrowserApp(std::filesystem::path dataset_root)
-    : index_(scanDatasets(dataset_root)) {
+    : index_(scanDatasets(dataset_root)),
+      recipes_dir_(HBRICK_RECIPES_DIR) {
     thumbnails_.resize(index_.sets.size());
     for (std::size_t i = 0; i < index_.sets.size(); ++i) {
         thumbnails_[i].resize(index_.sets[i].maps.size());
     }
+    refreshRecipeIndex();
     if (index_.sets.empty()) {
         status_ = "No datasets found under " + index_.root.string()
             + " - run datasets/movingai/fetch_movingai.sh --extract-only";
@@ -100,7 +236,30 @@ BrowserApp::~BrowserApp() {
     }
     for (const std::unique_ptr<MapPanel>& panel : panels_) {
         destroyTexture(panel->texture);
+        destroyOrientationTextures(panel->orient);
     }
+}
+
+void BrowserApp::prepareFrame() {
+    if (ui_font_dirty_) {
+        rebuildUiFont();
+    }
+}
+
+void BrowserApp::rebuildUiFont() {
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    ImFontConfig config;
+    config.SizePixels = ui_font_size_;
+    io.Fonts->AddFontDefault(&config);
+    io.Fonts->Build();
+    ui_font_dirty_ = false;
+    font_gpu_refresh_needed_ = true;
+}
+
+void BrowserApp::adjustUiFont(const float delta_pixels) {
+    ui_font_size_ = std::clamp(ui_font_size_ + delta_pixels, 12.0F, 28.0F);
+    ui_font_dirty_ = true;
 }
 
 void BrowserApp::drawFrame() {
@@ -124,6 +283,9 @@ void BrowserApp::drawFrame() {
     drawMapPanels();
     if (show_inspector_) {
         drawInspectorPanel();
+    }
+    if (show_shortcuts_) {
+        drawShortcutsWindow();
     }
 
     redock_panels_ = false;
@@ -150,55 +312,159 @@ void BrowserApp::drawMenuBar() {
 
     if (ImGui::BeginMenu("File")) {
         MapPanel* active = activePanel();
-        if (ImGui::MenuItem("Close active map", "Ctrl+W", false, active != nullptr)
+        if (menuAction("Close active map", "Ctrl+W", active != nullptr)
             && active != nullptr) {
             active->open = false;
         }
-        if (ImGui::MenuItem("Close all maps", nullptr, false, !panels_.empty())) {
+        if (menuAction("Close all maps", nullptr, !panels_.empty())) {
             for (const std::unique_ptr<MapPanel>& panel : panels_) {
                 panel->open = false;
             }
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Quit", nullptr)) {
+        if (ImGui::BeginMenu("Load recipe")) {
+            ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+            const std::vector<std::filesystem::path> files = listRecipes(recipes_dir_);
+            if (files.empty()) {
+                ImGui::TextDisabled("No recipes in %s", recipes_dir_.string().c_str());
+            }
+            for (const std::filesystem::path& file : files) {
+                if (menuAction(file.filename().string().c_str())) {
+                    const std::optional<Recipe> recipe = loadRecipe(file);
+                    if (recipe.has_value()) {
+                        applyRecipe(*recipe);
+                    } else {
+                        status_ = "Could not parse recipe " + file.filename().string();
+                    }
+                }
+            }
+            ImGui::PopItemFlag();
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (menuAction("Quit", "Ctrl+Q")) {
             quit_requested_ = true;
         }
         ImGui::EndMenu();
     }
 
     if (ImGui::BeginMenu("View")) {
-        if (ImGui::MenuItem("Layout: Browse")) {
+        if (menuAction("Layout: Browse", "Ctrl+Shift+1")) {
             pending_preset_ = LayoutPreset::Browse;
             preset_pending_ = true;
         }
-        if (ImGui::MenuItem("Layout: Focus")) {
+        if (menuAction("Layout: Focus", "Ctrl+Shift+2")) {
             pending_preset_ = LayoutPreset::Focus;
             preset_pending_ = true;
         }
-        if (ImGui::MenuItem("Layout: Compare")) {
+        if (menuAction("Layout: Compare", "Ctrl+Shift+3")) {
             pending_preset_ = LayoutPreset::Compare;
             preset_pending_ = true;
         }
         ImGui::Separator();
-        ImGui::MenuItem("Datasets panel", nullptr, &show_gallery_);
-        ImGui::MenuItem("Inspector panel", nullptr, &show_inspector_);
+        menuToggle("Datasets panel", "Ctrl+G", &show_gallery_);
+        menuToggle("Inspector panel", "Ctrl+I", &show_inspector_);
         ImGui::Separator();
-        ImGui::MenuItem("Loupe (picture-in-picture)", nullptr, &show_loupe_);
-        ImGui::MenuItem("Grid lines when zoomed", nullptr, &show_grid_);
+        menuToggle("Loupe (picture-in-picture)", "Ctrl+L", &show_loupe_);
+        menuToggle("Grid lines when zoomed", "Ctrl+Shift+G", &show_grid_);
         ImGui::Separator();
         MapPanel* active = activePanel();
-        if (ImGui::MenuItem("Fit active map", "F", false, active != nullptr)
-            && active != nullptr) {
+        if (menuAction("Fit active map", "F", active != nullptr) && active != nullptr) {
             active->fit_requested = true;
         }
-        if (ImGui::MenuItem("Zoom 1:1", "1", false, active != nullptr)
-            && active != nullptr) {
+        if (menuAction("Zoom 1:1", "1", active != nullptr) && active != nullptr) {
             active->zoom = 1.0F;
         }
+        ImGui::Separator();
+        if (menuAction("Font size larger", "Ctrl+=")) {
+            adjustUiFont(1.0F);
+        }
+        if (menuAction("Font size smaller", "Ctrl+-")) {
+            adjustUiFont(-1.0F);
+        }
+        if (menuAction("Font size reset", "Ctrl+0")) {
+            ui_font_size_ = 16.0F;
+            ui_font_dirty_ = true;
+        }
+        ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+        if (ImGui::SliderFloat(
+                "UI font size",
+                &ui_font_size_,
+                12.0F,
+                28.0F,
+                "%.0f px")) {
+            ui_font_dirty_ = true;
+        }
+        ImGui::PopItemFlag();
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Help")) {
+        menuToggle("Keyboard shortcuts", "F1", &show_shortcuts_);
         ImGui::EndMenu();
     }
 
     ImGui::EndMainMenuBar();
+}
+
+void BrowserApp::drawShortcutsWindow() {
+    ImGui::SetNextWindowSize(ImVec2(520.0F, 520.0F), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Keyboard shortcuts", &show_shortcuts_)) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextWrapped(
+        "Shortcuts are listed in the Help menu and work whenever a text field "
+        "does not have keyboard focus."
+    );
+    ImGui::Separator();
+
+    constexpr const char* kShortcuts[][2] = {
+        {"F1", "Show or hide this shortcuts window"},
+        {"Ctrl+Q", "Quit the application"},
+        {"Ctrl+= / Ctrl+-", "Increase / decrease UI font size"},
+        {"Ctrl+0", "Reset UI font size to 16 px"},
+        {"Ctrl+Shift+1/2/3", "Browse / Focus / Compare layout preset"},
+        {"Ctrl+G", "Toggle Datasets gallery panel"},
+        {"Ctrl+I", "Toggle Inspector panel"},
+        {"Ctrl+L", "Toggle picture-in-picture loupe"},
+        {"Ctrl+Shift+G", "Toggle grid lines at high zoom"},
+        {"Ctrl+Shift+R", "Toggle 'only maps with recipes' gallery filter"},
+        {"F", "Fit the active map to its panel"},
+        {"1", "Zoom the active map to 1:1"},
+        {"[ / ]", "Zoom the active map out / in"},
+        {"Ctrl+W", "Close the active map panel"},
+        {"O", "Toggle orientation editor for the active map"},
+        {"P", "Pin the active preview panel"},
+        {"Alt+1/2/3", "Terrain / passability / SCC view on active map"},
+        {"Esc / Space", "Clear the probe highlight on the active map"},
+        {"Right-click", "Probe a cell (BFS or SCC, set in Orient panel)"},
+        {"Ctrl+Shift+Enter", "Generate directed graph (orientation editor)"},
+        {"D", "Roll dice / randomize seed (orientation editor)"},
+        {"C", "Compute SCCs (orientation editor)"},
+        {"Ctrl+S", "Save current recipe (orientation editor)"},
+        {"Ctrl+Shift+P", "Switch probe mode: BFS reachability / SCC"},
+        {"Mouse wheel", "Zoom around the cursor"},
+        {"Left/middle drag", "Pan the canvas"},
+        {"Click (gallery)", "Open map in the reusable preview panel"},
+        {"Double-click (gallery)", "Open map in its own pinned panel"},
+    };
+
+    if (ImGui::BeginTable("##shortcuts", 2, ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 170.0F);
+        ImGui::TableSetupColumn("Action");
+        for (const auto& row : kShortcuts) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(row[0]);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextWrapped("%s", row[1]);
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
 }
 
 void BrowserApp::drawStatusBar() {
@@ -299,18 +565,155 @@ void BrowserApp::handleShortcuts() {
         return;
     }
 
+    handleGlobalShortcuts();
+
     MapPanel* active = activePanel();
-    if (active == nullptr) {
+    if (active != nullptr) {
+        handleMapShortcuts(*active);
+    }
+}
+
+void BrowserApp::handleGlobalShortcuts() {
+    const ImGuiIO& io = ImGui::GetIO();
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) {
+        show_shortcuts_ = !show_shortcuts_;
+    }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Q, false)) {
+        quit_requested_ = true;
+    }
+
+    if (io.KeyCtrl
+        && (ImGui::IsKeyPressed(ImGuiKey_Equal, false)
+            || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false))) {
+        adjustUiFont(1.0F);
+    }
+    if (io.KeyCtrl
+        && (ImGui::IsKeyPressed(ImGuiKey_Minus, false)
+            || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false))) {
+        adjustUiFont(-1.0F);
+    }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_0, false)) {
+        ui_font_size_ = 16.0F;
+        ui_font_dirty_ = true;
+    }
+
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_1, false)) {
+        pending_preset_ = LayoutPreset::Browse;
+        preset_pending_ = true;
+    }
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_2, false)) {
+        pending_preset_ = LayoutPreset::Focus;
+        preset_pending_ = true;
+    }
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_3, false)) {
+        pending_preset_ = LayoutPreset::Compare;
+        preset_pending_ = true;
+    }
+
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_G, false)) {
+        show_gallery_ = !show_gallery_;
+    }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_I, false)) {
+        show_inspector_ = !show_inspector_;
+    }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_L, false)) {
+        show_loupe_ = !show_loupe_;
+    }
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_G, false)) {
+        show_grid_ = !show_grid_;
+    }
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false)) {
+        filter_recipes_only_ = !filter_recipes_only_;
+    }
+}
+
+void BrowserApp::handleMapShortcuts(MapPanel& panel) {
+    const ImGuiIO& io = ImGui::GetIO();
+
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+        panel.open = false;
         return;
     }
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
-        active->open = false;
-    }
     if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-        active->fit_requested = true;
+        panel.fit_requested = true;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_1, false)) {
-        active->zoom = 1.0F;
+        panel.zoom = 1.0F;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket, false)) {
+        panel.zoom = std::clamp(panel.zoom / 1.25F, kMinZoom, kMaxZoom);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_RightBracket, false)) {
+        panel.zoom = std::clamp(panel.zoom * 1.25F, kMinZoom, kMaxZoom);
+    }
+
+    if ((ImGui::IsKeyPressed(ImGuiKey_Escape, false)
+         || ImGui::IsKeyPressed(ImGuiKey_Space, false))
+        && panel.orient.probe_valid) {
+        clearProbe(panel.orient);
+        status_ = "Probe cleared";
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+        panel.orient.editor_open = !panel.orient.editor_open;
+        if (panel.orient.editor_open) {
+            panel.recipes_dirty = true;
+        }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !panel.pinned) {
+        panel.pinned = true;
+    }
+
+    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_1, false)) {
+        panel.view_mode = ViewMode::Terrain;
+        rebuildPanelTexture(panel);
+    }
+    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_2, false)) {
+        panel.view_mode = ViewMode::Passability;
+        rebuildPanelTexture(panel);
+    }
+    if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_3, false)
+        && panel.orient.scc_valid) {
+        panel.view_mode = ViewMode::Scc;
+        rebuildPanelTexture(panel);
+    }
+
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
+        panel.orient.probe_mode = panel.orient.probe_mode == ProbeMode::Reachability
+            ? ProbeMode::Component
+            : ProbeMode::Reachability;
+    }
+
+    if (!panel.orient.editor_open) {
+        return;
+    }
+
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+        regenerateGraph(panel.orient, panel.layout);
+        if (panel.view_mode == ViewMode::Scc) {
+            panel.view_mode = ViewMode::Passability;
+        }
+        rebuildPanelTexture(panel);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+        panel.orient.seed = rollSeed();
+        if (panel.orient.auto_generate) {
+            regenerateGraph(panel.orient, panel.layout);
+            if (panel.view_mode == ViewMode::Scc) {
+                panel.view_mode = ViewMode::Passability;
+            }
+            rebuildPanelTexture(panel);
+        }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_C, false) && panel.orient.generated) {
+        computeScc(panel.orient, panel.layout);
+        panel.view_mode = ViewMode::Scc;
+        rebuildPanelTexture(panel);
+    }
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false)
+        && panel.orient.generated) {
+        savePanelRecipe(panel);
     }
 }
 
@@ -362,6 +765,12 @@ void BrowserApp::openMap(
     }
 
     destroyTexture(target->texture);
+    // A reused preview panel keeps its editor and parameters but any graph or
+    // analysis derived from the previous map is stale.
+    resetOrientationData(target->orient);
+    if (target->view_mode == ViewMode::Scc) {
+        target->view_mode = ViewMode::Passability;
+    }
     target->set_name = set.name;
     target->map_name = entry.name;
     target->map = std::move(result.map);
@@ -394,6 +803,7 @@ void BrowserApp::pruneClosedPanels() {
             active_closed = true;
         }
         destroyTexture((*it)->texture);
+        destroyOrientationTextures((*it)->orient);
         it = panels_.erase(it);
     }
     if (active_closed) {
@@ -402,15 +812,34 @@ void BrowserApp::pruneClosedPanels() {
 }
 
 void BrowserApp::rebuildPanelTexture(MapPanel& panel) {
-    const std::vector<uint8_t> pixels = panel.view_mode == ViewMode::Terrain
-        ? renderTerrainPixels(panel.map)
-        : renderPassabilityPixels(panel.layout);
+    std::vector<uint8_t> pixels;
+    switch (panel.view_mode) {
+        case ViewMode::Terrain:
+            pixels = renderTerrainPixels(panel.map);
+            break;
+        case ViewMode::Passability:
+            pixels = renderPassabilityPixels(panel.layout);
+            break;
+        case ViewMode::Scc:
+            pixels = panel.orient.scc_valid
+                ? renderSccPixels(panel.layout, panel.orient)
+                : renderPassabilityPixels(panel.layout);
+            break;
+    }
     uploadTexture(panel.texture, pixels, panel.map.width(), panel.map.height());
 }
 
 void BrowserApp::rebuildAllLayouts() {
     for (const std::unique_ptr<MapPanel>& panel : panels_) {
         panel->layout = panel->map.toMazeLayout(policy_);
+        // The directed graph is derived from the layout, so it must follow
+        // the policy change; SCC/probe results are recomputed on demand.
+        if (panel->orient.generated) {
+            regenerateGraph(panel->orient, panel->layout);
+        }
+        if (panel->view_mode == ViewMode::Scc) {
+            panel->view_mode = ViewMode::Passability;
+        }
         if (panel->view_mode == ViewMode::Passability) {
             rebuildPanelTexture(*panel);
         }
@@ -458,7 +887,16 @@ void BrowserApp::drawGalleryPanel() {
     }
 
     ImGui::SetNextItemWidth(-1.0F);
-    ImGui::InputTextWithHint("##filter", "filter maps...", filter_, sizeof(filter_));
+    ImGui::InputTextWithHint(
+        "##filter", "filter maps...  (* and ? wildcards)", filter_, sizeof(filter_)
+    );
+    itemTooltip(
+        "Substring search by default.\n"
+        "Use * (any run) and ? (any single character) for glob\n"
+        "matching, e.g.  maze512-*-0  or  AR0?03SR"
+    );
+    ImGui::Checkbox("Only maps with recipes", &filter_recipes_only_);
+    itemTooltip("Shortcut: Ctrl+Shift+R");
 
     for (std::size_t set_index = 0; set_index < index_.sets.size(); ++set_index) {
         const SetEntry& set = index_.sets[set_index];
@@ -466,9 +904,13 @@ void BrowserApp::drawGalleryPanel() {
         std::vector<std::size_t> visible;
         visible.reserve(set.maps.size());
         for (std::size_t i = 0; i < set.maps.size(); ++i) {
-            if (containsCaseInsensitive(set.maps[i].name, filter_)) {
-                visible.push_back(i);
+            if (!filterMatches(set.maps[i].name, filter_)) {
+                continue;
             }
+            if (filter_recipes_only_ && recipeCountFor(set_index, i) == 0U) {
+                continue;
+            }
+            visible.push_back(i);
         }
         if (visible.empty()) {
             continue;
@@ -506,6 +948,21 @@ void BrowserApp::drawGalleryPanel() {
                     );
                 } else {
                     ImGui::Dummy(ImVec2(kThumbnailDrawEdge, kThumbnailDrawEdge));
+                }
+
+                // Recipe badge: orange dot in the thumbnail corner.
+                const uint32_t recipes = recipeCountFor(set_index, map_index);
+                if (recipes > 0U) {
+                    const ImVec2 corner = ImGui::GetItemRectMin();
+                    ImDrawList* overlay = ImGui::GetWindowDrawList();
+                    const ImVec2 dot(corner.x + 7.0F, corner.y + 7.0F);
+                    overlay->AddCircleFilled(dot, 5.0F, IM_COL32(20, 20, 24, 255));
+                    overlay->AddCircleFilled(dot, 3.5F, IM_COL32(255, 170, 40, 255));
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip(
+                            "%u saved recipe%s", recipes, recipes == 1U ? "" : "s"
+                        );
+                    }
                 }
                 ImGui::SameLine();
 
@@ -560,7 +1017,8 @@ void BrowserApp::drawMapPanels() {
         ImGui::SetNextWindowSize(ImVec2(760.0F, 560.0F), ImGuiCond_FirstUseEver);
 
         const std::string name = panelWindowName(panel);
-        if (ImGui::Begin(name.c_str(), &panel.open)) {
+        panel.visible_now = ImGui::Begin(name.c_str(), &panel.open);
+        if (panel.visible_now) {
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
                 active_panel_id_ = panel.id;
             }
@@ -568,6 +1026,17 @@ void BrowserApp::drawMapPanels() {
         }
         ImGui::End();
         ++panel_index;
+    }
+
+    // Editor windows are drawn after all map panels so the canvas pass has
+    // already updated hover and active-panel state for this frame. An editor
+    // follows its map panel's visibility: it hides together with the panel's
+    // tab and reappears when that tab is selected again, so edits always
+    // target a map the user can see.
+    for (const std::unique_ptr<MapPanel>& panel_ptr : panels_) {
+        if (panel_ptr->orient.editor_open && panel_ptr->visible_now) {
+            drawOrientationEditor(*panel_ptr);
+        }
     }
 }
 
@@ -585,6 +1054,15 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
             panel.pinned = true;
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Orient")) {
+        panel.orient.editor_open = !panel.orient.editor_open;
+        if (panel.orient.editor_open) {
+            // Recipes may have changed on disk since the last time.
+            panel.recipes_dirty = true;
+        }
+    }
+    itemTooltip("Shortcut: O");
     ImGui::SameLine();
     ImGui::Text(
         "%u x %u   zoom %.2fx   %s",
@@ -664,6 +1142,11 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
     if (panel.texture.valid()) {
         draw_list->AddImage(toImTexture(panel.texture), image_min, image_max);
     }
+    if (panel.orient.probe_valid && panel.orient.probe_overlay.valid()) {
+        draw_list->AddImage(
+            toImTexture(panel.orient.probe_overlay), image_min, image_max
+        );
+    }
 
     // Grid lines once individual cells are big enough to separate.
     if (show_grid_ && panel.zoom >= kGridZoomThreshold) {
@@ -690,6 +1173,27 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
         }
     }
 
+    // Directed edge arrows once cells are large enough to read them.
+    if (panel.orient.generated && panel.zoom >= kArrowZoomThreshold) {
+        const float vx0 = std::max(0.0F, (canvas_pos.x - image_min.x) / panel.zoom);
+        const float vx1 = std::min(map_width, (canvas_end.x - image_min.x) / panel.zoom);
+        const float vy0 = std::max(0.0F, (canvas_pos.y - image_min.y) / panel.zoom);
+        const float vy1 = std::min(map_height, (canvas_end.y - image_min.y) / panel.zoom);
+        if (vx1 > vx0 && vy1 > vy0) {
+            drawEdgeArrows(
+                draw_list,
+                panel,
+                image_min,
+                panel.zoom,
+                panel.zoom,
+                static_cast<uint32_t>(vx0),
+                static_cast<uint32_t>(std::ceil(vx1)),
+                static_cast<uint32_t>(vy0),
+                static_cast<uint32_t>(std::ceil(vy1))
+            );
+        }
+    }
+
     // Eyedropper: resolve the cell under the cursor.
     bool panel_hover_valid = false;
     if (hovered) {
@@ -701,6 +1205,12 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
             hover_valid_ = true;
             hover_x_ = static_cast<uint32_t>(cell_x);
             hover_y_ = static_cast<uint32_t>(cell_y);
+
+            // Right click probes reachability from the hovered cell.
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)
+                && panel.orient.generated) {
+                setProbe(panel, hover_x_, hover_y_);
+            }
 
             if (panel.zoom >= 3.0F) {
                 const ImVec2 cell_min(
@@ -800,6 +1310,28 @@ void BrowserApp::drawLoupe(
     // Crosshair box on the hovered cell within the loupe.
     const float scale_x = edge / ((uv1.x - uv0.x) * map_width);
     const float scale_y = edge / ((uv1.y - uv0.y) * map_height);
+
+    // The loupe always magnifies enough for arrows, so show connectivity
+    // whenever a directed graph exists.
+    if (panel.orient.generated) {
+        draw_list->PushClipRect(p0, p1, true);
+        const ImVec2 origin(
+            p0.x - uv0.x * map_width * scale_x,
+            p0.y - uv0.y * map_height * scale_y
+        );
+        drawEdgeArrows(
+            draw_list,
+            panel,
+            origin,
+            scale_x,
+            scale_y,
+            static_cast<uint32_t>(uv0.x * map_width),
+            static_cast<uint32_t>(std::ceil(uv1.x * map_width)),
+            static_cast<uint32_t>(uv0.y * map_height),
+            static_cast<uint32_t>(std::ceil(uv1.y * map_height))
+        );
+        draw_list->PopClipRect();
+    }
     const ImVec2 cell_min(
         p0.x + (static_cast<float>(hover_x_) - uv0.x * map_width) * scale_x,
         p0.y + (static_cast<float>(hover_y_) - uv0.y * map_height) * scale_y
@@ -808,6 +1340,706 @@ void BrowserApp::drawLoupe(
     draw_list->AddRect(cell_min, cell_max, IM_COL32(255, 200, 0, 255), 0.0F, 0, 1.5F);
 
     draw_list->AddRect(p0, p1, IM_COL32(180, 180, 190, 220), 0.0F, 0, 1.5F);
+}
+
+// ---------------------------------------------------------------------------
+// Directed orientation: arrows, probe, editor, recipes
+// ---------------------------------------------------------------------------
+
+void BrowserApp::drawEdgeArrows(
+    ImDrawList* draw_list,
+    const MapPanel& panel,
+    const ImVec2 origin,
+    const float scale_x,
+    const float scale_y,
+    const uint32_t x_first,
+    const uint32_t x_last,
+    const uint32_t y_first,
+    const uint32_t y_last
+) const {
+    const DirectedGridGraph& graph = panel.orient.graph;
+    const uint32_t width = panel.layout.width();
+    const uint32_t height = panel.layout.height();
+    const uint32_t x_end = std::min(x_last, width);
+    const uint32_t y_end = std::min(y_last, height);
+    if (x_first >= x_end || y_first >= y_end) {
+        return;
+    }
+
+    // Safety valve: at the arrow zoom threshold this is never hit, but a
+    // huge window could otherwise explode the draw list.
+    const uint64_t cells = static_cast<uint64_t>(x_end - x_first)
+        * static_cast<uint64_t>(y_end - y_first);
+    if (cells > 60000ULL) {
+        return;
+    }
+
+    const ImU32 color_bidirectional = IM_COL32(150, 150, 160, 150);
+    const ImU32 color_one_way = IM_COL32(255, 150, 40, 235);
+    const float head = 0.30F * std::min(scale_x, scale_y);
+
+    const auto cellCenter = [&](const uint32_t x, const uint32_t y) {
+        return ImVec2(
+            origin.x + (static_cast<float>(x) + 0.5F) * scale_x,
+            origin.y + (static_cast<float>(y) + 0.5F) * scale_y
+        );
+    };
+
+    const auto drawAdjacency = [&](
+        const uint32_t ux, const uint32_t uy,
+        const uint32_t vx, const uint32_t vy
+    ) {
+        const uint32_t u = uy * width + ux;
+        const uint32_t v = vy * width + vx;
+        const bool forward = hasArc(graph, u, v);
+        const bool backward = hasArc(graph, v, u);
+        if (!forward && !backward) {
+            return;
+        }
+
+        ImVec2 a = cellCenter(ux, uy);
+        ImVec2 b = cellCenter(vx, vy);
+        const float shrink = 0.20F;
+        const ImVec2 sa(a.x + (b.x - a.x) * shrink, a.y + (b.y - a.y) * shrink);
+        const ImVec2 sb(b.x - (b.x - a.x) * shrink, b.y - (b.y - a.y) * shrink);
+
+        if (forward && backward) {
+            draw_list->AddLine(sa, sb, color_bidirectional, 1.5F);
+            return;
+        }
+
+        const ImVec2 tail = forward ? sa : sb;
+        const ImVec2 tip = forward ? sb : sa;
+        draw_list->AddLine(tail, tip, color_one_way, 1.5F);
+
+        const float dx = tip.x - tail.x;
+        const float dy = tip.y - tail.y;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        if (length < 1.0F) {
+            return;
+        }
+        const float nx = dx / length;
+        const float ny = dy / length;
+        const ImVec2 left(
+            tip.x - nx * head - ny * head * 0.55F,
+            tip.y - ny * head + nx * head * 0.55F
+        );
+        const ImVec2 right(
+            tip.x - nx * head + ny * head * 0.55F,
+            tip.y - ny * head - nx * head * 0.55F
+        );
+        draw_list->AddTriangleFilled(tip, left, right, color_one_way);
+    };
+
+    for (uint32_t y = y_first; y < y_end; ++y) {
+        for (uint32_t x = x_first; x < x_end; ++x) {
+            if (!panel.layout.isPassable(x, y)) {
+                continue;
+            }
+            if (x + 1U < width && panel.layout.isPassable(x + 1U, y)) {
+                drawAdjacency(x, y, x + 1U, y);
+            }
+            if (y + 1U < height && panel.layout.isPassable(x, y + 1U)) {
+                drawAdjacency(x, y, x, y + 1U);
+            }
+        }
+    }
+}
+
+void BrowserApp::setProbe(MapPanel& panel, const uint32_t x, const uint32_t y) {
+    if (!panel.layout.isPassable(x, y)) {
+        clearProbe(panel.orient);
+        return;
+    }
+    const uint32_t vertex = panel.layout.vertexId(GridCoord{x, y}).value;
+
+    if (panel.orient.probe_mode == ProbeMode::Component) {
+        // The component probe needs SCC labels; compute them transparently.
+        if (!panel.orient.scc_valid) {
+            computeScc(panel.orient, panel.layout);
+        }
+        computeComponentProbe(panel.orient, vertex);
+    } else {
+        computeProbe(panel.orient, vertex);
+    }
+    if (!panel.orient.probe_valid) {
+        return;
+    }
+
+    const std::vector<uint8_t> pixels =
+        renderProbeOverlayPixels(panel.layout, panel.orient);
+    uploadTexture(
+        panel.orient.probe_overlay,
+        pixels,
+        panel.layout.width(),
+        panel.layout.height()
+    );
+
+    const uint32_t passable = panel.layout.passableCount();
+    const std::string cell = "(" + std::to_string(x) + ", " + std::to_string(y) + ")";
+    if (panel.orient.probe_result_mode == ProbeMode::Component) {
+        status_ = "SCC of " + cell + ": "
+            + std::to_string(panel.orient.probe_reach_count) + " of "
+            + std::to_string(passable) + " passable cells";
+    } else {
+        status_ = "Reachable from " + cell + ": "
+            + std::to_string(panel.orient.probe_reach_count) + " of "
+            + std::to_string(passable) + " passable cells, max depth "
+            + std::to_string(panel.orient.probe_max_depth);
+    }
+}
+
+void BrowserApp::setComponentProbe(MapPanel& panel, const uint32_t component) {
+    if (!panel.orient.scc_valid) {
+        return;
+    }
+    computeComponentProbeById(panel.orient, component);
+    if (!panel.orient.probe_valid) {
+        return;
+    }
+
+    const std::vector<uint8_t> pixels =
+        renderProbeOverlayPixels(panel.layout, panel.orient);
+    uploadTexture(
+        panel.orient.probe_overlay,
+        pixels,
+        panel.layout.width(),
+        panel.layout.height()
+    );
+
+    status_ = "Highlighted SCC " + std::to_string(component) + ": "
+        + std::to_string(panel.orient.probe_reach_count) + " cells";
+}
+
+void BrowserApp::drawOrientationEditor(MapPanel& panel) {
+    OrientationState& orient = panel.orient;
+
+    char name[192];
+    std::snprintf(
+        name,
+        sizeof(name),
+        "Orientation: %s/%s###orient_%llu",
+        panel.set_name.c_str(),
+        panel.map_name.c_str(),
+        static_cast<unsigned long long>(panel.id)
+    );
+    ImGui::SetNextWindowSize(ImVec2(380.0F, 640.0F), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin(name, &orient.editor_open)) {
+        ImGui::End();
+        return;
+    }
+
+    bool params_changed = false;
+
+    ImGui::SeparatorText("Edge orientation");
+
+    if (ImGui::BeginCombo("Mode", modeLabel(orient.mode))) {
+        constexpr GridEdgeConversionMode kModes[] = {
+            GridEdgeConversionMode::BidirectionalAll,
+            GridEdgeConversionMode::AcyclicEastSouth,
+            GridEdgeConversionMode::RandomAsymmetric,
+            GridEdgeConversionMode::GradientFlow,
+        };
+        for (const GridEdgeConversionMode candidate : kModes) {
+            if (ImGui::Selectable(modeLabel(candidate), candidate == orient.mode)
+                && candidate != orient.mode) {
+                orient.mode = candidate;
+                params_changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    const bool uses_seed = orient.mode == GridEdgeConversionMode::RandomAsymmetric
+        || orient.mode == GridEdgeConversionMode::GradientFlow;
+    ImGui::BeginDisabled(!uses_seed);
+    ImGui::SetNextItemWidth(180.0F);
+    params_changed |= ImGui::InputScalar(
+        "Seed", ImGuiDataType_U64, &orient.seed
+    );
+    itemTooltip(
+        "Seed of the deterministic random generator.\n"
+        "The same map + same parameters + same seed always\n"
+        "produce the exact same directed graph."
+    );
+    ImGui::SameLine();
+    if (ImGui::Button("Roll dice")) {
+        orient.seed = rollSeed();
+        params_changed = true;
+    }
+    itemTooltip("Shortcut: D");
+    ImGui::EndDisabled();
+
+    switch (orient.mode) {
+        case GridEdgeConversionMode::RandomAsymmetric: {
+            const bool one_way_edited = ImGui::SliderFloat(
+                "p one-way", &orient.p_one_way, 0.0F, 1.0F, "%.3f"
+            );
+            itemTooltip(
+                "Chance that a corridor between two cells becomes a single\n"
+                "directed arc (direction chosen by coin flip).\n\n"
+                "Together with 'p bidirectional' this partitions every\n"
+                "corridor's fate, so the two sliders cannot exceed 1 in\n"
+                "total: raising one pushes the other down."
+            );
+            const bool bidirectional_edited = ImGui::SliderFloat(
+                "p bidirectional", &orient.p_bidirectional, 0.0F, 1.0F, "%.3f"
+            );
+            itemTooltip(
+                "Chance that a corridor keeps both directions\n"
+                "(a normal two-way passage)."
+            );
+            params_changed |= one_way_edited || bidirectional_edited;
+            // The two probabilities partition each adjacency's outcome, so
+            // their sum must stay within 1. The slider the user is dragging
+            // wins; the other one yields.
+            if (orient.p_one_way + orient.p_bidirectional > 1.0F) {
+                if (one_way_edited) {
+                    orient.p_bidirectional = 1.0F - orient.p_one_way;
+                } else {
+                    orient.p_one_way = 1.0F - orient.p_bidirectional;
+                }
+            }
+            ImGui::TextWrapped(
+                "Each corridor: %.0f%% two-way, %.0f%% one-way (random "
+                "direction), %.0f%% removed entirely.",
+                static_cast<double>(orient.p_bidirectional) * 100.0,
+                static_cast<double>(orient.p_one_way) * 100.0,
+                static_cast<double>(
+                    1.0F - orient.p_one_way - orient.p_bidirectional
+                ) * 100.0
+            );
+            break;
+        }
+        case GridEdgeConversionMode::GradientFlow: {
+            params_changed |= ImGui::SliderFloat(
+                "flow angle (deg)", &orient.gradient_angle_degrees,
+                0.0F, 360.0F, "%.0f"
+            );
+            itemTooltip(
+                "Global 'downhill' direction the arcs prefer.\n"
+                "0 deg points east, 90 deg points south,\n"
+                "180 deg west, 270 deg north."
+            );
+            params_changed |= ImGui::SliderFloat(
+                "p bidirectional", &orient.p_bidirectional, 0.0F, 1.0F, "%.3f"
+            );
+            itemTooltip(
+                "Chance that a corridor keeps both directions.\n"
+                "Decided first, before any orientation happens."
+            );
+            params_changed |= ImGui::SliderFloat(
+                "p against gradient", &orient.p_against_gradient,
+                0.0F, 0.5F, "%.3f"
+            );
+            itemTooltip(
+                "Of the corridors that became one-way, the chance the arc\n"
+                "is flipped to point uphill. This backflow is what creates\n"
+                "cycles (and therefore larger SCCs) in the flow field.\n\n"
+                "This applies to a different stage than 'p bidirectional',\n"
+                "so the two values are independent and never need to sum\n"
+                "to 1."
+            );
+            const double p_bi = static_cast<double>(orient.p_bidirectional);
+            const double p_against =
+                static_cast<double>(orient.p_against_gradient);
+            ImGui::TextWrapped(
+                "Each corridor: %.0f%% two-way; the remaining %.0f%% become "
+                "one-way arcs along the %.0f deg flow, of which %.0f%% are "
+                "flipped backwards. No corridor is removed in this mode.",
+                p_bi * 100.0,
+                (1.0 - p_bi) * 100.0,
+                static_cast<double>(orient.gradient_angle_degrees),
+                p_against * 100.0
+            );
+            break;
+        }
+        case GridEdgeConversionMode::BidirectionalAll:
+            ImGui::TextDisabled("No parameters for this mode");
+            ImGui::TextWrapped(
+                "Every corridor keeps both directions; the graph matches the "
+                "undirected maze. Useful as a fully-connected baseline."
+            );
+            break;
+        case GridEdgeConversionMode::AcyclicEastSouth:
+            ImGui::TextDisabled("No parameters for this mode");
+            ImGui::TextWrapped(
+                "Every corridor is oriented east or south, producing a DAG: "
+                "every passable cell becomes its own singleton SCC."
+            );
+            break;
+    }
+
+    ImGui::Checkbox("Regenerate on change", &orient.auto_generate);
+    ImGui::SameLine();
+    const bool generate_clicked = ImGui::Button("Generate");
+    itemTooltip("Shortcut: Ctrl+Shift+Enter");
+
+    if (generate_clicked || (params_changed && orient.auto_generate)) {
+        regenerateGraph(orient, panel.layout);
+        if (panel.view_mode == ViewMode::Scc) {
+            // SCC labels died with the old graph; fall back until recomputed.
+            panel.view_mode = ViewMode::Passability;
+        }
+        rebuildPanelTexture(panel);
+    }
+
+    if (orient.generated) {
+        ImGui::TextWrapped(
+            "Graph: %u cells passable, %llu directed edges",
+            panel.layout.passableCount(),
+            static_cast<unsigned long long>(orient.graph.numEdges())
+        );
+    } else {
+        ImGui::TextDisabled("No graph generated yet");
+    }
+
+    ImGui::SeparatorText("SCC analysis");
+    ImGui::BeginDisabled(!orient.generated);
+    if (ImGui::Button("Compute SCCs")) {
+        computeScc(orient, panel.layout);
+        panel.view_mode = ViewMode::Scc;
+        rebuildPanelTexture(panel);
+    }
+    itemTooltip(
+        "Partitions the directed graph into strongly connected\n"
+        "components (groups of cells that can all reach each other)\n"
+        "and recolors the map so each component gets its own color.\n"
+        "Shortcut: C"
+    );
+    if (orient.scc_valid) {
+        const uint32_t passable = panel.layout.passableCount();
+        ImGui::Text("Components: %u", orient.num_components);
+        ImGui::TextWrapped(
+            "Largest: %u cells (%.1f%% of passable)",
+            orient.largest_component,
+            passable > 0U
+                ? 100.0 * static_cast<double>(orient.largest_component)
+                    / static_cast<double>(passable)
+                : 0.0
+        );
+        ImGui::TextWrapped(
+            "Condensation: %u vertices, %llu arcs",
+            orient.num_components,
+            static_cast<unsigned long long>(orient.condensation_edges)
+        );
+
+        if (!orient.component_sizes.empty()) {
+            // Top components by size; enough to read the distribution shape.
+            const std::size_t bars =
+                std::min<std::size_t>(orient.component_sizes.size(), 64U);
+            float values[64];
+            for (std::size_t i = 0; i < bars; ++i) {
+                values[i] = static_cast<float>(orient.component_sizes[i]);
+            }
+            char overlay[64];
+            std::snprintf(
+                overlay, sizeof(overlay), "top %zu of %u SCC sizes",
+                bars, orient.num_components
+            );
+            ImGui::PlotHistogram(
+                "##scc_hist",
+                values,
+                static_cast<int>(bars),
+                0,
+                overlay,
+                0.0F,
+                static_cast<float>(orient.component_sizes.front()),
+                ImVec2(-1.0F, 64.0F)
+            );
+
+            // Bins are clickable: hover names the component, click paints it
+            // on the canvas via the probe overlay.
+            if (ImGui::IsItemHovered()) {
+                const ImVec2 rect_min = ImGui::GetItemRectMin();
+                const ImVec2 rect_max = ImGui::GetItemRectMax();
+                const float rect_width = std::max(1.0F, rect_max.x - rect_min.x);
+                const float fraction =
+                    (ImGui::GetIO().MousePos.x - rect_min.x) / rect_width;
+                const std::size_t bin = std::min(
+                    bars - 1U,
+                    static_cast<std::size_t>(
+                        std::max(0.0F, fraction) * static_cast<float>(bars)
+                    )
+                );
+                ImGui::SetTooltip(
+                    "SCC rank %zu: %u cells (id %u)\nClick to highlight it on the map",
+                    bin + 1U,
+                    orient.component_sizes[bin],
+                    orient.component_order[bin]
+                );
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    setComponentProbe(panel, orient.component_order[bin]);
+                }
+            }
+        }
+    }
+
+    if (ImGui::Button("Estimate reachable-pair density")) {
+        estimateDensity(orient, panel.layout, 512U);
+    }
+    itemTooltip(
+        "Fraction of ordered cell pairs (u, v) where v is reachable\n"
+        "from u. 1.0 means fully connected, near 0 means shattered.\n"
+        "Estimated by BFS from sampled sources; exact on small maps."
+    );
+    if (orient.density.valid) {
+        if (orient.density.std_error == 0.0F) {
+            ImGui::TextWrapped(
+                "Density: %.4f (exact, all %u sources)",
+                static_cast<double>(orient.density.density),
+                orient.density.samples
+            );
+        } else {
+            ImGui::TextWrapped(
+                "Density: %.4f +/- %.4f (%u sampled sources)",
+                static_cast<double>(orient.density.density),
+                static_cast<double>(2.0F * orient.density.std_error),
+                orient.density.samples
+            );
+        }
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Right-click probe");
+
+    int probe_mode = orient.probe_mode == ProbeMode::Component ? 1 : 0;
+    bool probe_mode_changed = false;
+    if (ImGui::RadioButton("Reachable set (BFS)", &probe_mode, 0)) {
+        probe_mode_changed = orient.probe_mode != ProbeMode::Reachability;
+        orient.probe_mode = ProbeMode::Reachability;
+    }
+    itemTooltip(
+        "Highlights every cell reachable from the clicked cell by\n"
+        "following arcs forward. Colored by hop distance: yellow is\n"
+        "close to the source, violet is the far frontier."
+    );
+    if (ImGui::RadioButton("Strongly connected component", &probe_mode, 1)) {
+        probe_mode_changed = orient.probe_mode != ProbeMode::Component;
+        orient.probe_mode = ProbeMode::Component;
+    }
+    itemTooltip(
+        "Highlights the cells that can reach the clicked cell AND be\n"
+        "reached from it (its SCC). Computes SCC labels automatically\n"
+        "if needed."
+    );
+
+    if (probe_mode_changed && orient.probe_valid) {
+        // Re-run the active probe under the newly selected mode.
+        const GridCoord coord =
+            panel.layout.coordFromVertex(VertexId{orient.probe_vertex});
+        setProbe(panel, coord.x, coord.y);
+    }
+
+    if (orient.probe_valid) {
+        const GridCoord coord =
+            panel.layout.coordFromVertex(VertexId{orient.probe_vertex});
+        const uint32_t passable = panel.layout.passableCount();
+        const double percent = passable > 0U
+            ? 100.0 * static_cast<double>(orient.probe_reach_count)
+                / static_cast<double>(passable)
+            : 0.0;
+        if (orient.probe_result_mode == ProbeMode::Component) {
+            ImGui::TextWrapped(
+                "SCC of (%u, %u): %u of %u cells (%.1f%%)",
+                coord.x, coord.y, orient.probe_reach_count, passable, percent
+            );
+        } else {
+            ImGui::TextWrapped(
+                "From (%u, %u): %u of %u cells (%.1f%%), max depth %u",
+                coord.x, coord.y, orient.probe_reach_count, passable, percent,
+                orient.probe_max_depth
+            );
+        }
+        if (ImGui::Button("Clear probe")) {
+            clearProbe(orient);
+        }
+        itemTooltip("Shortcut: Esc or Space");
+    } else if (orient.generated) {
+        ImGui::TextWrapped(
+            "Right-click a passable cell on the canvas to probe it. "
+            "Esc or Space clears the highlight."
+        );
+    } else {
+        ImGui::TextDisabled("Generate a graph first");
+    }
+
+    ImGui::SeparatorText("Recipes");
+
+    ImGui::BeginDisabled(!orient.generated);
+    if (ImGui::Button("Save current as recipe")) {
+        savePanelRecipe(panel);
+    }
+    ImGui::EndDisabled();
+    itemTooltip("Shortcut: Ctrl+S");
+    itemTooltip(
+        "Stores the parameters only (never the maze) as a JSON file\n"
+        "under recipes/. Changed parameters always produce a new file;\n"
+        "saving identical parameters overwrites the same file."
+    );
+
+    // Saved recipes for this exact map, refreshed lazily.
+    if (panel.recipes_dirty) {
+        panel.map_recipes.clear();
+        for (const std::filesystem::path& file : listRecipes(recipes_dir_)) {
+            std::optional<Recipe> recipe = loadRecipe(file);
+            if (recipe.has_value()
+                && recipe->set_name == panel.set_name
+                && recipe->map_name == panel.map_name) {
+                panel.map_recipes.emplace_back(file, std::move(*recipe));
+            }
+        }
+        panel.recipes_dirty = false;
+    }
+
+    if (panel.map_recipes.empty()) {
+        ImGui::TextDisabled("No saved recipes for this map");
+    } else {
+        ImGui::TextWrapped(
+            "%zu saved recipe(s) for this map:", panel.map_recipes.size()
+        );
+        for (std::size_t i = 0; i < panel.map_recipes.size(); ++i) {
+            const Recipe& saved = panel.map_recipes[i].second;
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Button("Load")) {
+                applyRecipeToPanel(panel, saved);
+            }
+            itemTooltip(panel.map_recipes[i].first.filename().string().c_str());
+            ImGui::SameLine();
+            ImGui::TextWrapped(
+                "%s, seed %llu, one-way %.2f, bi %.2f, angle %.0f, against %.2f",
+                modeLabel(saved.mode),
+                static_cast<unsigned long long>(saved.seed),
+                static_cast<double>(saved.p_one_way),
+                static_cast<double>(saved.p_bidirectional),
+                static_cast<double>(saved.gradient_angle_degrees),
+                static_cast<double>(saved.p_against_gradient)
+            );
+            ImGui::PopID();
+        }
+    }
+
+    ImGui::End();
+}
+
+void BrowserApp::refreshRecipeIndex() {
+    recipe_counts_.assign(index_.sets.size(), {});
+    for (std::size_t i = 0; i < index_.sets.size(); ++i) {
+        recipe_counts_[i].assign(index_.sets[i].maps.size(), 0U);
+    }
+
+    for (const std::filesystem::path& file : listRecipes(recipes_dir_)) {
+        const std::optional<Recipe> recipe = loadRecipe(file);
+        if (!recipe.has_value()) {
+            continue;
+        }
+        for (std::size_t i = 0; i < index_.sets.size(); ++i) {
+            if (index_.sets[i].name != recipe->set_name) {
+                continue;
+            }
+            for (std::size_t j = 0; j < index_.sets[i].maps.size(); ++j) {
+                if (index_.sets[i].maps[j].name == recipe->map_name) {
+                    ++recipe_counts_[i][j];
+                    break;
+                }
+            }
+            break;
+        }
+    }
+}
+
+uint32_t BrowserApp::recipeCountFor(
+    const std::size_t set_index,
+    const std::size_t map_index
+) const {
+    if (set_index >= recipe_counts_.size()
+        || map_index >= recipe_counts_[set_index].size()) {
+        return 0U;
+    }
+    return recipe_counts_[set_index][map_index];
+}
+
+void BrowserApp::savePanelRecipe(MapPanel& panel) {
+    const OrientationState& orient = panel.orient;
+    Recipe recipe;
+    recipe.set_name = panel.set_name;
+    recipe.map_name = panel.map_name;
+    recipe.policy = policy_;
+    recipe.mode = orient.mode;
+    recipe.seed = orient.seed;
+    recipe.p_one_way = orient.p_one_way;
+    recipe.p_bidirectional = orient.p_bidirectional;
+    recipe.gradient_angle_degrees = orient.gradient_angle_degrees;
+    recipe.p_against_gradient = orient.p_against_gradient;
+
+    const std::filesystem::path written = saveRecipe(recipes_dir_, recipe);
+    if (written.empty()) {
+        status_ = "Recipe save failed (" + recipes_dir_.string() + ")";
+        return;
+    }
+
+    status_ = "Saved recipe " + written.filename().string();
+    for (const std::unique_ptr<MapPanel>& other : panels_) {
+        if (other->set_name == panel.set_name && other->map_name == panel.map_name) {
+            other->recipes_dirty = true;
+        }
+    }
+    refreshRecipeIndex();
+}
+
+void BrowserApp::applyRecipeToPanel(MapPanel& panel, const Recipe& recipe) {
+    if (policy_ != recipe.policy) {
+        policy_ = recipe.policy;
+        rebuildAllLayouts();
+    }
+
+    OrientationState& orient = panel.orient;
+    orient.mode = recipe.mode;
+    orient.seed = recipe.seed;
+    orient.p_one_way = recipe.p_one_way;
+    orient.p_bidirectional = recipe.p_bidirectional;
+    orient.gradient_angle_degrees = recipe.gradient_angle_degrees;
+    orient.p_against_gradient = recipe.p_against_gradient;
+    orient.editor_open = true;
+
+    regenerateGraph(orient, panel.layout);
+    computeScc(orient, panel.layout);
+    panel.view_mode = ViewMode::Scc;
+    rebuildPanelTexture(panel);
+
+    status_ = "Applied recipe: " + recipe.set_name + "/" + recipe.map_name
+        + ", " + std::to_string(orient.num_components) + " SCCs";
+}
+
+void BrowserApp::applyRecipe(const Recipe& recipe) {
+    std::size_t set_index = index_.sets.size();
+    std::size_t map_index = 0;
+    for (std::size_t i = 0; i < index_.sets.size(); ++i) {
+        if (index_.sets[i].name != recipe.set_name) {
+            continue;
+        }
+        const SetEntry& set = index_.sets[i];
+        for (std::size_t j = 0; j < set.maps.size(); ++j) {
+            if (set.maps[j].name == recipe.map_name) {
+                set_index = i;
+                map_index = j;
+                break;
+            }
+        }
+        break;
+    }
+    if (set_index == index_.sets.size()) {
+        status_ = "Recipe map not found in dataset: " + recipe.set_name + "/"
+            + recipe.map_name;
+        return;
+    }
+
+    openMap(set_index, map_index, true);
+    MapPanel* panel = activePanel();
+    if (panel == nullptr) {
+        return;
+    }
+    applyRecipeToPanel(*panel, recipe);
 }
 
 // ---------------------------------------------------------------------------
@@ -824,8 +2056,11 @@ void BrowserApp::drawInspectorPanel() {
 
     ImGui::SeparatorText("View");
 
-    int view = (active != nullptr && active->view_mode == ViewMode::Passability)
-        ? 1 : 0;
+    int view = 0;
+    if (active != nullptr) {
+        view = active->view_mode == ViewMode::Passability ? 1
+            : active->view_mode == ViewMode::Scc ? 2 : 0;
+    }
     ImGui::BeginDisabled(active == nullptr);
     if (ImGui::RadioButton("Terrain colors", &view, 0) && active != nullptr
         && active->view_mode != ViewMode::Terrain) {
@@ -835,6 +2070,13 @@ void BrowserApp::drawInspectorPanel() {
     if (ImGui::RadioButton("MazeLayout passability", &view, 1) && active != nullptr
         && active->view_mode != ViewMode::Passability) {
         active->view_mode = ViewMode::Passability;
+        rebuildPanelTexture(*active);
+    }
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(active == nullptr || !active->orient.scc_valid);
+    if (ImGui::RadioButton("SCC components", &view, 2) && active != nullptr
+        && active->view_mode != ViewMode::Scc) {
+        active->view_mode = ViewMode::Scc;
         rebuildPanelTexture(*active);
     }
     ImGui::EndDisabled();
@@ -901,6 +2143,21 @@ void BrowserApp::drawInspectorPanel() {
         ImGui::Text("Terrain: %s", movingAiTerrainName(terrain));
         ImGui::Text("Passable (policy): %s", passable ? "yes" : "no");
         ImGui::Text("MazeLayout vertex: %u", vertex.value);
+
+        if (passable && active->orient.scc_valid) {
+            const uint32_t component = active->orient.component_of[vertex.value];
+            ImGui::Text(
+                "SCC: id %u, size %u",
+                component,
+                active->orient.component_size_of[component]
+            );
+        }
+        if (passable && active->orient.probe_valid) {
+            ImGui::Text(
+                "Probe reachable: %s",
+                active->orient.probe_reachable[vertex.value] != 0U ? "yes" : "no"
+            );
+        }
     } else {
         ImGui::TextDisabled("Hover a map canvas");
     }
