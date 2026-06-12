@@ -146,7 +146,7 @@ Every graph search API takes `GraphSearchScratch&` rather than owning buffers in
 
 ### SCC decomposition
 
-[`SccDecomposition::compute()`](../include/hbrick/graph/scc_decomposition.hpp) uses scratch across **two DFS passes**:
+[`SccDecomposition::compute()`](../include/hbrick/graph/scc_decomposition.hpp) implements **Kosaraju's algorithm** and uses scratch across **two DFS passes**:
 
 1. **First pass** (original graph): `visitedMark()` plus a local `DfsFrame` stack for finish-order
 2. **Second pass** (transpose graph): `nextMark()` again, reusing `stack()` and `visitedMark()`

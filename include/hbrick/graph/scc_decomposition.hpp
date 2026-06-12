@@ -18,9 +18,11 @@ namespace hbrick {
  * @brief Strongly connected component (SCC) labeling of a directed graph.
  * @ingroup hbrick_graph
  *
- * Produced by @ref compute using Tarjan's algorithm. Each vertex maps to a
- * dense component id in @c [0, numComponents()). Component ids are stable for
- * the lifetime of the decomposition object.
+ * Produced by @ref compute using Kosaraju's two-pass DFS: finish-order DFS on
+ * the input graph, then component assignment via DFS on the transpose in
+ * reverse finish order. Each vertex maps to a dense component id in
+ * @c [0, numComponents()). Component ids are stable for the lifetime of the
+ * decomposition object.
  */
 class SccDecomposition {
 public:
@@ -28,8 +30,10 @@ public:
     SccDecomposition() = default;
 
     /**
-     * @brief Computes SCCs for @p graph.
+     * @brief Computes SCCs for @p graph using Kosaraju's two-pass DFS.
      * @ingroup hbrick_graph
+     *
+     * Uses @p scratch for visited marks and stack storage across both passes.
      *
      * @param graph Input directed graph.
      * @param scratch Reusable workspace; resized internally as needed.
