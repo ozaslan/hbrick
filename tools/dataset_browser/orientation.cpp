@@ -85,6 +85,7 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout) {
     state.component_sizes.clear();
     state.component_order.clear();
     state.density = {};
+    cancelDensityEstimate(state);
     clearProbe(state);
 }
 
@@ -160,63 +161,211 @@ void computeScc(OrientationState& state, const MazeLayout& layout) {
     state.scc_valid = true;
 }
 
-void estimateDensity(
+namespace {
+
+void finalizeDensityEstimate(
+    OrientationState& state,
+    const DensityEstimateJob& job,
+    const bool stopped_early
+) {
+    if (job.completed == 0U) {
+        return;
+    }
+
+    const double n = static_cast<double>(job.completed);
+    const double mean = job.sum / n;
+    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
+    const bool exact = job.exhaustive && !stopped_early
+        && job.completed >= job.source_count;
+    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
+
+    state.density.valid = true;
+    state.density.density = static_cast<float>(mean);
+    state.density.std_error = static_cast<float>(std_error);
+    state.density.samples = job.completed;
+}
+
+constexpr uint32_t kAutoMinSamples = 64U;
+constexpr uint32_t kAutoCheckInterval = 32U;
+constexpr uint32_t kAutoStableRoundsRequired = 3U;
+
+bool metricsStable(
+    const double prev_density,
+    const double prev_std_error,
+    const double density,
+    const double std_error
+) {
+    const double density_tol = std::max(
+        1e-6,
+        0.001 * std::max(prev_density, density)
+    );
+    const double sigma_tol = std::max(
+        1e-7,
+        0.03 * std::max(prev_std_error, std_error)
+    );
+    return std::abs(density - prev_density) <= density_tol
+        && std::abs(std_error - prev_std_error) <= sigma_tol;
+}
+
+bool checkAutoConvergence(DensityEstimateJob& job) {
+    if (!job.auto_samples || job.completed < kAutoMinSamples) {
+        return false;
+    }
+    if (job.completed % kAutoCheckInterval != 0U) {
+        return false;
+    }
+
+    const double n = static_cast<double>(job.completed);
+    const double mean = job.sum / n;
+    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
+    const bool exact = job.exhaustive && job.completed >= job.source_count;
+    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
+    const double density = mean;
+
+    if (!job.checkpoint_initialized) {
+        job.checkpoint_density = static_cast<float>(density);
+        job.checkpoint_std_error = static_cast<float>(std_error);
+        job.checkpoint_initialized = true;
+        return false;
+    }
+
+    const double prev_density = static_cast<double>(job.checkpoint_density);
+    const double prev_std_error = static_cast<double>(job.checkpoint_std_error);
+
+    if (metricsStable(prev_density, prev_std_error, density, std_error)) {
+        ++job.stable_rounds;
+    } else {
+        job.stable_rounds = 0U;
+    }
+
+    job.checkpoint_density = static_cast<float>(density);
+    job.checkpoint_std_error = static_cast<float>(std_error);
+    return job.stable_rounds >= kAutoStableRoundsRequired;
+}
+
+}  // namespace
+
+DensityEstimate snapshotDensityJobEstimate(
+    const DensityEstimateJob& job
+) noexcept {
+    DensityEstimate estimate;
+    if (job.completed == 0U) {
+        return estimate;
+    }
+
+    const double n = static_cast<double>(job.completed);
+    const double mean = job.sum / n;
+    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
+    const bool exact = job.exhaustive && job.completed >= job.source_count;
+    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
+
+    estimate.valid = true;
+    estimate.density = static_cast<float>(mean);
+    estimate.std_error = static_cast<float>(std_error);
+    estimate.samples = job.completed;
+    return estimate;
+}
+
+void cancelDensityEstimate(OrientationState& state) {
+    state.density_job = {};
+}
+
+void stopDensityEstimate(OrientationState& state) {
+    DensityEstimateJob& job = state.density_job;
+    if (!job.active) {
+        return;
+    }
+    if (job.completed > 0U) {
+        finalizeDensityEstimate(state, job, true);
+    }
+    job.active = false;
+}
+
+void beginDensityEstimate(
     OrientationState& state,
     const MazeLayout& layout,
     const uint32_t samples
 ) {
+    cancelDensityEstimate(state);
     state.density = {};
     if (!state.generated) {
         return;
     }
 
+    DensityEstimateJob job;
+    job.requested_samples = samples;
+    job.auto_samples = state.density_auto_samples;
+
     const CsrGraph& graph = state.graph.csrGraph();
     const uint32_t num_vertices = graph.numVertices();
 
-    std::vector<uint32_t> passable;
-    passable.reserve(layout.passableCount());
+    job.passable.reserve(layout.passableCount());
     for (uint32_t vertex = 0; vertex < num_vertices; ++vertex) {
         if (layout.isPassable(VertexId{vertex})) {
-            passable.push_back(vertex);
+            job.passable.push_back(vertex);
         }
     }
-    if (passable.empty()) {
+    if (job.passable.empty()) {
         return;
     }
 
-    // Small maps: visit every source, making the estimate exact.
-    const bool exhaustive = passable.size() <= samples;
-    const uint32_t source_count = exhaustive
-        ? static_cast<uint32_t>(passable.size())
+    job.exhaustive = job.passable.size() <= samples;
+    job.source_count = job.exhaustive
+        ? static_cast<uint32_t>(job.passable.size())
         : samples;
+    job.total_passable = static_cast<double>(job.passable.size());
+    job.visited.assign(num_vertices, 0U);
+    job.queue.reserve(job.passable.size());
+    job.pick = std::uniform_int_distribution<std::size_t>(
+        0, job.passable.size() - 1
+    );
+    job.active = true;
+    state.density_job = std::move(job);
+}
 
-    std::vector<uint8_t> visited(num_vertices, 0U);
-    std::vector<uint32_t> queue;
-    queue.reserve(passable.size());
-
-    std::mt19937_64 rng{0x9E3779B97F4A7C15ULL};
-    std::uniform_int_distribution<std::size_t> pick(0, passable.size() - 1);
-
-    const double total = static_cast<double>(passable.size());
-    double sum = 0.0;
-    double sum_squares = 0.0;
-    for (uint32_t i = 0; i < source_count; ++i) {
-        const uint32_t source = exhaustive ? passable[i] : passable[pick(rng)];
-        const uint32_t reached = bfsReachableSet(graph, source, visited, queue);
-        const double fraction = static_cast<double>(reached) / total;
-        sum += fraction;
-        sum_squares += fraction * fraction;
+bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout) {
+    (void)layout;
+    DensityEstimateJob& job = state.density_job;
+    if (!job.active) {
+        return true;
     }
 
-    const double n = static_cast<double>(source_count);
-    const double mean = sum / n;
-    const double variance = std::max(0.0, sum_squares / n - mean * mean);
-    const double std_error = exhaustive ? 0.0 : std::sqrt(variance / n);
+    const CsrGraph& graph = state.graph.csrGraph();
+    const uint32_t source = job.exhaustive
+        ? job.passable[job.completed]
+        : job.passable[job.pick(job.rng)];
+    const uint32_t reached = bfsReachableSet(
+        graph, source, job.visited, job.queue
+    );
+    const double fraction =
+        static_cast<double>(reached) / job.total_passable;
+    job.sum += fraction;
+    job.sum_squares += fraction * fraction;
+    ++job.completed;
 
-    state.density.valid = true;
-    state.density.density = static_cast<float>(mean);
-    state.density.std_error = static_cast<float>(std_error);
-    state.density.samples = source_count;
+    if (checkAutoConvergence(job)) {
+        finalizeDensityEstimate(state, job, true);
+        job.active = false;
+        return true;
+    }
+
+    if (job.completed >= job.source_count) {
+        finalizeDensityEstimate(state, job, false);
+        job.active = false;
+        return true;
+    }
+    return false;
+}
+
+void estimateDensity(
+    OrientationState& state,
+    const MazeLayout& layout,
+    const uint32_t samples
+) {
+    beginDensityEstimate(state, layout, samples);
+    while (state.density_job.active) {
+        stepDensityEstimate(state, layout);
+    }
 }
 
 void computeProbe(OrientationState& state, const uint32_t source_vertex) {
