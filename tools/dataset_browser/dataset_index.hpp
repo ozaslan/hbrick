@@ -39,7 +39,7 @@ struct DatasetIndex {
 };
 
 /**
- * @brief Scans @p root for `<set>/maps/*.map` files, sorted by name.
+ * @brief Scans @p root for each set's @c maps directory @c .map files, sorted by name.
  *
  * Missing or empty roots yield an index with zero sets; the GUI reports that
  * state instead of failing.

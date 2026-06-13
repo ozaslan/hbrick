@@ -18,21 +18,15 @@
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
+#include "hbrick/graph/scc_decomposition.hpp"
 #include "hbrick/grid/maze_layout.hpp"
+#include "test_limits.hpp"
 
 namespace hbrick::test_support {
 
 /**
  * @brief Reference BFS reachability used as the ground truth in tests.
  * @ingroup hbrick_test_support
- *
- * Thin wrapper around @ref hbrick::Bfs::reachable for test readability.
- *
- * @param graph Graph under test.
- * @param source Source vertex index.
- * @param target Target vertex index.
- * @param scratch Reusable traversal workspace.
- * @return BFS reachability answer.
  */
 [[nodiscard]] ReachabilityAnswer bfsReference(
     const CsrGraph& graph,
@@ -41,90 +35,127 @@ namespace hbrick::test_support {
     GraphSearchScratch& scratch
 );
 
-/**
- * @brief Builds a CSR graph from a maze layout using the given conversion mode.
- * @ingroup hbrick_test_support
- *
- * Convenience wrapper around @ref hbrick::DirectedGridGraphBuilder::build that returns
- * only the CSR representation.
- *
- * @param grid Passable cell layout.
- * @param mode Edge orientation policy.
- * @param params Randomness parameters for asymmetric conversion.
- * @return CSR graph suitable for baseline and oracle tests.
- */
 [[nodiscard]] CsrGraph buildGridGraph(
     const MazeLayout& grid,
     GridEdgeConversionMode mode,
     RandomAsymmetricParams params = {}
 );
 
-/**
- * @brief Summary of one baseline run compared against BFS on all vertex pairs.
- * @ingroup hbrick_test_support
- */
 struct BaselineOracleResult {
-    /** @brief Human-readable baseline name. @ingroup hbrick_test_support */
     std::string name;
-    /** @brief Final preprocess status reported by the baseline. @ingroup hbrick_test_support */
     BaselineStatus status = BaselineStatus::NotRun;
-    /** @brief Number of (source, target) pairs where the baseline disagreed with BFS. @ingroup hbrick_test_support */
     uint32_t mismatches = 0U;
 };
 
-/**
- * @brief Runs every shipped baseline and compares all pairs against BFS.
- * @ingroup hbrick_test_support
- *
- * @param graph Graph instance shared by all baselines.
- * @param max_memory_bytes Memory budget forwarded to closure-based baselines.
- * @return Per-baseline mismatch summaries.
- */
 [[nodiscard]] std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
     const CsrGraph& graph,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 
-/**
- * @brief Counts vertex pairs where @p query disagrees with BFS.
- * @ingroup hbrick_test_support
- *
- * @param graph Graph to enumerate.
- * @param query Callable returning a reachability answer for (source, target).
- * @return Number of mismatched ordered pairs.
- */
 [[nodiscard]] uint32_t countMismatchesAgainstBfs(
     const CsrGraph& graph,
     const std::function<ReachabilityAnswer(uint32_t, uint32_t)>& query
 );
 
-/**
- * @brief Google Test helper that fails when any baseline disagrees with BFS.
- * @ingroup hbrick_test_support
- *
- * @param graph Graph instance to validate.
- * @param context String included in failure messages for scenario identification.
- * @param max_memory_bytes Memory budget forwarded to closure-based baselines.
- */
 void expectAllBaselinesMatchBfs(
     const CsrGraph& graph,
     const std::string& context,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 
-/**
- * @brief Like expectAllBaselinesMatchBfs but skips closure preprocess (CsrBfs, CsrDfs, SccDagSearch only).
- * @ingroup hbrick_test_support
- *
- * Use on bidirectional grid graphs where the passable region forms one large SCC; boolean
- * closure preprocess is O(n^3) and redundant with cycle-graph closure tests elsewhere.
- *
- * @param graph Graph instance to validate.
- * @param context String included in failure messages for scenario identification.
- */
 void expectSearchBaselinesMatchBfs(
     const CsrGraph& graph,
     const std::string& context
+);
+
+[[nodiscard]] bool mutuallyReachableViaBidirectionalBfs(
+    const CsrGraph& graph,
+    uint32_t left,
+    uint32_t right,
+    GraphSearchScratch& left_to_right_scratch,
+    GraphSearchScratch& right_to_left_scratch
+);
+
+void expectSccPartitionMatchesBidirectionalBfs(
+    const CsrGraph& graph,
+    const std::string& context
+);
+
+/**
+ * @brief Returns how many disjoint pair slices cover all V² ordered pairs.
+ * @ingroup hbrick_test_support
+ *
+ * Returns @c 1 when @p num_vertices is at most @ref kFullAllPairsVertexLimit. Otherwise
+ * returns @c ceil(V² / kMaxPairsPerSlice).
+ */
+[[nodiscard]] uint32_t computeReachabilityPairSliceCount(uint32_t num_vertices);
+
+/**
+ * @brief Verifies SCC labels and all baseline reachability slices for @p graph.
+ * @ingroup hbrick_test_support
+ *
+ * Runs SCC partition once, then every deterministic pair slice in one test case.
+ */
+void expectReachabilityOracleAllSlices(
+    const CsrGraph& graph,
+    const std::string& context,
+    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
+    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/**
+ * @brief Counts ordered pairs assigned to @p slice_id when splitting V² pairs into @p slice_count slices.
+ * @ingroup hbrick_test_support
+ *
+ * Pairs are enumerated in row-major order (@c source major, @c target minor). Pair index
+ * @c p = source * V + target is included when @c p % slice_count == slice_id.
+ */
+[[nodiscard]] uint64_t reachabilityPairCountInSlice(
+    uint32_t num_vertices,
+    uint32_t slice_id,
+    uint32_t slice_count
+);
+
+void expectSearchBaselinesMatchBfsOnSlice(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count
+);
+
+void expectAllBaselinesMatchBfsOnSlice(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/**
+ * @brief Verifies SCC labels and baseline reachability for one deterministic pair slice.
+ * @ingroup hbrick_test_support
+ *
+ * Runs @ref expectSccPartitionMatchesBidirectionalBfs on @p slice_id @c 0 only. When
+ * @p num_vertices <= @p full_all_pairs_vertex_limit, tests all V² pairs in slice 0 via all
+ * baselines. Otherwise tests the search baselines on the pairs belonging to @p slice_id.
+ */
+void expectReachabilityOracleSlice(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
+    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/** @brief Runs @ref expectReachabilityOracleAllSlices. @ingroup hbrick_test_support */
+void expectExhaustiveReachabilityOracle(
+    const CsrGraph& graph,
+    const std::string& context,
+    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
+    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 
 }  // namespace hbrick::test_support

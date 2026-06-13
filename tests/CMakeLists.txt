@@ -10,10 +10,53 @@ if(NOT GTest_FOUND)
     FetchContent_MakeAvailable(googletest)
 endif()
 
+include(GoogleTest)
+
+set(HBRICK_GTEST_TIMEOUT 20 CACHE STRING "Maximum seconds allowed for each Google Test case")
+set(HBRICK_MOVINGAI_GTEST_TIMEOUT 180 CACHE STRING "Maximum seconds for each MovingAI map reachability test")
+
+function(hbrick_register_gtests target_name)
+    gtest_discover_tests(
+        ${target_name}
+        DISCOVERY_TIMEOUT 120
+        PROPERTIES TIMEOUT ${HBRICK_GTEST_TIMEOUT}
+    )
+endfunction()
+
+function(hbrick_register_slow_gtests target_name timeout_seconds)
+    gtest_discover_tests(
+        ${target_name}
+        DISCOVERY_TIMEOUT 120
+        PROPERTIES TIMEOUT ${timeout_seconds}
+    )
+endfunction()
+
+add_library(
+    hbrick_tools_data STATIC
+    ${CMAKE_SOURCE_DIR}/tools/dataset_browser/recipe.cpp
+    ${CMAKE_SOURCE_DIR}/tools/dataset_browser/dataset_index.cpp
+)
+
+target_include_directories(
+    hbrick_tools_data
+    PUBLIC
+        ${CMAKE_SOURCE_DIR}/tools/dataset_browser
+)
+
+target_link_libraries(
+    hbrick_tools_data
+    PUBLIC
+        hbrick_io
+        hbrick_graph
+        hbrick_project_warnings
+)
+
 add_library(
     hbrick_test_support
     support/maze_generator.cpp
+    support/movingai_map_catalog.cpp
     support/reachability_oracle.cpp
+    support/recipe_graph.cpp
 )
 
 target_include_directories(
@@ -22,10 +65,17 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/support
 )
 
+target_compile_definitions(
+    hbrick_test_support
+    PUBLIC
+        HBRICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 target_link_libraries(
     hbrick_test_support
     PUBLIC
         hbrick_baselines
+        hbrick_tools_data
         GTest::gtest
         hbrick_project_warnings
 )
@@ -40,7 +90,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_placeholder COMMAND test_placeholder)
+hbrick_register_gtests(test_placeholder)
 
 add_executable(test_core_types unit/test_core_types.cpp)
 
@@ -52,7 +102,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_core_types COMMAND test_core_types)
+hbrick_register_gtests(test_core_types)
 
 add_executable(test_maze_layout unit/test_maze_layout.cpp)
 
@@ -64,7 +114,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_maze_layout COMMAND test_maze_layout)
+hbrick_register_gtests(test_maze_layout)
 
 add_executable(test_csr_graph unit/test_csr_graph.cpp)
 
@@ -76,7 +126,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_csr_graph COMMAND test_csr_graph)
+hbrick_register_gtests(test_csr_graph)
 
 add_executable(test_directed_grid_graph unit/test_directed_grid_graph.cpp)
 
@@ -88,7 +138,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_directed_grid_graph COMMAND test_directed_grid_graph)
+hbrick_register_gtests(test_directed_grid_graph)
 
 add_executable(test_bfs_dfs unit/test_bfs_dfs.cpp)
 
@@ -100,7 +150,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_bfs_dfs COMMAND test_bfs_dfs)
+hbrick_register_gtests(test_bfs_dfs)
 
 add_executable(test_bit_vector unit/test_bit_vector.cpp)
 add_executable(test_bit_matrix unit/test_bit_matrix.cpp)
@@ -130,9 +180,9 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_bit_vector COMMAND test_bit_vector)
-add_test(NAME test_bit_matrix COMMAND test_bit_matrix)
-add_test(NAME test_boolean_closure COMMAND test_boolean_closure)
+hbrick_register_gtests(test_bit_vector)
+hbrick_register_gtests(test_bit_matrix)
+hbrick_register_gtests(test_boolean_closure)
 
 add_executable(test_closure_matrix_builder unit/test_closure_matrix_builder.cpp)
 
@@ -144,7 +194,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_closure_matrix_builder COMMAND test_closure_matrix_builder)
+hbrick_register_gtests(test_closure_matrix_builder)
 
 add_executable(test_scc_dag unit/test_scc_dag.cpp)
 
@@ -156,7 +206,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_scc_dag COMMAND test_scc_dag)
+hbrick_register_gtests(test_scc_dag)
 
 add_executable(test_csr_baselines unit/test_csr_baselines.cpp)
 
@@ -168,7 +218,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_csr_baselines COMMAND test_csr_baselines)
+hbrick_register_gtests(test_csr_baselines)
 
 add_executable(test_svg_canvas unit/test_svg_canvas.cpp)
 
@@ -180,7 +230,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_svg_canvas COMMAND test_svg_canvas)
+hbrick_register_gtests(test_svg_canvas)
 
 add_executable(test_bench unit/test_bench.cpp)
 
@@ -192,7 +242,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_bench COMMAND test_bench)
+hbrick_register_gtests(test_bench)
 
 add_executable(test_correctness_harness integration/test_correctness_harness.cpp)
 
@@ -204,7 +254,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_correctness_harness COMMAND test_correctness_harness)
+hbrick_register_gtests(test_correctness_harness)
 
 add_executable(test_maze_reachability integration/test_maze_reachability.cpp)
 
@@ -216,7 +266,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_maze_reachability COMMAND test_maze_reachability)
+hbrick_register_gtests(test_maze_reachability)
 
 add_executable(test_dag_reachability unit/test_dag_reachability.cpp)
 
@@ -228,7 +278,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_dag_reachability COMMAND test_dag_reachability)
+hbrick_register_gtests(test_dag_reachability)
 
 add_executable(test_hot_path_allocations unit/test_hot_path_allocations.cpp)
 
@@ -240,7 +290,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_hot_path_allocations COMMAND test_hot_path_allocations)
+hbrick_register_gtests(test_hot_path_allocations)
 
 add_executable(test_maze_generator unit/test_maze_generator.cpp)
 
@@ -252,7 +302,7 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_maze_generator COMMAND test_maze_generator)
+hbrick_register_gtests(test_maze_generator)
 
 add_executable(test_movingai_loader unit/test_movingai_loader.cpp)
 
@@ -270,4 +320,55 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
-add_test(NAME test_movingai_loader COMMAND test_movingai_loader)
+hbrick_register_gtests(test_movingai_loader)
+
+add_executable(test_scc_reachability integration/test_scc_reachability.cpp)
+
+target_link_libraries(
+    test_scc_reachability
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_scc_reachability)
+
+add_executable(test_recipe_reachability integration/test_recipe_reachability.cpp)
+
+target_compile_definitions(
+    test_recipe_reachability
+    PRIVATE
+        HBRICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(
+    test_recipe_reachability
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_recipe_reachability)
+
+add_executable(test_movingai_reachability integration/test_movingai_reachability.cpp)
+
+target_compile_definitions(
+    test_movingai_reachability
+    PRIVATE
+        HBRICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(
+    test_movingai_reachability
+    PRIVATE
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_slow_gtests(
+    test_movingai_reachability
+    ${HBRICK_MOVINGAI_GTEST_TIMEOUT}
+)

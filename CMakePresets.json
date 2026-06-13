@@ -29,7 +29,9 @@
             "name": "dev",
             "configurePreset": "dev",
             "output": {
-                "outputOnFailure": true
+                "outputOnFailure": true,
+                "shortProgress": true,
+                "verbosity": "verbose"
             }
         }
     ]

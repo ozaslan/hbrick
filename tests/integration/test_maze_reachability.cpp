@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <tuple>
 
 #include "maze_generator.hpp"
 #include "reachability_oracle.hpp"
+#include "test_limits.hpp"
 
 namespace {
 
@@ -46,14 +48,11 @@ void runOracleOnMaze(
     const std::string context = maze_scenario.name + "/" + mode_scenario.name
         + " vertices=" + std::to_string(graph.numVertices());
 
-    if (mode_scenario.mode == hbrick::GridEdgeConversionMode::BidirectionalAll) {
-        // Bidirectional mazes collapse to one large SCC; closure preprocess is O(n^3).
-        // Closure baselines are covered on cycle/acyclic graphs in other tests.
-        hbrick::test_support::expectSearchBaselinesMatchBfs(graph, context);
-        return;
-    }
-
-    hbrick::test_support::expectAllBaselinesMatchBfs(graph, context);
+    hbrick::test_support::expectReachabilityOracleAllSlices(
+        graph,
+        context,
+        mode_scenario.mode
+    );
 }
 
 class MazeReachabilityOracleTest
@@ -61,7 +60,7 @@ class MazeReachabilityOracleTest
 
 }  // namespace
 
-TEST_P(MazeReachabilityOracleTest, AllBaselinesAgreeWithBfsOnAllPairs) {
+TEST_P(MazeReachabilityOracleTest, BaselinesMatchBfsOnAllDeterministicPairSlices) {
     const MazeScenario& maze_scenario = std::get<0>(GetParam());
     const GraphModeScenario& mode_scenario = std::get<1>(GetParam());
     runOracleOnMaze(maze_scenario, mode_scenario);
@@ -87,6 +86,11 @@ INSTANTIATE_TEST_SUITE_P(
                 "random-asymmetric",
                 hbrick::GridEdgeConversionMode::RandomAsymmetric,
                 hbrick::RandomAsymmetricParams{0x515EED01ULL, 0.14L, 0.26L}
+            },
+            GraphModeScenario{
+                "gradient-flow",
+                hbrick::GridEdgeConversionMode::GradientFlow,
+                hbrick::RandomAsymmetricParams{0x515EED08ULL, 0.14L, 0.26L, 45.0, 0.08L}
             }
         )
     )
@@ -109,6 +113,11 @@ INSTANTIATE_TEST_SUITE_P(
                 "random-asymmetric",
                 hbrick::GridEdgeConversionMode::RandomAsymmetric,
                 hbrick::RandomAsymmetricParams{0x515EED04ULL, 0.14L, 0.26L}
+            },
+            GraphModeScenario{
+                "gradient-flow",
+                hbrick::GridEdgeConversionMode::GradientFlow,
+                hbrick::RandomAsymmetricParams{0x515EED09ULL, 0.14L, 0.26L, 30.0, 0.06L}
             }
         )
     )
@@ -179,6 +188,28 @@ INSTANTIATE_TEST_SUITE_P(
     )
 );
 
+INSTANTIATE_TEST_SUITE_P(
+    CyclicMazesMediumRandom,
+    MazeReachabilityOracleTest,
+    ::testing::Combine(
+        ::testing::Values(
+            MazeScenario{
+                "cyclic-14x12-openings",
+                {14U, 12U, 0xF00DF00DULL},
+                0xBBAA11A1ULL,
+                32U
+            }
+        ),
+        ::testing::Values(
+            GraphModeScenario{
+                "random-asymmetric",
+                hbrick::GridEdgeConversionMode::RandomAsymmetric,
+                hbrick::RandomAsymmetricParams{0x515EED03ULL, 0.12L, 0.28L}
+            }
+        )
+    )
+);
+
 TEST(MazeReachabilityOracle, ClosureBaselinesMatchBfsOnSmallBidirectionalMaze) {
     const hbrick::MazeLayout maze = hbrick::test_support::generatePerfectMaze(
         hbrick::test_support::MazeParams{8U, 8U, 0xB1D1EC011ULL}
@@ -188,24 +219,9 @@ TEST(MazeReachabilityOracle, ClosureBaselinesMatchBfsOnSmallBidirectionalMaze) {
         hbrick::GridEdgeConversionMode::BidirectionalAll
     );
 
-    hbrick::test_support::expectAllBaselinesMatchBfs(
+    hbrick::test_support::expectReachabilityOracleAllSlices(
         graph,
-        "perfect-8x8-bidirectional-closure vertices=" + std::to_string(graph.numVertices())
-    );
-}
-
-TEST(MazeReachabilityOracle, AllBaselinesAgreeWithBfsOnLargeCyclicMaze) {
-    runOracleOnMaze(
-        MazeScenario{
-            "large-cyclic-22x18-openings",
-            {22U, 18U, 0xF00DF00DULL},
-            0xBBAA11A1ULL,
-            64U
-        },
-        GraphModeScenario{
-            "random-asymmetric",
-            hbrick::GridEdgeConversionMode::RandomAsymmetric,
-            hbrick::RandomAsymmetricParams{0x515EED03ULL, 0.12L, 0.28L}
-        }
+        "perfect-8x8-bidirectional-closure vertices=" + std::to_string(graph.numVertices()),
+        hbrick::GridEdgeConversionMode::BidirectionalAll
     );
 }
