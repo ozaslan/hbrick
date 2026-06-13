@@ -2,9 +2,12 @@
 
 Sampled estimation of how **connected** a directed graph is in an ordered-pair sense: the average fraction of universe vertices forward-reachable from a randomly chosen source.
 
-**API:** [`ReachabilityDensityEstimator`](../include/hbrick/graph/reachability_density.hpp) in `hbrick_graph`.  
+**API reference:** [`include/hbrick/graph/reachability_density.hpp`](../include/hbrick/graph/reachability_density.hpp)  
+**Implementation:** [`src/graph/reachability_density.cpp`](../src/graph/reachability_density.cpp)  
 **Tests:** [`tests/unit/test_reachability_density.cpp`](../tests/unit/test_reachability_density.cpp).  
 **GUI:** [Dataset browser](dataset_browser.md) orientation editor (thin wrapper over the library estimator).
+
+**Algorithm specification (academic):** [Reachability density — algorithm and implementation](reachability_density_algorithm.md)
 
 ---
 

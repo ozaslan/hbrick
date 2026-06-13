@@ -59,6 +59,7 @@ Typical workflow:
 | [`docs/closure_storage.md`](docs/closure_storage.md) | Rationale for dense BitMatrix closure and memory policy |
 | [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) | Design notes for reusable traversal workspace |
 | [`docs/reachability_density.md`](docs/reachability_density.md) | Reachable-pair density estimation (sampling, auto-stop, parallel BFS) |
+| [`docs/reachability_density_algorithm.md`](docs/reachability_density_algorithm.md) | Formal algorithm specification with code references (serial and parallel) |
 | [`docs/dataset_browser.md`](docs/dataset_browser.md) | Interactive GUI for MovingAI maps, directed graphs, and orientation recipes |
 | [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
 

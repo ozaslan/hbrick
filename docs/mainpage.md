@@ -34,6 +34,7 @@ grid-embedded mazes, and high-performance query paths.
 - [Closure storage](closure_storage.md) — why reachability oracles use dense BitMatrix and Warshall
 - [GraphSearchScratch design notes](graph_search_scratch.md) — reusable traversal workspace details
 - [Reachability density](reachability_density.md) — sampled reachable-pair fraction, distinct sources, parallel BFS
+- [Reachability density algorithm](reachability_density_algorithm.md) — formal specification with implementation references
 - [Dataset browser](dataset_browser.md) — interactive GUI for MovingAI maps, directed graphs, and orientation recipes
 
 ## Generating this documentation
