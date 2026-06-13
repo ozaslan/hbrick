@@ -12,6 +12,7 @@ The project is the implementation foundation for **H-BRICK** (Hierarchical BRICK
 |------|--------|
 | Core types, grids, CSR graphs | Implemented |
 | BFS / DFS search with reusable scratch buffers | Implemented |
+| Reachability density estimation (serial and parallel) | Implemented |
 | Bit vectors, bit matrices, boolean transitive closure | Implemented |
 | SCC decomposition and condensation DAG | Implemented |
 | Reference baselines (search + closure) | Implemented |
@@ -34,7 +35,7 @@ The library is split into target-based CMake modules:
 | `hbrick_core` | `hbrick::` | Shared types, vertex IDs, reachability answers, status reporting |
 | `hbrick_io` | `hbrick::` | MovingAI `.map` loading and passability policies |
 | `hbrick_grid` | `hbrick::` | Maze layouts and cardinal directions |
-| `hbrick_graph` | `hbrick::` | CSR storage, BFS/DFS, SCC decomposition, condensation DAG, DAG reachability |
+| `hbrick_graph` | `hbrick::` | CSR storage, BFS/DFS, SCC decomposition, condensation DAG, DAG reachability, reachability density |
 | `hbrick_bit` | `hbrick::` | Bit vectors, bit matrices, boolean closure (pure bit logic) |
 | `hbrick_baselines` | `hbrick::` | Reference preprocess/query algorithms for correctness and benchmarking |
 | `hbrick_bench` | `hbrick::` | Simple timing utilities |
@@ -44,7 +45,7 @@ Typical workflow:
 
 1. Build or load a `MazeLayout` or `CsrGraph`.
 2. Optionally convert a grid with `DirectedGridGraphBuilder` (acyclic east/south, bidirectional, or seeded random-asymmetric edges).
-3. Answer reachability via search (`Bfs`, `Dfs`), condensation (`SccDecomposition`, `CondensationGraph`, `DagReachability`), or a baseline for comparison.
+3. Answer reachability via search (`Bfs`, `Dfs`), condensation (`SccDecomposition`, `CondensationGraph`, `DagReachability`), a baseline for comparison, or estimate global connectivity with `ReachabilityDensityEstimator`.
 
 ---
 
@@ -57,6 +58,7 @@ Typical workflow:
 | [`docs/traversal_storage.md`](docs/traversal_storage.md) | Rationale for CSR graph storage and search (BFS/DFS/SCC) |
 | [`docs/closure_storage.md`](docs/closure_storage.md) | Rationale for dense BitMatrix closure and memory policy |
 | [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) | Design notes for reusable traversal workspace |
+| [`docs/reachability_density.md`](docs/reachability_density.md) | Reachable-pair density estimation (sampling, auto-stop, parallel BFS) |
 | [`docs/dataset_browser.md`](docs/dataset_browser.md) | Interactive GUI for MovingAI maps, directed graphs, and orientation recipes |
 | [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
 
@@ -123,6 +125,7 @@ There are **24 test executables**, including:
 - **`test_movingai_reachability`** — parametrized reachability oracle over every extracted MovingAI catalog map (skipped when `datasets/movingai/extracted` is absent)
 - **`test_dag_reachability`** — direct coverage of DAG reachability on known graphs and maze-derived condensation DAGs
 - **`test_hot_path_allocations`** — verifies that query/traversal paths do not resize scratch buffers
+- **`test_reachability_density`** — reachable-pair density: distinct sampling, auto-stop, serial/parallel equivalence
 
 CI (GitHub Actions) runs configure, build, docs, and the full test suite on every push and pull request.
 
@@ -157,6 +160,7 @@ Hot traversal and query paths are optimized for predictable performance:
 - **No associative containers** on hot paths — contiguous arrays and bit-parallel words instead
 - **No virtual dispatch** — flat, statically dispatched code
 - **Scratch reuse** via `GraphSearchScratch` with visited-mark stamping and overflow handling — see [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) for design details
+- **Cold-path analysis** (e.g. [`ReachabilityDensityEstimator`](docs/reachability_density.md)) may use threads and per-worker scratch pools; hot single-pair BFS/DFS query paths remain single-threaded.
 
 Closure-based baselines estimate memory **before** allocation and return `SkippedByPolicy` when a configured limit would be exceeded.
 

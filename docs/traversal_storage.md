@@ -131,6 +131,8 @@ These rules explain why CSR plus `GraphSearchScratch` (stamp-array visited set, 
 |------|----------|
 | CSR neighbor access | [`src/graph/csr_graph.cpp`](../src/graph/csr_graph.cpp) |
 | BFS reachability | [`src/graph/bfs.cpp`](../src/graph/bfs.cpp) |
+| BFS reachable-set size | [`Bfs::reachableCount`](../include/hbrick/graph/bfs.hpp) — used by density estimator |
+| Reachability density | [`src/graph/reachability_density.cpp`](../src/graph/reachability_density.cpp) — see [Reachability density](reachability_density.md) |
 | DFS reachability | [`src/graph/dfs.cpp`](../src/graph/dfs.cpp) |
 | Hot-path allocation tests | [`tests/unit/test_hot_path_allocations.cpp`](../tests/unit/test_hot_path_allocations.cpp) |
 | BFS/DFS correctness | [`tests/unit/test_bfs_dfs.cpp`](../tests/unit/test_bfs_dfs.cpp) |

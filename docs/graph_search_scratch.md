@@ -229,7 +229,25 @@ This aligns with project hot-path rules:
 
 ## Threading
 
-Benchmarking is single-threaded today. If multi-threaded benchmarking is added later, the rule is:
+Hot-path traversal (`Bfs::reachable`, `Dfs::reachable`, SCC inner loops) is single-threaded.
+
+**Exception:** [`ReachabilityDensityEstimator`](reachability_density.md) is cold-path graph analysis. When `ReachabilityDensityConfig::num_threads != 1`, it runs parallel BFS batches with:
+
+- **One `GraphSearchScratch` per worker thread** (stored in `scratch_pool_`)
+- A read-only shared `CsrGraph`
+- Distinct pre-shuffled source vertices per worker (no duplicate start cells in a batch)
+
+```cpp
+// Parallel density estimation (each worker owns scratch_pool_[worker])
+ReachabilityDensityConfig config;
+config.num_threads = 0;  // hardware concurrency
+estimator.begin(graph, universe, config);
+while (estimator.active()) {
+    estimator.stepParallel(graph);
+}
+```
+
+If multi-threaded benchmarking is added later, the same rule applies elsewhere:
 
 - **One `GraphSearchScratch` per thread**
 - No shared mutable scratch buffers
@@ -249,5 +267,6 @@ Stamps, queue contents, and stack contents are all mutated during traversal and 
 | SCC usage | [`src/graph/scc_decomposition.cpp`](../src/graph/scc_decomposition.cpp) |
 | Overflow / reset tests | [`tests/unit/test_bfs_dfs.cpp`](../tests/unit/test_bfs_dfs.cpp) |
 | Hot-path allocation tests | [`tests/unit/test_hot_path_allocations.cpp`](../tests/unit/test_hot_path_allocations.cpp) |
+| Reachability density (parallel scratch) | [`tests/unit/test_reachability_density.cpp`](../tests/unit/test_reachability_density.cpp) |
 | Implementation spec (Stage 5) | [`codex_implementation_spec.md`](../codex_implementation_spec.md) § GraphSearchScratch |
 | Doxygen API | Build with `-DHBRICK_BUILD_DOCS=ON`, then see `hbrick::GraphSearchScratch` in `docs/html/index.html` |

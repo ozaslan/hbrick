@@ -123,6 +123,7 @@ The same underlying maze geometry can exist in several representations simultane
 | Build or edit a maze layout | `MazeLayout` |
 | Convert grid to directed graph | `DirectedGridGraphBuilder` |
 | Run reachability search | `CsrGraph` + `GraphSearchScratch` + `Bfs` / `Dfs` |
+| Estimate average forward reachability fraction | `CsrGraph` + `ReachabilityDensityEstimator` — [guide](reachability_density.md) |
 | Keep grid coords alongside graph | `DirectedGridGraph` |
 | Render maze and edges | `MazeLayout` + `DirectedGridGraph` + `GridGraphRenderer` |
 | Reachability on acyclic directed graph | `DagReachability` (or `AcyclicEastSouth` conversion) |

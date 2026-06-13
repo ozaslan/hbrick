@@ -217,19 +217,21 @@ Switching to **SCC view mode** (`Alt+3` or automatic after compute) recolors pas
 
 ### Reachable-pair density
 
-**Estimate reachable-pair density** runs forward BFS from passable sources and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is **exact** over every passable cell. On larger maps it samples **distinct** random sources (partial Fisher–Yates shuffle, no repeats).
+The orientation editor estimates **reachable-pair density** via [`ReachabilityDensityEstimator`](../include/hbrick/graph/reachability_density.hpp) in `hbrick_graph`. See [Reachability density](reachability_density.md) for the full definition, sampling method, and API.
+
+**Estimate reachable-pair density** runs forward BFS from passable sources and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is **exact** over every passable cell. On larger maps it samples **distinct** sources (partial Fisher–Yates shuffle at `begin()`; no repeats within one job).
 
 | Control | Behavior |
 |---------|----------|
-| **Parallel sampling** (default on) | Runs multiple distinct BFS samples per batch via `stepParallel` (`num_threads` = hardware concurrency) |
-| **Choose samples automatically** (default on) | Stops once density and its uncertainty (σ) stabilize. The sample-count combo becomes a **maximum cap** (default 512). |
-| **Sample count** combo | 128, 256, 512, 1024, 2048, 4096, 8192, or 16384 sources. With auto mode off, this is the fixed sample count. |
+| **Parallel sampling** (default on) | `stepParallel()` each UI slice; `num_threads = 0` (hardware concurrency). Each worker BFS uses the next distinct pre-shuffled source. |
+| **Choose samples automatically** (default on) | `AutoStopWhenStable` — stops once density and σ stabilize. Sample-count combo is a **maximum cap** (default 512). |
+| **Sample count** combo | 128–16384 sources. With auto off (`FixedSamples`), this is the exact distinct sample count. |
 
-Clicking **Estimate reachable-pair density** opens a **progress modal** with a bar (`completed / total sources`), a running estimate (`Density so far: …`), parallel worker count when enabled, and a **Stop** button that keeps the result from sources completed so far. Estimation runs incrementally in parallel batches (one batch per UI slice, ~12 ms budget per frame) so the window stays responsive. Orientation controls are disabled while a job is active.
+Clicking **Estimate reachable-pair density** opens a **progress modal** with a bar (`completed / total sources`), a running estimate (`Density so far: …`), parallel worker count when enabled, and a **Stop** button. Estimation runs incrementally in parallel batches (~12 ms budget per frame). Orientation controls are disabled while a job is active.
 
 The editor shows the final result as `Density: …` with ±2σ when sampling, or `(exact, all N sources)` when exhaustive.
 
-This measures how “connected” the directed graph is in an ordered-pair sense: 1.0 means fully reachable, near 0 means highly fragmented.
+`1.0` means fully reachable in the ordered-pair sense; near `0` means highly fragmented.
 
 ### Right-click probe
 
@@ -330,7 +332,9 @@ The browser exercises these hbrick components end to end:
 | `DirectedGridGraph` | CSR storage; neighbor iteration for arrows and probes |
 | `SccDecomposition` | Component labeling and condensation stats |
 | `Bfs` | Right-click reachability probes |
-| `ReachabilityDensityEstimator` | Reachable-pair density (`FixedSamples` or `AutoStopWhenStable`) |
+| `ReachabilityDensityEstimator` | Reachable-pair density via library API ([guide](reachability_density.md)) |
+
+The browser does not implement density logic locally; `orientation.cpp` builds the passable vertex universe and delegates to `ReachabilityDensityEstimator`.
 
 Rendering paths deliberately use `MazeLayout` (not raw map characters) for passability and SCC views so the GUI validates the same conversion pipeline as tests.
 
@@ -345,7 +349,7 @@ Hot-path rules from the library (no allocations in traversal) apply to library c
 - **Global passability policy** — One policy applies to all panels; recipes can change it when loaded.
 - **Arrow draw budget** — Edge arrows skip rendering when the visible cell count exceeds 60,000 (safety valve for huge windows at high zoom).
 - **SCC view invalidation** — Regenerating a graph clears SCC labels until recomputed; view mode falls back to passability.
-- **Incremental density jobs** — Reachable-pair density estimation runs one BFS sample per UI frame slice; only one job can be active per open map panel.
+- **Incremental density jobs** — One parallel or serial batch per UI frame slice; only one job per open map panel. Distinct sources are assigned at job start (partial Fisher–Yates).
 - **No batch export** — SVG visualization exists in `hbrick_viz` but is not wired into this tool.
 
 ---
