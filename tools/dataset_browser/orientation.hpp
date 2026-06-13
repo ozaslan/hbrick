@@ -85,15 +85,35 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout);
 void computeScc(OrientationState& state, const MazeLayout& layout);
 
 /**
- * @brief Estimates reachable-pair density by forward BFS from sampled sources.
+ * @brief Estimates reachable-pair density in one blocking call.
  *
- * Density is the average fraction of passable vertices reachable from a
- * uniformly sampled passable source (self included), an unbiased estimate of
- * the ordered reachable-pair fraction.
+ * Builds the passable-vertex universe from @p layout, configures
+ * @ref ReachabilityDensityEstimator from @p state (sample mode, parallel
+ * flag), and runs until completion. Writes the final estimate to
+ * @c state.density. No-op when @c state.generated is @c false.
+ *
+ * Density is the average fraction of passable vertices reachable from
+ * distinct passable sources (self included), an unbiased estimate of the
+ * ordered reachable-pair fraction.
+ *
+ * @param state Panel state holding the directed graph and estimator settings.
+ * @param layout Maze layout used to enumerate passable vertices.
+ * @param samples Maximum distinct BFS sources (@c max_samples).
  */
 void estimateDensity(OrientationState& state, const MazeLayout& layout, uint32_t samples);
 
-/** @brief Starts an incremental density estimate; no-op when the graph is missing. */
+/**
+ * @brief Starts an incremental density estimate for modal progress UI.
+ *
+ * Cancels any prior job, clears @c state.density, and calls
+ * @ref ReachabilityDensityEstimator::begin with passable vertices and
+ * @c densityConfig derived from @p state. No-op when @c state.generated is
+ * @c false.
+ *
+ * @param state Panel state holding the directed graph and estimator settings.
+ * @param layout Maze layout used to enumerate passable vertices.
+ * @param samples Maximum distinct BFS sources (@c max_samples).
+ */
 void beginDensityEstimate(
     OrientationState& state,
     const MazeLayout& layout,
@@ -101,30 +121,52 @@ void beginDensityEstimate(
 );
 
 /**
- * @brief Runs one BFS sample of an active job.
+ * @brief Runs one serial BFS sample of an active density job.
  *
- * @return @c true when the job is finished (success or cancelled setup).
+ * Delegates to @ref ReachabilityDensityEstimator::step. On completion,
+ * copies @ref ReachabilityDensityEstimator::result into @c state.density.
+ *
+ * @param state Panel state holding the active estimator.
+ * @param layout Unused; kept for a uniform stepping API with layout-aware helpers.
+ * @return @c true when the job finished and @c state.density was updated;
+ *         @c false when more samples remain.
  */
 bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout);
 
 /**
- * @brief Runs a parallel batch of BFS samples for an active job.
+ * @brief Runs a batch of BFS samples for an active density job.
  *
- * Uses @ref ReachabilityDensityEstimator::stepParallel with distinct
- * pre-shuffled sources. Falls back to a single sample when parallel mode
- * is disabled.
+ * When @c state.density_use_parallel is @c true, calls
+ * @ref ReachabilityDensityEstimator::stepParallel (hardware thread count,
+ * distinct pre-shuffled sources per worker). Otherwise runs a single
+ * @ref ReachabilityDensityEstimator::step. On completion, copies the
+ * result into @c state.density.
  *
- * @return @c true when the job is finished (success or cancelled setup).
+ * @param state Panel state holding the active estimator and parallel flag.
+ * @param layout Unused; kept for a uniform stepping API with layout-aware helpers.
+ * @return @c true when the job finished and @c state.density was updated;
+ *         @c false when more samples remain.
  */
 bool stepDensityEstimateParallel(OrientationState& state, const MazeLayout& layout);
 
-/** @brief Aborts an in-progress density job without updating the result. */
+/**
+ * @brief Aborts an in-progress density job without updating the result.
+ *
+ * Calls @ref ReachabilityDensityEstimator::cancel and clears
+ * @c state.density_modal_requested.
+ *
+ * @param state Panel state holding the active estimator.
+ */
 void cancelDensityEstimate(OrientationState& state);
 
 /**
  * @brief Stops an active job and keeps the estimate from completed samples.
  *
- * No-op when the job is inactive or no samples have finished yet.
+ * Calls @ref ReachabilityDensityEstimator::stop and copies
+ * @ref ReachabilityDensityEstimator::result into @c state.density.
+ * No-op when the job is inactive or no samples have finished.
+ *
+ * @param state Panel state holding the active estimator.
  */
 void stopDensityEstimate(OrientationState& state);
 
