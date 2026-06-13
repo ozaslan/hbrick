@@ -113,9 +113,9 @@ All tests are registered with CTest and use Google Test.
 ctest --preset dev --output-on-failure
 ```
 
-There are **23 test executables**, including:
+There are **24 test executables**, including:
 
-- **Unit tests** for grids, CSR graphs, bit primitives, SCC/condensation, baselines, MovingAI I/O, and SVG output
+- **Unit tests** for grids, CSR graphs, bit primitives, SCC/condensation, baselines, MovingAI I/O, reachability density, and SVG output
 - **Integration tests** including a multi-baseline correctness harness
 - **`test_maze_reachability`** — sliced all-pairs checks on non-trivial perfect and cyclic mazes, comparing every baseline against BFS
 - **`test_scc_reachability`** — SCC partition validation and SCC-DAG baseline checks on synthetic and maze-derived graphs

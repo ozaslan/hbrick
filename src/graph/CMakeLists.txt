@@ -10,6 +10,7 @@ add_library(
     scc_decomposition.cpp
     condensation_graph.cpp
     dag_reachability.cpp
+    reachability_density.cpp
 )
 
 target_include_directories(
@@ -21,5 +22,8 @@ target_include_directories(
 
 target_link_libraries(hbrick_graph PUBLIC hbrick_core hbrick_grid hbrick_project_options)
 target_link_libraries(hbrick_graph PRIVATE hbrick_project_warnings)
+
+find_package(Threads REQUIRED)
+target_link_libraries(hbrick_graph PUBLIC Threads::Threads)
 
 add_library(hbrick::graph ALIAS hbrick_graph)

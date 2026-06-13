@@ -10,11 +10,11 @@
 #pragma once
 
 #include <cstdint>
-#include <random>
 #include <vector>
 
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
+#include "hbrick/graph/reachability_density.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 
 #include "map_render.hpp"
@@ -27,37 +27,6 @@ enum class ProbeMode : uint8_t {
     Reachability,
     /** @brief All cells in the clicked cell's strongly connected component. */
     Component,
-};
-
-/** @brief Result of a sampled reachable-pair density estimate. */
-struct DensityEstimate {
-    bool valid = false;
-    float density = 0.0F;
-    float std_error = 0.0F;
-    uint32_t samples = 0;
-};
-
-/** @brief Incremental reachable-pair density job (one BFS sample per step). */
-struct DensityEstimateJob {
-    bool active = false;
-    bool modal_requested = false;
-    bool auto_samples = false;
-    uint32_t requested_samples = 512;
-    uint32_t completed = 0;
-    uint32_t source_count = 0;
-    bool exhaustive = false;
-    double total_passable = 0.0;
-    double sum = 0.0;
-    double sum_squares = 0.0;
-    float checkpoint_density = 0.0F;
-    float checkpoint_std_error = 0.0F;
-    bool checkpoint_initialized = false;
-    uint32_t stable_rounds = 0;
-    std::vector<uint32_t> passable;
-    std::vector<uint8_t> visited;
-    std::vector<uint32_t> queue;
-    std::mt19937_64 rng{0x9E3779B97F4A7C15ULL};
-    std::uniform_int_distribution<std::size_t> pick{0, 0};
 };
 
 /** @brief Per-panel state of the directed-orientation editor. */
@@ -84,10 +53,13 @@ struct OrientationState {
     std::vector<uint32_t> component_sizes;     // populated sizes, sorted desc
     std::vector<uint32_t> component_order;     // raw ids parallel to component_sizes
 
-    DensityEstimate density;
-    DensityEstimateJob density_job;
+    ReachabilityDensityEstimate density;
+    ReachabilityDensityEstimator density_estimator;
+    bool density_modal_requested = false;
     int density_sample_index = 2;  // default 512 in the UI sample-count list
-    bool density_auto_samples = true;
+    ReachabilityDensitySampleMode density_sample_mode =
+        ReachabilityDensitySampleMode::AutoStopWhenStable;
+    bool density_use_parallel = true;
 
     ProbeMode probe_mode = ProbeMode::Reachability;
     bool probe_valid = false;
@@ -135,6 +107,17 @@ void beginDensityEstimate(
  */
 bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout);
 
+/**
+ * @brief Runs a parallel batch of BFS samples for an active job.
+ *
+ * Uses @ref ReachabilityDensityEstimator::stepParallel with distinct
+ * pre-shuffled sources. Falls back to a single sample when parallel mode
+ * is disabled.
+ *
+ * @return @c true when the job is finished (success or cancelled setup).
+ */
+bool stepDensityEstimateParallel(OrientationState& state, const MazeLayout& layout);
+
 /** @brief Aborts an in-progress density job without updating the result. */
 void cancelDensityEstimate(OrientationState& state);
 
@@ -144,11 +127,6 @@ void cancelDensityEstimate(OrientationState& state);
  * No-op when the job is inactive or no samples have finished yet.
  */
 void stopDensityEstimate(OrientationState& state);
-
-/** @brief Running mean and standard error from an active or partial job. */
-[[nodiscard]] DensityEstimate snapshotDensityJobEstimate(
-    const DensityEstimateJob& job
-) noexcept;
 
 /**
  * @brief Computes the forward-reachable set from @p source_vertex with hop

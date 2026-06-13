@@ -116,6 +116,10 @@ Search, decomposition, and reusable traversal workspace.
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
 | [`Bfs`](../include/hbrick/graph/bfs.hpp) | `graph/bfs.hpp` | BFS reachability algorithm | Single-pair reachability via breadth-first search on `CsrGraph` | General directed-graph reachability; correctness oracle |
+| [`Bfs::reachableCount`](../include/hbrick/graph/bfs.hpp) | `graph/bfs.hpp` | Forward reachable-set size | Counts vertices reachable from a source (including itself) | Reachability density estimation and analysis |
+| [`ReachabilityDensityEstimator`](../include/hbrick/graph/reachability_density.hpp) | `graph/reachability_density.hpp` | Sampled density estimator | Average forward reachability fraction over distinct universe sources | Graph connectivity analysis; dataset browser and `test_reachability_density` |
+| [`ReachabilityDensityEstimator::stepParallel`](../include/hbrick/graph/reachability_density.hpp) | `graph/reachability_density.hpp` | Parallel batch sampler | Runs distinct pre-shuffled BFS sources across worker threads | Large-map density jobs; dataset browser |
+| [`ReachabilityDensitySampleMode`](../include/hbrick/graph/reachability_density.hpp) | `graph/reachability_density.hpp` | Sampling policy enum | `FixedSamples` or `AutoStopWhenStable` | Choose fixed iteration count vs smart early stopping |
 | [`Dfs`](../include/hbrick/graph/dfs.hpp) | `graph/dfs.hpp` | DFS reachability algorithm | Single-pair reachability via depth-first search on `CsrGraph` | Alternative search baseline; SCC building block |
 | [`SccDecomposition`](../include/hbrick/graph/scc_decomposition.hpp) | `graph/scc_decomposition.hpp` | SCC labeling | Kosaraju two-pass DFS; maps each vertex → component id | Detect strongly connected components in cyclic graphs |
 | [`CondensationGraph`](../include/hbrick/graph/condensation_graph.hpp) | `graph/condensation_graph.hpp` | SCC condensation DAG | Bundles `SccDecomposition` with induced component-level `CsrGraph` | Reduce cyclic graphs to a DAG of super-nodes |

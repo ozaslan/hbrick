@@ -152,6 +152,19 @@ target_link_libraries(
 
 hbrick_register_gtests(test_bfs_dfs)
 
+add_executable(test_reachability_density unit/test_reachability_density.cpp)
+
+target_link_libraries(
+    test_reachability_density
+    PRIVATE
+        hbrick_graph
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_reachability_density)
+
 add_executable(test_bit_vector unit/test_bit_vector.cpp)
 add_executable(test_bit_matrix unit/test_bit_matrix.cpp)
 add_executable(test_boolean_closure unit/test_boolean_closure.cpp)

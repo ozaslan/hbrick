@@ -217,14 +217,15 @@ Switching to **SCC view mode** (`Alt+3` or automatic after compute) recolors pas
 
 ### Reachable-pair density
 
-**Estimate reachable-pair density** runs forward BFS from passable sources and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is **exact** over every passable cell. On larger maps it samples random sources.
+**Estimate reachable-pair density** runs forward BFS from passable sources and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is **exact** over every passable cell. On larger maps it samples **distinct** random sources (partial Fisher–Yates shuffle, no repeats).
 
 | Control | Behavior |
 |---------|----------|
+| **Parallel sampling** (default on) | Runs multiple distinct BFS samples per batch via `stepParallel` (`num_threads` = hardware concurrency) |
 | **Choose samples automatically** (default on) | Stops once density and its uncertainty (σ) stabilize. The sample-count combo becomes a **maximum cap** (default 512). |
 | **Sample count** combo | 128, 256, 512, 1024, 2048, 4096, 8192, or 16384 sources. With auto mode off, this is the fixed sample count. |
 
-Clicking **Estimate reachable-pair density** opens a **progress modal** with a bar (`completed / total sources`), a running estimate (`Density so far: …`), and a **Stop** button that keeps the result from sources completed so far. Estimation runs incrementally (one BFS sample per UI slice, ~12 ms budget per frame) so the window stays responsive. Orientation controls are disabled while a job is active.
+Clicking **Estimate reachable-pair density** opens a **progress modal** with a bar (`completed / total sources`), a running estimate (`Density so far: …`), parallel worker count when enabled, and a **Stop** button that keeps the result from sources completed so far. Estimation runs incrementally in parallel batches (one batch per UI slice, ~12 ms budget per frame) so the window stays responsive. Orientation controls are disabled while a job is active.
 
 The editor shows the final result as `Density: …` with ±2σ when sampling, or `(exact, all N sources)` when exhaustive.
 
@@ -328,7 +329,8 @@ The browser exercises these hbrick components end to end:
 | `DirectedGridGraphBuilder` | Grid-to-directed-graph conversion |
 | `DirectedGridGraph` | CSR storage; neighbor iteration for arrows and probes |
 | `SccDecomposition` | Component labeling and condensation stats |
-| BFS reachability | Probes and density estimation |
+| `Bfs` | Right-click reachability probes |
+| `ReachabilityDensityEstimator` | Reachable-pair density (`FixedSamples` or `AutoStopWhenStable`) |
 
 Rendering paths deliberately use `MazeLayout` (not raw map characters) for passability and SCC views so the GUI validates the same conversion pipeline as tests.
 

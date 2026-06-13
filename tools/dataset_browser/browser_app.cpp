@@ -1838,13 +1838,22 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         }
     }
 
-    ImGui::BeginDisabled(orient.density_job.active);
-    ImGui::Checkbox(
-        "Choose samples automatically", &orient.density_auto_samples
-    );
+    ImGui::BeginDisabled(orient.density_estimator.active());
+    bool auto_stop_samples =
+        orient.density_sample_mode == ReachabilityDensitySampleMode::AutoStopWhenStable;
+    if (ImGui::Checkbox("Choose samples automatically", &auto_stop_samples)) {
+        orient.density_sample_mode = auto_stop_samples
+            ? ReachabilityDensitySampleMode::AutoStopWhenStable
+            : ReachabilityDensitySampleMode::FixedSamples;
+    }
     itemTooltip(
         "Stop once the density and its uncertainty (sigma) stabilize.\n"
         "The sample count below becomes a maximum cap."
+    );
+    ImGui::Checkbox("Parallel sampling", &orient.density_use_parallel);
+    itemTooltip(
+        "Run multiple BFS samples at once using distinct pre-shuffled\n"
+        "start cells (one worker thread per sample)."
     );
     ImGui::SetNextItemWidth(120.0F);
     ImGui::Combo(
@@ -1860,7 +1869,7 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         "16384\0"
     );
     itemTooltip(
-        orient.density_auto_samples
+        auto_stop_samples
             ? "Maximum random passable sources to BFS from.\n"
               "Small maps use every passable cell instead (exact)."
             : "Number of random passable sources to BFS from.\n"
@@ -1881,8 +1890,8 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
             panel.layout,
             kDensitySampleCounts[static_cast<std::size_t>(index)]
         );
-        if (orient.density_job.active) {
-            orient.density_job.modal_requested = true;
+        if (orient.density_estimator.active()) {
+            orient.density_modal_requested = true;
         }
     }
     ImGui::EndDisabled();
@@ -2109,8 +2118,8 @@ void BrowserApp::drawDensityEstimateModals() {
     for (const std::unique_ptr<MapPanel>& panel_ptr : panels_) {
         MapPanel& panel = *panel_ptr;
         OrientationState& orient = panel.orient;
-        DensityEstimateJob& job = orient.density_job;
-        if (!job.active && !job.modal_requested) {
+        ReachabilityDensityEstimator& estimator = orient.density_estimator;
+        if (!estimator.active() && !orient.density_modal_requested) {
             continue;
         }
 
@@ -2122,17 +2131,17 @@ void BrowserApp::drawDensityEstimateModals() {
             static_cast<unsigned long long>(panel.id)
         );
 
-        if (job.modal_requested) {
-            job.modal_requested = false;
+        if (orient.density_modal_requested) {
+            orient.density_modal_requested = false;
         }
-        if (job.active) {
+        if (estimator.active()) {
             ImGui::OpenPopup(popup_id);
         }
 
         const auto start = std::chrono::steady_clock::now();
         constexpr auto kBudget = std::chrono::milliseconds(12);
-        while (job.active) {
-            if (stepDensityEstimate(orient, panel.layout)) {
+        while (estimator.active()) {
+            if (stepDensityEstimateParallel(orient, panel.layout)) {
                 break;
             }
             const auto elapsed = std::chrono::steady_clock::now() - start;
@@ -2141,7 +2150,7 @@ void BrowserApp::drawDensityEstimateModals() {
             }
         }
 
-        if (!job.active) {
+        if (!estimator.active()) {
             continue;
         }
 
@@ -2150,21 +2159,21 @@ void BrowserApp::drawDensityEstimateModals() {
                 popup_id,
                 nullptr,
                 ImGuiWindowFlags_AlwaysAutoResize)) {
-            const float fraction = job.source_count > 0U
-                ? static_cast<float>(job.completed)
-                    / static_cast<float>(job.source_count)
+            const float fraction = estimator.source_count() > 0U
+                ? static_cast<float>(estimator.completed())
+                    / static_cast<float>(estimator.source_count())
                 : 0.0F;
             char overlay[64];
             std::snprintf(
                 overlay,
                 sizeof(overlay),
                 "%u / %u sources",
-                job.completed,
-                job.source_count
+                estimator.completed(),
+                estimator.source_count()
             );
             ImGui::ProgressBar(fraction, ImVec2(-1.0F, 0.0F), overlay);
 
-            const DensityEstimate running = snapshotDensityJobEstimate(job);
+            const ReachabilityDensityEstimate running = estimator.snapshot();
             if (running.valid) {
                 if (running.std_error == 0.0F) {
                     ImGui::TextWrapped(
@@ -2184,32 +2193,41 @@ void BrowserApp::drawDensityEstimateModals() {
                 ImGui::TextDisabled("Density so far: —");
             }
 
-            if (job.auto_samples) {
-                if (job.exhaustive) {
+            const bool auto_stop =
+                estimator.sample_mode() == ReachabilityDensitySampleMode::AutoStopWhenStable;
+            if (auto_stop) {
+                if (estimator.exhaustive()) {
                     ImGui::TextWrapped(
                         "Auto-stop when stable (max %zu passable cells)",
-                        job.passable.size()
+                        estimator.universe().size()
                     );
                 } else {
                     ImGui::TextWrapped(
                         "Auto-stop when stable (max %u random sources)",
-                        job.requested_samples
+                        estimator.source_count()
                     );
                 }
-            } else if (job.exhaustive) {
+            } else if (estimator.exhaustive()) {
                 ImGui::TextWrapped(
                     "Exact estimate over all %zu passable cells",
-                    job.passable.size()
+                    estimator.universe().size()
                 );
             } else {
                 ImGui::TextWrapped(
                     "Sampling %u random passable sources",
-                    job.requested_samples
+                    estimator.source_count()
+                );
+            }
+
+            if (orient.density_use_parallel && estimator.num_threads() > 1U) {
+                ImGui::TextWrapped(
+                    "Parallel workers: %u (distinct sources per batch)",
+                    estimator.num_threads()
                 );
             }
 
             ImGui::Separator();
-            ImGui::BeginDisabled(job.completed == 0U);
+            ImGui::BeginDisabled(estimator.completed() == 0U);
             if (ImGui::Button("Stop", ImVec2(120.0F, 0.0F))) {
                 stopDensityEstimate(orient);
             }

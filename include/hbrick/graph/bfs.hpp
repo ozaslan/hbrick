@@ -39,6 +39,24 @@ public:
         uint32_t target,
         GraphSearchScratch& scratch
     ) noexcept;
+
+    /**
+     * @brief Returns how many vertices are forward-reachable from @p source.
+     * @ingroup hbrick_graph
+     *
+     * Counts @p source itself plus every vertex discovered by a full forward
+     * BFS. The hot path uses only preallocated scratch buffers.
+     *
+     * @param graph Directed graph to search.
+     * @param source Source vertex index.
+     * @param scratch Reusable traversal workspace sized for @p graph.
+     * @return Reachable vertex count, or @c 0 when @p source is out of range.
+     */
+    [[nodiscard]] static uint32_t reachableCount(
+        const CsrGraph& graph,
+        uint32_t source,
+        GraphSearchScratch& scratch
+    ) noexcept;
 };
 
 }  // namespace hbrick

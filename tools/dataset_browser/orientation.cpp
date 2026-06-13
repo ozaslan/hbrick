@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <random>
 
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
@@ -11,38 +10,6 @@
 namespace hbrick::tools {
 
 namespace {
-
-/**
- * @brief Forward BFS over the CSR graph collecting the reachable set.
- *
- * Tool-side analysis helper (not a library hot path); uses its own visited
- * bitmap so results can outlive the call.
- */
-uint32_t bfsReachableSet(
-    const CsrGraph& graph,
-    const uint32_t source,
-    std::vector<uint8_t>& visited,
-    std::vector<uint32_t>& queue
-) {
-    std::fill(visited.begin(), visited.end(), uint8_t{0});
-    queue.clear();
-    queue.push_back(source);
-    visited[source] = 1U;
-    uint32_t count = 1U;
-
-    std::size_t head = 0;
-    while (head < queue.size()) {
-        const uint32_t vertex = queue[head++];
-        for (const uint32_t next : graph.outNeighbors(vertex)) {
-            if (visited[next] == 0U) {
-                visited[next] = 1U;
-                queue.push_back(next);
-                ++count;
-            }
-        }
-    }
-    return count;
-}
 
 void hsvToRgb(const float h, const float s, const float v, uint8_t out[3]) {
     const float c = v * s;
@@ -87,6 +54,99 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout) {
     state.density = {};
     cancelDensityEstimate(state);
     clearProbe(state);
+}
+
+namespace {
+
+[[nodiscard]] std::vector<uint32_t> passableVertices(const MazeLayout& layout) {
+    std::vector<uint32_t> passable;
+    passable.reserve(layout.passableCount());
+    const uint32_t num_vertices = layout.numVertices();
+    for (uint32_t vertex = 0; vertex < num_vertices; ++vertex) {
+        if (layout.isPassable(VertexId{vertex})) {
+            passable.push_back(vertex);
+        }
+    }
+    return passable;
+}
+
+[[nodiscard]] ReachabilityDensityConfig densityConfig(
+    const OrientationState& state,
+    const uint32_t samples
+) {
+    ReachabilityDensityConfig config;
+    config.max_samples = samples;
+    config.sample_mode = state.density_sample_mode;
+    config.num_threads = state.density_use_parallel ? 0U : 1U;
+    return config;
+}
+
+}  // namespace
+
+void cancelDensityEstimate(OrientationState& state) {
+    state.density_estimator.cancel();
+    state.density_modal_requested = false;
+}
+
+void stopDensityEstimate(OrientationState& state) {
+    state.density_estimator.stop();
+    state.density = state.density_estimator.result();
+}
+
+void beginDensityEstimate(
+    OrientationState& state,
+    const MazeLayout& layout,
+    const uint32_t samples
+) {
+    cancelDensityEstimate(state);
+    state.density = {};
+    if (!state.generated) {
+        return;
+    }
+
+    const std::vector<uint32_t> passable = passableVertices(layout);
+    state.density_estimator.begin(
+        state.graph.csrGraph(),
+        passable,
+        densityConfig(state, samples)
+    );
+}
+
+bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout) {
+    (void)layout;
+    if (state.density_estimator.step(state.graph.csrGraph())) {
+        state.density = state.density_estimator.result();
+        return true;
+    }
+    return false;
+}
+
+bool stepDensityEstimateParallel(OrientationState& state, const MazeLayout& layout) {
+    (void)layout;
+    const bool finished = state.density_use_parallel
+        ? state.density_estimator.stepParallel(state.graph.csrGraph())
+        : state.density_estimator.step(state.graph.csrGraph());
+    if (finished) {
+        state.density = state.density_estimator.result();
+    }
+    return finished;
+}
+
+void estimateDensity(
+    OrientationState& state,
+    const MazeLayout& layout,
+    const uint32_t samples
+) {
+    if (!state.generated) {
+        return;
+    }
+
+    const std::vector<uint32_t> passable = passableVertices(layout);
+    state.density = state.density_estimator.estimate(
+        state.graph.csrGraph(),
+        passable,
+        densityConfig(state, samples)
+    );
 }
 
 void computeScc(OrientationState& state, const MazeLayout& layout) {
@@ -159,213 +219,6 @@ void computeScc(OrientationState& state, const MazeLayout& layout) {
     state.largest_component = largest;
     state.condensation_edges = cross_edges.size();
     state.scc_valid = true;
-}
-
-namespace {
-
-void finalizeDensityEstimate(
-    OrientationState& state,
-    const DensityEstimateJob& job,
-    const bool stopped_early
-) {
-    if (job.completed == 0U) {
-        return;
-    }
-
-    const double n = static_cast<double>(job.completed);
-    const double mean = job.sum / n;
-    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
-    const bool exact = job.exhaustive && !stopped_early
-        && job.completed >= job.source_count;
-    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
-
-    state.density.valid = true;
-    state.density.density = static_cast<float>(mean);
-    state.density.std_error = static_cast<float>(std_error);
-    state.density.samples = job.completed;
-}
-
-constexpr uint32_t kAutoMinSamples = 64U;
-constexpr uint32_t kAutoCheckInterval = 32U;
-constexpr uint32_t kAutoStableRoundsRequired = 3U;
-
-bool metricsStable(
-    const double prev_density,
-    const double prev_std_error,
-    const double density,
-    const double std_error
-) {
-    const double density_tol = std::max(
-        1e-6,
-        0.001 * std::max(prev_density, density)
-    );
-    const double sigma_tol = std::max(
-        1e-7,
-        0.03 * std::max(prev_std_error, std_error)
-    );
-    return std::abs(density - prev_density) <= density_tol
-        && std::abs(std_error - prev_std_error) <= sigma_tol;
-}
-
-bool checkAutoConvergence(DensityEstimateJob& job) {
-    if (!job.auto_samples || job.completed < kAutoMinSamples) {
-        return false;
-    }
-    if (job.completed % kAutoCheckInterval != 0U) {
-        return false;
-    }
-
-    const double n = static_cast<double>(job.completed);
-    const double mean = job.sum / n;
-    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
-    const bool exact = job.exhaustive && job.completed >= job.source_count;
-    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
-    const double density = mean;
-
-    if (!job.checkpoint_initialized) {
-        job.checkpoint_density = static_cast<float>(density);
-        job.checkpoint_std_error = static_cast<float>(std_error);
-        job.checkpoint_initialized = true;
-        return false;
-    }
-
-    const double prev_density = static_cast<double>(job.checkpoint_density);
-    const double prev_std_error = static_cast<double>(job.checkpoint_std_error);
-
-    if (metricsStable(prev_density, prev_std_error, density, std_error)) {
-        ++job.stable_rounds;
-    } else {
-        job.stable_rounds = 0U;
-    }
-
-    job.checkpoint_density = static_cast<float>(density);
-    job.checkpoint_std_error = static_cast<float>(std_error);
-    return job.stable_rounds >= kAutoStableRoundsRequired;
-}
-
-}  // namespace
-
-DensityEstimate snapshotDensityJobEstimate(
-    const DensityEstimateJob& job
-) noexcept {
-    DensityEstimate estimate;
-    if (job.completed == 0U) {
-        return estimate;
-    }
-
-    const double n = static_cast<double>(job.completed);
-    const double mean = job.sum / n;
-    const double variance = std::max(0.0, job.sum_squares / n - mean * mean);
-    const bool exact = job.exhaustive && job.completed >= job.source_count;
-    const double std_error = exact ? 0.0 : std::sqrt(variance / n);
-
-    estimate.valid = true;
-    estimate.density = static_cast<float>(mean);
-    estimate.std_error = static_cast<float>(std_error);
-    estimate.samples = job.completed;
-    return estimate;
-}
-
-void cancelDensityEstimate(OrientationState& state) {
-    state.density_job = {};
-}
-
-void stopDensityEstimate(OrientationState& state) {
-    DensityEstimateJob& job = state.density_job;
-    if (!job.active) {
-        return;
-    }
-    if (job.completed > 0U) {
-        finalizeDensityEstimate(state, job, true);
-    }
-    job.active = false;
-}
-
-void beginDensityEstimate(
-    OrientationState& state,
-    const MazeLayout& layout,
-    const uint32_t samples
-) {
-    cancelDensityEstimate(state);
-    state.density = {};
-    if (!state.generated) {
-        return;
-    }
-
-    DensityEstimateJob job;
-    job.requested_samples = samples;
-    job.auto_samples = state.density_auto_samples;
-
-    const CsrGraph& graph = state.graph.csrGraph();
-    const uint32_t num_vertices = graph.numVertices();
-
-    job.passable.reserve(layout.passableCount());
-    for (uint32_t vertex = 0; vertex < num_vertices; ++vertex) {
-        if (layout.isPassable(VertexId{vertex})) {
-            job.passable.push_back(vertex);
-        }
-    }
-    if (job.passable.empty()) {
-        return;
-    }
-
-    job.exhaustive = job.passable.size() <= samples;
-    job.source_count = job.exhaustive
-        ? static_cast<uint32_t>(job.passable.size())
-        : samples;
-    job.total_passable = static_cast<double>(job.passable.size());
-    job.visited.assign(num_vertices, 0U);
-    job.queue.reserve(job.passable.size());
-    job.pick = std::uniform_int_distribution<std::size_t>(
-        0, job.passable.size() - 1
-    );
-    job.active = true;
-    state.density_job = std::move(job);
-}
-
-bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout) {
-    (void)layout;
-    DensityEstimateJob& job = state.density_job;
-    if (!job.active) {
-        return true;
-    }
-
-    const CsrGraph& graph = state.graph.csrGraph();
-    const uint32_t source = job.exhaustive
-        ? job.passable[job.completed]
-        : job.passable[job.pick(job.rng)];
-    const uint32_t reached = bfsReachableSet(
-        graph, source, job.visited, job.queue
-    );
-    const double fraction =
-        static_cast<double>(reached) / job.total_passable;
-    job.sum += fraction;
-    job.sum_squares += fraction * fraction;
-    ++job.completed;
-
-    if (checkAutoConvergence(job)) {
-        finalizeDensityEstimate(state, job, true);
-        job.active = false;
-        return true;
-    }
-
-    if (job.completed >= job.source_count) {
-        finalizeDensityEstimate(state, job, false);
-        job.active = false;
-        return true;
-    }
-    return false;
-}
-
-void estimateDensity(
-    OrientationState& state,
-    const MazeLayout& layout,
-    const uint32_t samples
-) {
-    beginDensityEstimate(state, layout, samples);
-    while (state.density_job.active) {
-        stepDensityEstimate(state, layout);
-    }
 }
 
 void computeProbe(OrientationState& state, const uint32_t source_vertex) {
