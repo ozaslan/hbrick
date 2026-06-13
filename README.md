@@ -16,6 +16,8 @@ The project is the implementation foundation for **H-BRICK** (Hierarchical BRICK
 | SCC decomposition and condensation DAG | Implemented |
 | Reference baselines (search + closure) | Implemented |
 | Maze-based correctness harness (BFS oracle) | Implemented |
+| MovingAI map I/O (`hbrick_io`) | Implemented |
+| Dataset browser GUI (optional tools target) | Implemented |
 | SVG grid visualization | Implemented |
 | Lightweight benchmarking helpers | Implemented |
 | Doxygen API documentation | Implemented |
@@ -30,6 +32,7 @@ The library is split into target-based CMake modules:
 | CMake target | Namespace | Purpose |
 |--------------|-----------|---------|
 | `hbrick_core` | `hbrick::` | Shared types, vertex IDs, reachability answers, status reporting |
+| `hbrick_io` | `hbrick::` | MovingAI `.map` loading and passability policies |
 | `hbrick_grid` | `hbrick::` | Maze layouts and cardinal directions |
 | `hbrick_graph` | `hbrick::` | CSR storage, BFS/DFS, SCC decomposition, condensation DAG, DAG reachability |
 | `hbrick_bit` | `hbrick::` | Bit vectors, bit matrices, boolean closure (pure bit logic) |
@@ -87,6 +90,7 @@ Useful CMake options:
 |--------|---------|-------------|
 | `HBRICK_WARNINGS_AS_ERRORS` | `ON` (via preset) | Treat compiler warnings as errors |
 | `HBRICK_BUILD_DOCS` | `OFF` | Add the `hbrick_docs` Doxygen target |
+| `HBRICK_BUILD_TOOLS` | `OFF` | Build developer tools (`hbrick_dataset_browser` GUI) |
 | `HBRICK_ENABLE_LTO` | `ON` | Link-time optimization for non-Debug builds |
 
 Example with documentation enabled:
@@ -109,11 +113,14 @@ All tests are registered with CTest and use Google Test.
 ctest --preset dev --output-on-failure
 ```
 
-There are **19 test executables**, including:
+There are **23 test executables**, including:
 
-- **Unit tests** for grids, CSR graphs, bit primitives, SCC/condensation, baselines, and SVG output
+- **Unit tests** for grids, CSR graphs, bit primitives, SCC/condensation, baselines, MovingAI I/O, and SVG output
 - **Integration tests** including a multi-baseline correctness harness
-- **`test_maze_reachability`** — exhaustive all-pairs checks on non-trivial perfect and cyclic mazes, comparing every baseline against BFS
+- **`test_maze_reachability`** — sliced all-pairs checks on non-trivial perfect and cyclic mazes, comparing every baseline against BFS
+- **`test_scc_reachability`** — SCC partition validation and SCC-DAG baseline checks on synthetic and maze-derived graphs
+- **`test_recipe_reachability`** — recipe save/load round-trip and reachability oracle on graphs built from saved orientation recipes
+- **`test_movingai_reachability`** — parametrized reachability oracle over every extracted MovingAI catalog map (skipped when `datasets/movingai/extracted` is absent)
 - **`test_dag_reachability`** — direct coverage of DAG reachability on known graphs and maze-derived condensation DAGs
 - **`test_hot_path_allocations`** — verifies that query/traversal paths do not resize scratch buffers
 
@@ -130,8 +137,10 @@ hbrick/
 ├── tests/
 │   ├── unit/           Focused unit tests
 │   ├── integration/    Cross-module correctness harnesses
-│   └── support/        Maze generator and BFS oracle helpers
+│   └── support/        Maze generator, MovingAI catalog, recipe graph builder, reachability oracle
 ├── docs/               Doxygen sources (mainpage, groups); html/ is generated output
+├── recipes/            Saved orientation recipe JSON files (dataset browser)
+├── datasets/movingai/  Archived MovingAI benchmark zips and fetch script
 ├── .github/workflows/  CI pipeline
 ├── CMakeLists.txt
 ├── CMakePresets.json

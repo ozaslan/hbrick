@@ -8,7 +8,7 @@ How mazes, grids, and graphs relate — and why the library converts between the
 
 ## Maze layout
 
-A maze layout is a **`MazeLayout`**: a dense bitmap of open/blocked cells. Generation helpers (`generatePerfectMaze`, `generateMazeWithExtraPassages`) return a `MazeLayout` and live in **test support**.
+A maze layout is a **`MazeLayout`**: a dense bitmap of open/blocked cells. Sources include test-support generators (`generatePerfectMaze`, `generateMazeWithExtraPassages`) and production I/O via [`loadMovingAiMap`](../include/hbrick/io/movingai_loader.hpp) with a [`MovingAiPassabilityPolicy`](../include/hbrick/io/movingai_map.hpp).
 
 The library does **not** run reachability directly on the bitmap. It converts passable adjacencies into a **directed graph** because all search, SCC, and closure algorithms operate on explicit adjacency lists in CSR format.
 
@@ -31,6 +31,7 @@ The library does **not** run reachability directly on the bitmap. It converts pa
 ```mermaid
 flowchart TD
     MazeGen["test_support: generatePerfectMaze()"] --> Grid["MazeLayout\n(bitmap)"]
+    MovingAi["hbrick_io: loadMovingAiMap()"] --> Grid
     Grid --> Builder["DirectedGridGraphBuilder\n(edge orientation policy)"]
     Builder --> DGG["DirectedGridGraph\n(CSR + grid metadata)"]
     DGG --> CSR["CsrGraph\n(strip metadata)"]
@@ -45,8 +46,8 @@ flowchart TD
 
 ### Step-by-step
 
-1. **Maze → `MazeLayout`** (test fixtures only)  
-   `generatePerfectMaze` carves corridors into a physical grid of size `(2×rooms_w+1) × (2×rooms_h+1)`. Odd coordinates are rooms; walls become passable when carved.
+1. **Maze → `MazeLayout`**  
+   Test fixtures use `generatePerfectMaze`, which carves corridors into a physical grid of size `(2×rooms_w+1) × (2×rooms_h+1)`. Odd coordinates are rooms; walls become passable when carved. Production paths load MovingAI `.map` files via `loadMovingAiMap` and convert with `MovingAiMap::toMazeLayout(policy)`.
 
 2. **`MazeLayout` → directed graph**  
    [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_builder.hpp) scans passable east/south adjacency pairs and applies an edge-orientation policy to produce directed arcs. Output is a [`DirectedGridGraph`](../include/hbrick/graph/directed_grid_graph.hpp) (CSR + grid dimensions).
@@ -79,8 +80,9 @@ When [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_bu
 | `AcyclicEastSouth` | One arc per corridor, aligned with east/south scan order | Deterministic DAG; direct `DagReachability` without SCC |
 | `BidirectionalAll` | Two opposing arcs per corridor | Approximates undirected maze walking; one large SCC |
 | `RandomAsymmetric` | Seeded mix of bidirectional, one-way, and no edge | Stress tests with varied cycle structure |
+| `GradientFlow` | Seeded arcs prefer a global flow angle with backflow noise | Directional bias with controlled cycle injection |
 
-For `RandomAsymmetric`, [`RandomAsymmetricParams`](../include/hbrick/graph/random_asymmetric_params.hpp) supplies the seed and per-adjacency probabilities (`p_bidirectional`, `p_one_way`).
+For `RandomAsymmetric` and `GradientFlow`, [`RandomAsymmetricParams`](../include/hbrick/graph/random_asymmetric_params.hpp) supplies the seed and per-adjacency probabilities (`p_bidirectional`, `p_one_way`, `gradient_angle_degrees`, `p_against_gradient`).
 
 ---
 

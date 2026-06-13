@@ -886,3 +886,21 @@ expected matrices are written down
 ```
 
 Until then, Codex should build only the infrastructure, baselines, correctness harness, and visualization foundation.
+
+---
+
+# 20. Implemented infrastructure beyond Stages 0–10
+
+The following additions are **not** H-BRICK tile-index work. They extend the Stages 0–10 foundation for dataset validation and developer tooling:
+
+| Area | Location | Purpose |
+|------|----------|---------|
+| `hbrick_io` | `include/hbrick/io/`, `src/io/` | MovingAI `.map` loading, terrain classification, passability policies |
+| Dataset browser | `tools/dataset_browser/` | Optional GUI (`HBRICK_BUILD_TOOLS`) for map inspection, orientation editing, SCC analysis, and recipe save/load |
+| Orientation recipes | `recipes/`, `tools/dataset_browser/recipe.*` | JSON parameter files reproducing directed-graph conversion settings |
+| MovingAI catalog | `tests/support/movingai_map_catalog.*` | Discovers extracted benchmark maps for parametrized tests |
+| Recipe graph builder | `tests/support/recipe_graph.*` | Builds CSR graphs from saved recipes |
+| Reachability oracle | `tests/support/reachability_oracle.*`, `test_limits.hpp` | Sliced all-pairs baseline checks, SCC partition validation |
+| Integration tests | `test_movingai_reachability`, `test_recipe_reachability`, `test_scc_reachability` | Correctness harness over catalog maps, recipes, and SCC-DAG baselines |
+
+Stage 11+ (H-BRICK tiles, parent composition, query propagation) remains blocked per §19.

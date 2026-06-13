@@ -217,20 +217,29 @@ Switching to **SCC view mode** (`Alt+3` or automatic after compute) recolors pas
 
 ### Reachable-pair density
 
-**Estimate reachable-pair density** samples forward BFS from random passable sources (512 samples by default) and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is exact over all sources. Display includes ±2σ error when sampling.
+**Estimate reachable-pair density** runs forward BFS from passable sources and reports the average fraction of passable vertices reachable from each source (self included). On small maps the estimate is **exact** over every passable cell. On larger maps it samples random sources.
+
+| Control | Behavior |
+|---------|----------|
+| **Choose samples automatically** (default on) | Stops once density and its uncertainty (σ) stabilize. The sample-count combo becomes a **maximum cap** (default 512). |
+| **Sample count** combo | 128, 256, 512, 1024, 2048, 4096, 8192, or 16384 sources. With auto mode off, this is the fixed sample count. |
+
+Clicking **Estimate reachable-pair density** opens a **progress modal** with a bar (`completed / total sources`), a running estimate (`Density so far: …`), and a **Stop** button that keeps the result from sources completed so far. Estimation runs incrementally (one BFS sample per UI slice, ~12 ms budget per frame) so the window stays responsive. Orientation controls are disabled while a job is active.
+
+The editor shows the final result as `Density: …` with ±2σ when sampling, or `(exact, all N sources)` when exhaustive.
 
 This measures how “connected” the directed graph is in an ordered-pair sense: 1.0 means fully reachable, near 0 means highly fragmented.
 
 ### Right-click probe
 
-Two probe modes (`Ctrl+Shift+P` to switch):
+Two probe modes, selectable via radio buttons in the editor or `Ctrl+Shift+P`:
 
 | Mode | Behavior |
 |------|----------|
-| **Reachable set (BFS)** | Forward reachable set from the clicked cell, colored by hop distance (yellow near source, violet at frontier). Reports count and max depth. |
-| **Strongly connected component** | All cells in the same SCC as the clicked cell. Computes SCC labels automatically if needed. |
+| **Reachable set (BFS)** | Forward reachable set from the clicked cell, colored by hop distance (yellow near source, violet at frontier). Reports count, percentage of passable cells, and max depth. |
+| **Strongly connected component** | All cells in the same SCC as the clicked cell. Computes SCC labels automatically if needed. Reports SCC size and percentage. |
 
-**Clear probe** button, `Esc`, or `Space` removes the overlay.
+Switching modes while a probe is active re-runs the highlight under the new mode. **Clear probe** button, `Esc`, or `Space` removes the overlay.
 
 ### Recipes
 
@@ -238,7 +247,7 @@ Recipes capture **parameters only** — never the maze file itself. They are fla
 
 **Save current as recipe** (`Ctrl+S`) — Writes set name, map name, policy, mode, seed, and probability fields. Filename derives from map name, mode, seed, and a content hash; identical parameters overwrite the same file.
 
-**Saved recipes list** — Per-map recipes appear in the editor (newest first) with Load and Delete actions. Delete opens a confirmation modal.
+**Saved recipes list** — Per-map recipes appear in the editor (newest first). Each entry shows the filename, saved timestamp, mode, seed, and probability fields, with **Load** and **Delete** buttons. Delete opens a confirmation modal.
 
 **File → Load recipe** — Opens any recipe from disk: locates the referenced map in the dataset index, opens it pinned, applies parameters, regenerates the graph, and computes SCCs.
 
@@ -334,6 +343,7 @@ Hot-path rules from the library (no allocations in traversal) apply to library c
 - **Global passability policy** — One policy applies to all panels; recipes can change it when loaded.
 - **Arrow draw budget** — Edge arrows skip rendering when the visible cell count exceeds 60,000 (safety valve for huge windows at high zoom).
 - **SCC view invalidation** — Regenerating a graph clears SCC labels until recomputed; view mode falls back to passability.
+- **Incremental density jobs** — Reachable-pair density estimation runs one BFS sample per UI frame slice; only one job can be active per open map panel.
 - **No batch export** — SVG visualization exists in `hbrick_viz` but is not wired into this tool.
 
 ---

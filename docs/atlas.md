@@ -15,12 +15,15 @@ flowchart TB
     graphMod[hbrick_graph]
     baselines[hbrick_baselines]
     grid[hbrick_grid]
+    io[hbrick_io]
     bench[hbrick_bench]
     viz[hbrick_viz]
 
     core --> bit
     core --> graphMod
     grid --> graphMod
+    core --> io
+    grid --> io
     core --> baselines
     bit --> baselines
     graphMod --> baselines
@@ -48,6 +51,21 @@ Shared identifiers, query descriptors, and status types.
 | [`toString(ReachabilityAnswer)`](../include/hbrick/core/status_reporting.hpp) | `core/status_reporting.hpp` | Diagnostic string | Human-readable reachability label | Logging and test output (not hot paths) |
 | [`toString(BaselineStatus)`](../include/hbrick/core/status_reporting.hpp) | `core/status_reporting.hpp` | Diagnostic string | Human-readable baseline status label | Logging and test output (not hot paths) |
 | [`libraryVersion()`](../include/hbrick/core/version.hpp) | `core/version.hpp` | Version metadata | Returns compile-time library version string | Version checks in tools and tests |
+
+---
+
+## hbrick_io
+
+MovingAI benchmark map loading and terrain classification.
+
+| Name | Header | Represents | Purpose | When to use |
+|------|--------|------------|---------|-------------|
+| [`MovingAiTerrain`](../include/hbrick/io/movingai_map.hpp) | `io/movingai_map.hpp` | Terrain class enum | Ground, obstacle, swamp, water, weighted letter, etc. | Classify raw `.map` cell characters |
+| [`MovingAiPassabilityPolicy`](../include/hbrick/io/movingai_map.hpp) | `io/movingai_map.hpp` | Passability policy enum | Ground-only, ground+swamp, all traversable, weighted letters | Control which terrain cells become passable in `MazeLayout` |
+| [`MovingAiMap`](../include/hbrick/io/movingai_map.hpp) | `io/movingai_map.hpp` | Parsed `.map` grid | Raw cells plus metadata; `toMazeLayout(policy)` conversion | Hold loaded benchmark maps before graph conversion |
+| [`MovingAiLoadResult`](../include/hbrick/io/movingai_loader.hpp) | `io/movingai_loader.hpp` | Load outcome | Parsed map or error string on failure | Check I/O success in tools and tests |
+| [`loadMovingAiMap`](../include/hbrick/io/movingai_loader.hpp) | `io/movingai_loader.hpp` | File loader | Reads a `.map` from disk into `MovingAiMap` | Dataset browser, MovingAI integration tests |
+| [`parseMovingAiMap`](../include/hbrick/io/movingai_loader.hpp) | `io/movingai_loader.hpp` | String parser | Parses in-memory `.map` content | Unit tests and fixtures without disk I/O |
 
 ---
 
@@ -86,8 +104,8 @@ Graph topology representations and construction utilities.
 | [`CsrGraph`](../include/hbrick/graph/csr_graph.hpp) | `graph/csr_graph.hpp` | Immutable directed graph (CSR) | `row_ptrs` + `col_indices`; allocation-free `outNeighbors()` spans | **Canonical** algorithmic graph representation — see [Traversal storage](traversal_storage.md) |
 | [`DirectedGridGraph`](../include/hbrick/graph/directed_grid_graph.hpp) | `graph/directed_grid_graph.hpp` | CSR graph + grid metadata | Wraps `CsrGraph` with `width`/`height` and coord helpers | When you need both adjacency lists and grid coordinates |
 | [`DirectedGridGraphBuilder`](../include/hbrick/graph/directed_grid_graph_builder.hpp) | `graph/directed_grid_graph_builder.hpp` | Grid-to-graph factory | Converts `MazeLayout` adjacencies into directed edges | Primary entry point for maze/grid → graph conversion |
-| [`GridEdgeConversionMode`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | Edge-orientation policy enum | `RandomAsymmetric`, `BidirectionalAll`, `AcyclicEastSouth` | Choose how undirected corridors become directed arcs |
-| [`RandomAsymmetricParams`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | RNG seed and probabilities | Controls seeded random edge orientation | Parameterize `RandomAsymmetric` conversion mode |
+| [`GridEdgeConversionMode`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | Edge-orientation policy enum | `RandomAsymmetric`, `GradientFlow`, `BidirectionalAll`, `AcyclicEastSouth` | Choose how undirected corridors become directed arcs |
+| [`RandomAsymmetricParams`](../include/hbrick/graph/random_asymmetric_params.hpp) | `graph/random_asymmetric_params.hpp` | RNG seed and probabilities | Controls seeded random or gradient-flow edge orientation | Parameterize `RandomAsymmetric` and `GradientFlow` conversion modes |
 
 ---
 
@@ -185,6 +203,20 @@ SVG rendering for debugging and test artifacts.
 | [`bfsReference`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BFS oracle | Ground-truth reachability for test comparison | Validate baselines against BFS |
 | [`runAllBaselinesAgainstBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | All-pairs baseline checker | Runs every baseline and counts BFS mismatches | Integration correctness harness |
 | [`expectAllBaselinesMatchBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Google Test assertion | Fails test when any baseline disagrees with BFS | End-to-end maze reachability tests |
+| [`expectSearchBaselinesMatchBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Search-only assertion | Validates BFS/DFS baselines against BFS | Large-graph slice tests |
+| [`mutuallyReachableViaBidirectionalBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | SCC membership check | Two forward BFS passes test mutual reachability | SCC partition validation |
+| [`expectSccPartitionMatchesBidirectionalBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | SCC oracle assertion | Every vertex pair agrees with bidirectional BFS | `test_scc_reachability` |
+| [`computeReachabilityPairSliceCount`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Pair-slice planner | Splits V² ordered pairs into deterministic slices | Keep large all-pairs tests within time limits |
+| [`expectReachabilityOracleAllSlices`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Full oracle harness | SCC check plus every baseline on all pair slices | MovingAI and recipe integration tests |
+| [`expectReachabilityOracleSlice`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Single-slice oracle | SCC check plus baselines on one pair slice | Parametrized per-map tests |
+| [`kFullAllPairsVertexLimit`](../tests/support/test_limits.hpp) | `tests/support/test_limits.hpp` | Size threshold | All-pairs in one test when V ≤ 600 | Shared test sizing policy |
+| [`kMaxPairsPerSlice`](../tests/support/test_limits.hpp) | `tests/support/test_limits.hpp` | Slice volume cap | Max ordered pairs per Google Test case | Prevent runaway all-pairs cost |
+| [`discoverMovingAiMaps`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Map catalog scanner | Lists every `.map` under an extracted MovingAI root | Build parametrized test inputs |
+| [`movingAiMapCatalog`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Cached catalog | Singleton list from `datasets/movingai/extracted` | `test_movingai_reachability` |
+| [`passabilityPolicyForMovingAiSet`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Set-specific policy | Chooses passability rules per benchmark slug | Catalog graph construction |
+| [`randomParamsForMovingAiMap`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Deterministic params | Seeded orientation params from set + map name | Reproducible per-map graphs in tests |
+| [`buildGraphFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe-to-graph builder | Loads map, applies recipe policy/mode/seed | `test_recipe_reachability` |
+| [`paramsFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe param adapter | Maps saved recipe fields to `RandomAsymmetricParams` | Recipe round-trip tests |
 
 ---
 

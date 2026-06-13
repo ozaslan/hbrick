@@ -61,6 +61,11 @@ All data is made available by the Moving AI Lab under the
 [Open Data Commons Attribution License (ODC-BY)](https://opendatacommons.org/licenses/by/1-0/).
 Attribution: Nathan Sturtevant, Moving AI Lab.
 
+## Usage in hbrick
+
+- **Extracted maps** under `extracted/<set>/maps/*.map` feed integration tests (`test_movingai_reachability`) and the optional dataset browser GUI. Tests skip gracefully when `extracted/` is absent.
+- **Orientation recipes** saved by the dataset browser live in the repository-root `recipes/` directory (parameters only — never the map files themselves). `test_recipe_reachability` validates graphs built from committed recipe fixtures.
+
 ## Citation
 
 Publications using these benchmarks should cite:

@@ -92,7 +92,7 @@ Hash-based sparsity is a good fit when vertex labels are sparse strings or ids w
 
 ### Why not search directly on `MazeLayout`?
 
-A maze bitmap records passable cells and implicit undirected adjacency. Reachability in hbrick is **directed**. Converting to CSR materializes explicit arcs under an orientation policy (`AcyclicEastSouth`, `BidirectionalAll`, `RandomAsymmetric`) and produces a representation that all downstream algorithms share — search, SCC, condensation, and closure building.
+A maze bitmap records passable cells and implicit undirected adjacency. Reachability in hbrick is **directed**. Converting to CSR materializes explicit arcs under an orientation policy (`AcyclicEastSouth`, `BidirectionalAll`, `RandomAsymmetric`, `GradientFlow`) and produces a representation that all downstream algorithms share — search, SCC, condensation, and closure building.
 
 The conversion cost is paid once at preprocess time; every query then reuses compact adjacency.
 

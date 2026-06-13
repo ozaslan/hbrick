@@ -8,13 +8,14 @@ grid-embedded mazes, and high-performance query paths.
 | Module | Purpose |
 |--------|---------|
 | @ref hbrick_core | Shared types, vertex ids, and query descriptors |
+| @ref hbrick_io | MovingAI `.map` loading and passability policies |
 | @ref hbrick_grid | Maze layouts and cardinal directions |
 | @ref hbrick_bit | Bit vectors, bit matrices, and boolean closure |
 | @ref hbrick_graph | CSR graphs, search, SCC decomposition, and DAG reachability |
 | @ref hbrick_baselines | Reference preprocess/query algorithms for correctness and benchmarking |
 | @ref hbrick_bench | Lightweight timing helpers |
 | @ref hbrick_viz | SVG rendering of grid graphs |
-| @ref hbrick_test_support | Maze fixtures and BFS oracle utilities used in tests |
+| @ref hbrick_test_support | Maze fixtures, MovingAI catalog, recipe graph builder, and reachability oracle utilities used in tests |
 
 ## Typical workflow
 
@@ -31,6 +32,7 @@ grid-embedded mazes, and high-performance query paths.
 - [Traversal storage](traversal_storage.md) — why CSR is used for BFS, DFS, and SCC; sparse formats vs hash tables
 - [Closure storage](closure_storage.md) — why reachability oracles use dense BitMatrix and Warshall
 - [GraphSearchScratch design notes](graph_search_scratch.md) — reusable traversal workspace details
+- [Dataset browser](dataset_browser.md) — interactive GUI for MovingAI maps, directed graphs, and orientation recipes
 
 ## Generating this documentation
 
