@@ -6,6 +6,8 @@
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
 #include "hbrick/baselines/full_closure_baseline.hpp"
+#include "hbrick/baselines/grail_baseline.hpp"
+#include "hbrick/baselines/two_hop_baseline.hpp"
 #include "hbrick/graph/bfs.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
@@ -35,6 +37,7 @@ hbrick::ReachabilityAnswer referenceBfs(
 
 void expectCsrBaselinesMatchReferenceOnAllPairs(const hbrick::CsrGraph& graph) {
     hbrick::GraphSearchScratch query_scratch(graph.numVertices());
+    hbrick::GraphSearchScratch preprocess_scratch(graph.numVertices());
 
     hbrick::CsrBfsBaseline bfs_baseline;
     hbrick::CsrDfsBaseline dfs_baseline;
@@ -44,9 +47,21 @@ void expectCsrBaselinesMatchReferenceOnAllPairs(const hbrick::CsrGraph& graph) {
     hbrick::FullClosureBaseline closure_baseline;
     closure_baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
 
+    hbrick::TwoHopBaseline two_hop_baseline;
+    two_hop_baseline.preprocess(graph, preprocess_scratch, std::numeric_limits<uint64_t>::max());
+
+    hbrick::GrailBaseline grail_baseline;
+    grail_baseline.preprocess(
+        graph,
+        hbrick::GrailBaselineParams{},
+        std::numeric_limits<uint64_t>::max()
+    );
+
     ASSERT_EQ(bfs_baseline.status(), hbrick::BaselineStatus::Completed);
     ASSERT_EQ(dfs_baseline.status(), hbrick::BaselineStatus::Completed);
     ASSERT_EQ(closure_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(two_hop_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(grail_baseline.status(), hbrick::BaselineStatus::Completed);
 
     for (uint32_t source = 0; source < graph.numVertices(); ++source) {
         for (uint32_t target = 0; target < graph.numVertices(); ++target) {
@@ -70,10 +85,21 @@ void expectCsrBaselinesMatchReferenceOnAllPairs(const hbrick::CsrGraph& graph) {
                 source,
                 target
             );
+            const hbrick::ReachabilityAnswer two_hop_answer = two_hop_baseline.query(
+                source,
+                target
+            );
+            const hbrick::ReachabilityAnswer grail_answer = grail_baseline.query(
+                source,
+                target,
+                query_scratch
+            );
 
             EXPECT_EQ(bfs_answer, expected) << "bfs source=" << source << " target=" << target;
             EXPECT_EQ(dfs_answer, expected) << "dfs source=" << source << " target=" << target;
             EXPECT_EQ(closure_answer, expected) << "closure source=" << source << " target=" << target;
+            EXPECT_EQ(two_hop_answer, expected) << "two-hop source=" << source << " target=" << target;
+            EXPECT_EQ(grail_answer, expected) << "grail source=" << source << " target=" << target;
         }
     }
 }
@@ -143,6 +169,8 @@ TEST(FullClosureBaseline, CompletedClosureAgreesWithBfsOnDiamond) {
 TEST(CsrBaselines, QueryReturnsUnreachableWhenNotPreprocessed) {
     hbrick::CsrBfsBaseline bfs_baseline;
     hbrick::CsrDfsBaseline dfs_baseline;
+    hbrick::TwoHopBaseline two_hop_baseline;
+    hbrick::GrailBaseline grail_baseline;
     hbrick::GraphSearchScratch scratch(1U);
 
     EXPECT_EQ(bfs_baseline.status(), hbrick::BaselineStatus::NotRun);
@@ -152,6 +180,49 @@ TEST(CsrBaselines, QueryReturnsUnreachableWhenNotPreprocessed) {
     );
     EXPECT_EQ(
         dfs_baseline.query(0U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+    EXPECT_EQ(
+        two_hop_baseline.query(0U, 0U),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+    EXPECT_EQ(
+        grail_baseline.query(0U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+}
+
+TEST(TwoHopBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+    const uint64_t estimate = hbrick::TwoHopBaseline::estimateMaxLabelBytes(
+        graph.numVertices()
+    );
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::TwoHopBaseline baseline;
+    baseline.preprocess(graph, scratch, estimate - 1U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(baseline.query(0U, 1U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(GrailBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+    const hbrick::GrailBaselineParams params;
+    const uint64_t estimate = hbrick::GrailBaseline::estimateLabelBytes(
+        graph.numVertices(),
+        params.num_trees
+    );
+
+    hbrick::GrailBaseline baseline;
+    baseline.preprocess(graph, params, estimate - 1U);
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(
+        baseline.query(0U, 1U, scratch),
         hbrick::ReachabilityAnswer::Unreachable
     );
 }

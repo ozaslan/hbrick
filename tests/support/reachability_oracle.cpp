@@ -9,8 +9,10 @@
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
 #include "hbrick/baselines/full_closure_baseline.hpp"
+#include "hbrick/baselines/grail_baseline.hpp"
 #include "hbrick/baselines/scc_dag_closure_baseline.hpp"
 #include "hbrick/baselines/scc_dag_search_baseline.hpp"
+#include "hbrick/baselines/two_hop_baseline.hpp"
 #include "hbrick/graph/bfs.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 
@@ -157,12 +159,16 @@ std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
     SccDagSearchBaseline scc_search;
     SccDagClosureBaseline scc_closure;
     FullClosureBaseline full_closure;
+    TwoHopBaseline two_hop;
+    GrailBaseline grail;
 
     csr_bfs.preprocess(graph);
     csr_dfs.preprocess(graph);
     scc_search.preprocess(graph, preprocess_scratch);
     scc_closure.preprocess(graph, preprocess_scratch, max_memory_bytes);
     full_closure.preprocess(graph, max_memory_bytes);
+    two_hop.preprocess(graph, preprocess_scratch, max_memory_bytes);
+    grail.preprocess(graph, GrailBaselineParams{}, max_memory_bytes);
 
     std::vector<BaselineOracleResult> results{
         {"CsrBfs", csr_bfs.status(), 0U},
@@ -170,6 +176,8 @@ std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
         {"SccDagSearch", scc_search.status(), 0U},
         {"SccDagClosure", scc_closure.status(), 0U},
         {"FullClosure", full_closure.status(), 0U},
+        {"TwoHop", two_hop.status(), 0U},
+        {"Grail", grail.status(), 0U},
     };
 
     if (graph.numVertices() == 0U) {
@@ -217,6 +225,20 @@ std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
                 const ReachabilityAnswer actual = full_closure.query(source, target);
                 if (actual != expected) {
                     ++results[4U].mismatches;
+                }
+            }
+
+            if (results[5U].status == BaselineStatus::Completed) {
+                const ReachabilityAnswer actual = two_hop.query(source, target);
+                if (actual != expected) {
+                    ++results[5U].mismatches;
+                }
+            }
+
+            if (results[6U].status == BaselineStatus::Completed) {
+                const ReachabilityAnswer actual = grail.query(source, target, query_scratch);
+                if (actual != expected) {
+                    ++results[6U].mismatches;
                 }
             }
         }
@@ -488,18 +510,24 @@ void expectAllBaselinesMatchBfsOnSlice(
     SccDagSearchBaseline scc_search;
     SccDagClosureBaseline scc_closure;
     FullClosureBaseline full_closure;
+    TwoHopBaseline two_hop;
+    GrailBaseline grail;
 
     csr_bfs.preprocess(graph);
     csr_dfs.preprocess(graph);
     scc_search.preprocess(graph, preprocess_scratch);
     scc_closure.preprocess(graph, preprocess_scratch, max_memory_bytes);
     full_closure.preprocess(graph, max_memory_bytes);
+    two_hop.preprocess(graph, preprocess_scratch, max_memory_bytes);
+    grail.preprocess(graph, GrailBaselineParams{}, max_memory_bytes);
 
     ASSERT_EQ(csr_bfs.status(), BaselineStatus::Completed) << context;
     ASSERT_EQ(csr_dfs.status(), BaselineStatus::Completed) << context;
     ASSERT_EQ(scc_search.status(), BaselineStatus::Completed) << context;
     ASSERT_EQ(scc_closure.status(), BaselineStatus::Completed) << context;
     ASSERT_EQ(full_closure.status(), BaselineStatus::Completed) << context;
+    ASSERT_EQ(two_hop.status(), BaselineStatus::Completed) << context;
+    ASSERT_EQ(grail.status(), BaselineStatus::Completed) << context;
 
     const uint32_t num_vertices = graph.numVertices();
     const uint64_t total_pairs = static_cast<uint64_t>(num_vertices) * num_vertices;
@@ -536,6 +564,12 @@ void expectAllBaselinesMatchBfsOnSlice(
             << slice_count << " source=" << source << " target=" << target;
         EXPECT_EQ(full_closure.query(source, target), expected)
             << context << " baseline=FullClosure slice=" << slice_id << '/'
+            << slice_count << " source=" << source << " target=" << target;
+        EXPECT_EQ(two_hop.query(source, target), expected)
+            << context << " baseline=TwoHop slice=" << slice_id << '/'
+            << slice_count << " source=" << source << " target=" << target;
+        EXPECT_EQ(grail.query(source, target, query_scratch), expected)
+            << context << " baseline=Grail slice=" << slice_id << '/'
             << slice_count << " source=" << source << " target=" << target;
 
         ++pairs_checked;
