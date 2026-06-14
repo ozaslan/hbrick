@@ -15,7 +15,7 @@ The project is the implementation foundation for **H-BRICK** (Hierarchical BRICK
 | Reachability density estimation (serial and parallel) | Implemented |
 | Bit vectors, bit matrices, boolean transitive closure | Implemented |
 | SCC decomposition and condensation DAG | Implemented |
-| Reference baselines (search + closure) | Implemented |
+| Reference baselines (search, closure, 2-hop, GRAIL) | Implemented |
 | Maze-based correctness harness (BFS oracle) | Implemented |
 | MovingAI map I/O (`hbrick_io`) | Implemented |
 | Dataset browser GUI (optional tools target) | Implemented |
@@ -163,7 +163,7 @@ Hot traversal and query paths are optimized for predictable performance:
 - **Scratch reuse** via `GraphSearchScratch` with visited-mark stamping and overflow handling — see [`docs/graph_search_scratch.md`](docs/graph_search_scratch.md) for design details
 - **Cold-path analysis** (e.g. [`ReachabilityDensityEstimator`](docs/reachability_density.md)) may use threads and per-worker scratch pools; hot single-pair BFS/DFS query paths remain single-threaded.
 
-Closure-based baselines estimate memory **before** allocation and return `SkippedByPolicy` when a configured limit would be exceeded.
+Closure-based and index baselines estimate memory **before** allocation and return `SkippedByPolicy` when a configured limit would be exceeded.
 
 ---
 
@@ -175,11 +175,15 @@ Reference algorithms live under `hbrick_baselines` and share a common preprocess
 |----------|----------|
 | `CsrBfsBaseline` | On-demand BFS per query |
 | `CsrDfsBaseline` | On-demand DFS per query |
-| `SccDagSearchBaseline` | SCC decomposition + search on condensation DAG |
+| `SccDagSearchBaseline` | SCC decomposition (Kosaraju) + search on condensation DAG |
 | `SccDagClosureBaseline` | SCC decomposition + boolean closure on DAG components |
-| `FullClosureBaseline` | Full boolean transitive closure of the graph |
+| `FullClosureBaseline` | Full boolean transitive closure (bit-parallel Warshall) |
+| `TwoHopBaseline` | Cohen-style all-vertex hub 2-hop labeling; query via sorted label intersection |
+| `GrailBaseline` | Random DFS interval labelings; tree hits return immediately, others fall back to BFS |
 
-These are used for correctness checking and future benchmarking, not as the final H-BRICK index.
+Shared preprocessing helpers live in `BaselineGraphUtils` (`buildTransposeGraph`, forward reachable collection, sorted label intersection).
+
+These are used for correctness checking and future benchmarking, not as the final H-BRICK index. The reachability oracle in `tests/support/reachability_oracle.*` validates every completed baseline against BFS.
 
 ---
 

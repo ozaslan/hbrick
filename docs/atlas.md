@@ -147,27 +147,37 @@ flowchart LR
         FullBL[FullClosureBaseline]
         SccCloseBL[SccDagClosureBaseline]
     end
+    subgraph indexPreprocess [General reachability indexes]
+        TwoHopBL[TwoHopBaseline]
+        GrailBL[GrailBaseline]
+    end
 
     CsrGraph --> noPreprocess
     CsrGraph --> sccSearch
     CsrGraph --> closure
+    CsrGraph --> indexPreprocess
 ```
 
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
 | [`CsrBfsBaseline`](../include/hbrick/baselines/csr_bfs_baseline.hpp) | `baselines/csr_bfs_baseline.hpp` | Search baseline (BFS) | Stores CSR copy; runs BFS per query | Minimal-preprocess correctness oracle |
 | [`CsrDfsBaseline`](../include/hbrick/baselines/csr_dfs_baseline.hpp) | `baselines/csr_dfs_baseline.hpp` | Search baseline (DFS) | Stores CSR copy; runs DFS per query | Compare search strategies; correctness oracle |
-| [`SccDagSearchBaseline`](../include/hbrick/baselines/scc_dag_search_baseline.hpp) | `baselines/scc_dag_search_baseline.hpp` | SCC + DAG search baseline | Preprocess: SCC + condensation; query: map to components + DAG BFS | Validate SCC condensation pipeline on cyclic graphs |
+| [`SccDagSearchBaseline`](../include/hbrick/baselines/scc_dag_search_baseline.hpp) | `baselines/scc_dag_search_baseline.hpp` | SCC + DAG search baseline | Preprocess: Kosaraju SCC + condensation; query: map to components + DAG BFS | Validate SCC condensation pipeline on cyclic graphs |
 | [`FullClosureBaseline`](../include/hbrick/baselines/full_closure_baseline.hpp) | `baselines/full_closure_baseline.hpp` | Full closure baseline | Preprocess: V×V transitive closure; query: O(1) bit lookup | All-pairs oracle when memory budget allows |
 | [`SccDagClosureBaseline`](../include/hbrick/baselines/scc_dag_closure_baseline.hpp) | `baselines/scc_dag_closure_baseline.hpp` | SCC + component closure baseline | Preprocess: SCC + C² component closure; query: O(1) lookup | Closure oracle with lower memory on sparse SCC structure |
+| [`TwoHopBaseline`](../include/hbrick/baselines/two_hop_baseline.hpp) | `baselines/two_hop_baseline.hpp` | 2-hop labeling baseline | Preprocess: all-vertex hub cover; query: sorted label intersection | General reachability index baseline; may skip on dense graphs |
+| [`GrailBaseline`](../include/hbrick/baselines/grail_baseline.hpp) | `baselines/grail_baseline.hpp` | GRAIL + BFS fallback baseline | Preprocess: random DFS interval labelings; query: tree hit or BFS | Lightweight index baseline for comparison with spatial methods |
 | [`ClosureMatrixBuilder`](../include/hbrick/baselines/closure_matrix_builder.hpp) | `baselines/closure_matrix_builder.hpp` | Closure preprocessing utility | Estimates memory, checks budget, builds reflexive adjacency `BitMatrix` from `CsrGraph` | Shared helper for closure-based baselines |
+| [`BaselineGraphUtils`](../include/hbrick/baselines/baseline_graph_utils.hpp) | `baselines/baseline_graph_utils.hpp` | Baseline preprocessing utility | Transpose CSR, forward reachable sets, sorted label intersection | Shared helper for index baselines |
 
 | Baseline | Preprocess cost | Query cost | Memory |
 |----------|----------------|------------|--------|
 | `CsrBfsBaseline` / `CsrDfsBaseline` | Copy graph | O(V + E) search | O(V + E) |
-| `SccDagSearchBaseline` | SCC + condensation | O(C + E_c) DAG search | O(V + E) |
+| `SccDagSearchBaseline` | Kosaraju SCC + condensation | O(C + E_c) DAG search | O(V + E) |
 | `FullClosureBaseline` | O(V³) Warshall | O(1) bit test | O(V²) bits |
 | `SccDagClosureBaseline` | SCC + component Warshall | O(1) bit test | O(C²) bits |
+| `TwoHopBaseline` | O(V · (V + E)) hub BFS scans | O(\|L_out\| + \|L_in\|) intersection | O(label entries), up to O(V²) |
+| `GrailBaseline` | O(k · (V + E)) random DFS trees | O(k) tree checks or O(V + E) BFS fallback | O(k · V) interval labels |
 
 ---
 

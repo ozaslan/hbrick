@@ -637,12 +637,15 @@ include/
 
     baselines/
       baseline_status.hpp
+      baseline_graph_utils.hpp
       closure_matrix_builder.hpp
       csr_bfs_baseline.hpp
       csr_dfs_baseline.hpp
       scc_dag_search_baseline.hpp
       scc_dag_closure_baseline.hpp
       full_closure_baseline.hpp
+      two_hop_baseline.hpp
+      grail_baseline.hpp
 ```
 
 ---
@@ -906,6 +909,6 @@ The following additions are **not** H-BRICK tile-index work. They extend the Sta
 | Recipe graph builder | `tests/support/recipe_graph.*` | Builds CSR graphs from saved recipes |
 | Reachability oracle | `tests/support/reachability_oracle.*`, `test_limits.hpp` | Sliced all-pairs baseline checks, SCC partition validation |
 | Reachability density | `include/hbrick/graph/reachability_density.hpp`, `test_reachability_density` | Sampled reachable-pair fraction; distinct sources; serial/parallel BFS — see [docs/reachability_density.md](docs/reachability_density.md) |
-| Integration tests | `test_movingai_reachability`, `test_recipe_reachability`, `test_scc_reachability` | Correctness harness over catalog maps, recipes, and SCC-DAG baselines |
+| Integration tests | `test_movingai_reachability`, `test_recipe_reachability`, `test_scc_reachability` | Correctness harness over catalog maps, recipes, and all reference baselines |
 
 Stage 11+ (H-BRICK tiles, parent composition, query propagation) remains blocked per §19.

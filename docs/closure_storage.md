@@ -91,7 +91,7 @@ uint64_t estimateReflexiveAdjacencyBytes(uint32_t num_vertices);
 bool canAllocateReflexiveAdjacency(uint32_t num_vertices, uint64_t max_memory_bytes);
 ```
 
-Baselines such as `FullClosureBaseline` check the budget at preprocess time and return `BaselineStatus::SkippedByPolicy` when the configured limit would be exceeded.
+Baselines such as `FullClosureBaseline` and `TwoHopBaseline` check the budget at preprocess time and return `BaselineStatus::SkippedByPolicy` when the configured limit would be exceeded.
 
 For graphs with large V, alternatives in the library include:
 
@@ -101,6 +101,8 @@ For graphs with large V, alternatives in the library include:
 | `SccDagSearchBaseline` | O(V + E) | O(C + E_c) on condensation DAG |
 | `SccDagClosureBaseline` | O(C²) bits | O(1) on component ids |
 | `FullClosureBaseline` | O(V²) bits | O(1) |
+| `TwoHopBaseline` | O(label entries), up to O(V²) | O(\|L_out\| + \|L_in\|) label intersection |
+| `GrailBaseline` | O(k · V) interval labels | O(k) tree checks or O(V + E) BFS fallback |
 
 When the SCC structure is sparse (many small components), `SccDagClosureBaseline` closes over C component nodes instead of V vertices — lower memory than full closure while keeping O(1) queries at the component level.
 
@@ -127,8 +129,9 @@ That converts sparse edge storage into a dense adjacency bit matrix suitable for
 | One or few reachability queries | CSR + BFS/DFS |
 | Many queries, V small enough for O(V²) bits | `FullClosureBaseline` |
 | Many queries, graph has sparse SCC structure | `SccDagClosureBaseline` |
-| Correctness oracle / benchmark reference | Closure or search baselines as appropriate |
-| V large, memory limited | Search baselines; closure skipped by policy |
+| Compare against general sparse reachability indexes | `TwoHopBaseline`, `GrailBaseline` |
+| Correctness oracle / benchmark reference | Closure, index, or search baselines as appropriate |
+| V large, memory limited | Search baselines; closure and 2-hop skipped by policy |
 
 ---
 
@@ -140,7 +143,10 @@ That converts sparse edge storage into a dense adjacency bit matrix suitable for
 | Warshall closure | [`src/bit/boolean_closure.cpp`](../src/bit/boolean_closure.cpp) |
 | CSR → BitMatrix adapter | [`src/baselines/closure_matrix_builder.cpp`](../src/baselines/closure_matrix_builder.cpp) |
 | Full closure baseline | [`src/baselines/full_closure_baseline.cpp`](../src/baselines/full_closure_baseline.cpp) |
-| Unit tests | [`tests/unit/test_bit_matrix.cpp`](../tests/unit/test_bit_matrix.cpp), [`tests/unit/test_boolean_closure.cpp`](../tests/unit/test_boolean_closure.cpp), [`tests/unit/test_closure_matrix_builder.cpp`](../tests/unit/test_closure_matrix_builder.cpp) |
+| 2-hop baseline | [`src/baselines/two_hop_baseline.cpp`](../src/baselines/two_hop_baseline.cpp) |
+| GRAIL baseline | [`src/baselines/grail_baseline.cpp`](../src/baselines/grail_baseline.cpp) |
+| Shared baseline helpers | [`src/baselines/baseline_graph_utils.cpp`](../src/baselines/baseline_graph_utils.cpp) |
+| Unit tests | [`tests/unit/test_bit_matrix.cpp`](../tests/unit/test_bit_matrix.cpp), [`tests/unit/test_boolean_closure.cpp`](../tests/unit/test_boolean_closure.cpp), [`tests/unit/test_closure_matrix_builder.cpp`](../tests/unit/test_closure_matrix_builder.cpp), [`tests/unit/test_csr_baselines.cpp`](../tests/unit/test_csr_baselines.cpp) |
 
 ---
 

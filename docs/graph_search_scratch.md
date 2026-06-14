@@ -167,6 +167,8 @@ Search baselines accept scratch on query (and sometimes preprocess):
 | `CsrDfsBaseline` | `query(..., scratch)` → DFS |
 | `SccDagSearchBaseline` | `preprocess(..., scratch)` for SCC; `query(..., scratch)` for DAG BFS |
 | `SccDagClosureBaseline` | `preprocess(..., scratch)` for SCC; queries use precomputed closure (no scratch) |
+| `TwoHopBaseline` | `preprocess(..., scratch)` for hub BFS scans; query uses sorted label intersection only (no scratch) |
+| `GrailBaseline` | `query(..., scratch)` → BFS fallback when no DFS tree certifies reachability |
 
 ---
 
@@ -197,6 +199,33 @@ baseline.preprocess(graph, preprocess_scratch);
 
 for (...) {
     baseline.query(source, target, query_scratch);
+}
+```
+
+### Index baselines (2-hop and GRAIL)
+
+`TwoHopBaseline` uses scratch only during preprocess (hub BFS scans). Queries intersect sorted label vectors and do not need scratch:
+
+```cpp
+hbrick::GraphSearchScratch preprocess_scratch(graph.numVertices());
+
+hbrick::TwoHopBaseline two_hop;
+two_hop.preprocess(graph, preprocess_scratch, max_memory_bytes);
+
+for (...) {
+    two_hop.query(source, target);
+}
+```
+
+`GrailBaseline` stores a CSR copy and uses scratch on query when no DFS tree certifies reachability:
+
+```cpp
+hbrick::GrailBaseline grail;
+grail.preprocess(graph, hbrick::GrailBaselineParams{}, max_memory_bytes);
+
+hbrick::GraphSearchScratch query_scratch(graph.numVertices());
+for (...) {
+    grail.query(source, target, query_scratch);
 }
 ```
 

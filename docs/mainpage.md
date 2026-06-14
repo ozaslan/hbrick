@@ -23,7 +23,8 @@ grid-embedded mazes, and high-performance query paths.
 2. Optionally convert the grid with @ref hbrick::DirectedGridGraphBuilder.
 3. Answer reachability using search (@ref hbrick::Bfs, @ref hbrick::Dfs,
    condensation (@ref hbrick::CondensationGraph, @ref hbrick::DagReachability),
-   a baseline for comparison, or @ref hbrick::ReachabilityDensityEstimator for
+   a baseline for comparison (@ref hbrick::TwoHopBaseline, @ref hbrick::GrailBaseline,
+   closure and search baselines), or @ref hbrick::ReachabilityDensityEstimator for
    sampled connectivity density.
 
 ## Further reading

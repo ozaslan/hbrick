@@ -120,7 +120,7 @@ These rules explain why CSR plus `GraphSearchScratch` (stamp-array visited set, 
 | Few or moderate queries on one graph | Good — minimal preprocess, O(V + E) per query |
 | Graph fits in memory, edges are sparse | Good — O(V + E) storage |
 | Need directed semantics | Required — bitmap alone is insufficient |
-| Many queries, memory budget allows | Consider closure baselines instead — see [Closure storage](closure_storage.md) |
+| Many queries, memory budget allows | Consider closure or index baselines instead — see [Closure storage](closure_storage.md) |
 | Need incoming-edge traversal without building reverse CSR | CSR alone is outgoing-only; build CSC or reverse CSR |
 
 ---

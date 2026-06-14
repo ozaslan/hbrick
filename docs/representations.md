@@ -113,6 +113,7 @@ The same underlying maze geometry can exist in several representations simultane
 | `CsrGraph` | CSR `row_ptrs` + `col_indices` | `Bfs`, `Dfs`, `SccDecomposition`, all baselines | Canonical hot-path graph; no grid overhead | No coordinate mapping |
 | `CondensationGraph` | SCC labels + component-level `CsrGraph` DAG | `DagReachability`, `SccDagSearchBaseline` | Turns cyclic graphs into acyclic super-node graph | Component-level granularity only |
 | `BitMatrix` | V×V boolean reachability matrix | `FullClosureBaseline`, `SccDagClosureBaseline` | O(1) query after preprocess | O(V²) memory; no path information |
+| Per-vertex label sets | Sorted outgoing/incoming hub labels or DFS intervals | `TwoHopBaseline`, `GrailBaseline` | Sparse-index queries without full closure materialization | Label size varies with reachability density |
 
 ---
 
@@ -129,6 +130,7 @@ The same underlying maze geometry can exist in several representations simultane
 | Reachability on acyclic directed graph | `DagReachability` (or `AcyclicEastSouth` conversion) |
 | Reachability on cyclic directed graph | `SccDecomposition` → `CondensationGraph` → `DagReachability` |
 | All-pairs oracle or O(1) lookup baseline | `BitMatrix` via `BooleanClosure` |
+| General reachability index baselines | `TwoHopBaseline`, `GrailBaseline` |
 | Build a non-grid graph | `CsrGraphBuilder` directly (no grid involved) |
 
 ---
