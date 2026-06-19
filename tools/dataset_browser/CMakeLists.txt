@@ -20,6 +20,7 @@ target_link_libraries(
     PRIVATE
         hbrick_io
         hbrick_graph
+        hbrick_bench
         hbrick_imgui
         hbrick_project_options
 )

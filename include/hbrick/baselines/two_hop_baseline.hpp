@@ -61,6 +61,12 @@ public:
         uint32_t num_vertices
     ) noexcept;
 
+    /**
+     * @brief Returns stored label bytes after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] uint64_t labelStorageBytes() const noexcept;
+
     /** @brief Returns the outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }
 

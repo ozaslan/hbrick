@@ -1,7 +1,9 @@
 #include "orientation.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
@@ -53,6 +55,7 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout) {
     state.component_order.clear();
     state.density = {};
     cancelDensityEstimate(state);
+    cancelReachabilityBenchmark(state);
     clearProbe(state);
 }
 
@@ -93,6 +96,131 @@ void stopDensityEstimate(OrientationState& state) {
     state.density = state.density_estimator.result();
 }
 
+void cancelReachabilityBenchmark(OrientationState& state) {
+    state.benchmark_stop.store(true, std::memory_order_release);
+    if (state.benchmark_job != nullptr) {
+        state.benchmark_job->cancel();
+    }
+
+    if (!state.benchmark_timer_frozen
+        && state.benchmark_started_at.time_since_epoch().count() != 0) {
+        state.benchmark_ended_at = std::chrono::steady_clock::now();
+        state.benchmark_timer_frozen = true;
+    }
+
+    if (state.benchmark_worker != nullptr && state.benchmark_worker->joinable()) {
+        state.benchmark_worker->detach();
+    }
+    state.benchmark_worker.reset();
+    state.benchmark_worker_running.store(false, std::memory_order_release);
+}
+
+void reapBenchmarkWorker(OrientationState& state) {
+    if (state.benchmark_worker == nullptr) {
+        return;
+    }
+
+    if (state.benchmark_worker_running.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!state.benchmark_timer_frozen
+        && state.benchmark_started_at.time_since_epoch().count() != 0) {
+        state.benchmark_ended_at = std::chrono::steady_clock::now();
+        state.benchmark_timer_frozen = true;
+    }
+
+    if (state.benchmark_worker->joinable()) {
+        state.benchmark_worker->join();
+    }
+    state.benchmark_worker.reset();
+}
+
+bool benchmarkWorkerRunning(const OrientationState& state) noexcept {
+    return state.benchmark_worker_running.load(std::memory_order_acquire);
+}
+
+namespace {
+
+[[nodiscard]] uint32_t chooseBenchmarkQueriesPerStep(const uint32_t query_count) noexcept {
+    if (query_count >= 1'000'000U) {
+        return 4096U;
+    }
+    if (query_count >= 100'000U) {
+        return 512U;
+    }
+    if (query_count >= 10'000U) {
+        return 128U;
+    }
+    return 16U;
+}
+
+}  // namespace
+
+void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout) {
+    cancelReachabilityBenchmark(state);
+    reapBenchmarkWorker(state);
+    if (benchmarkWorkerRunning(state)) {
+        return;
+    }
+
+    state.benchmark_stop.store(false, std::memory_order_release);
+    if (!state.generated) {
+        return;
+    }
+
+    const std::vector<uint32_t> universe = passableVertices(layout);
+    if (universe.size() < 2U) {
+        return;
+    }
+
+    state.benchmark_config.pair_seed = state.seed;
+    state.benchmark_config.max_memory_bytes = static_cast<uint64_t>(
+        static_cast<double>(state.benchmark_memory_gib) * (1024.0 * 1024.0 * 1024.0)
+    );
+    state.benchmark_config.queries_per_step =
+        chooseBenchmarkQueriesPerStep(state.benchmark_config.query_count);
+
+    state.benchmark_job = std::make_shared<hbrick::ReachabilityBenchmarkJob>();
+    state.benchmark_job->begin(
+        state.graph.csrGraph(),
+        universe,
+        state.benchmark_config
+    );
+    if (!state.benchmark_job->active()) {
+        state.benchmark_job.reset();
+        return;
+    }
+
+    state.benchmark_timer_frozen = false;
+    state.benchmark_started_at = std::chrono::steady_clock::now();
+    state.benchmark_ended_at = {};
+    state.benchmark_followup_density = false;
+    state.benchmark_show_modal = true;
+    state.benchmark_modal_requested = true;
+    state.benchmark_worker_running.store(true, std::memory_order_release);
+
+    const std::shared_ptr<hbrick::ReachabilityBenchmarkJob> job = state.benchmark_job;
+    state.benchmark_worker = std::make_unique<std::thread>([job, &state]() {
+        while (!state.benchmark_stop.load(std::memory_order_acquire)) {
+            if (!job->active()) {
+                break;
+            }
+            if (job->step()) {
+                break;
+            }
+        }
+        state.benchmark_worker_running.store(false, std::memory_order_release);
+    });
+}
+
+bool stepReachabilityBenchmark(OrientationState& state) {
+    if (state.benchmark_job == nullptr) {
+        return true;
+    }
+    return state.benchmark_job->step();
+}
+
 void beginDensityEstimate(
     OrientationState& state,
     const MazeLayout& layout,
@@ -110,6 +238,25 @@ void beginDensityEstimate(
         passable,
         densityConfig(state, samples)
     );
+}
+
+uint32_t densitySampleCountFromPanelSettings(const OrientationState& state) noexcept {
+    static constexpr uint32_t kDensitySampleCounts[] = {
+        128U, 256U, 512U, 1024U, 2048U, 4096U, 8192U, 16384U,
+    };
+    const int index = std::clamp(
+        state.density_sample_index,
+        0,
+        static_cast<int>(std::size(kDensitySampleCounts) - 1U)
+    );
+    return kDensitySampleCounts[static_cast<std::size_t>(index)];
+}
+
+void beginDensityEstimateFromPanelSettings(
+    OrientationState& state,
+    const MazeLayout& layout
+) {
+    beginDensityEstimate(state, layout, densitySampleCountFromPanelSettings(state));
 }
 
 bool stepDensityEstimate(OrientationState& state, const MazeLayout& layout) {
@@ -326,6 +473,8 @@ void clearProbe(OrientationState& state) {
 }
 
 void destroyOrientationTextures(OrientationState& state) {
+    cancelReachabilityBenchmark(state);
+    state.benchmark_job.reset();
     destroyTexture(state.probe_overlay);
 }
 

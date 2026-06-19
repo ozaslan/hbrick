@@ -33,6 +33,12 @@ public:
      */
     [[nodiscard]] uint64_t elapsedNanoseconds() const noexcept;
 
+    /**
+     * @brief Returns the current monotonic clock time in nanoseconds.
+     * @ingroup hbrick_bench
+     */
+    [[nodiscard]] static uint64_t steadyNowNanoseconds() noexcept;
+
 private:
     uint64_t start_nanoseconds_ = 0;
     uint64_t elapsed_nanoseconds_ = 0;

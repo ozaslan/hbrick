@@ -135,26 +135,54 @@ ReachabilityAnswer GrailBaseline::query(
     const uint32_t target,
     GraphSearchScratch& scratch
 ) const noexcept {
+    return queryDetailed(source, target, scratch).answer;
+}
+
+GrailQueryOutcome GrailBaseline::queryDetailed(
+    const uint32_t source,
+    const uint32_t target,
+    GraphSearchScratch& scratch
+) const noexcept {
+    GrailQueryOutcome outcome;
     if (status_ != BaselineStatus::Completed) {
-        return ReachabilityAnswer::Unreachable;
+        return outcome;
     }
 
     const uint32_t num_vertices = graph_.numVertices();
     if (source >= num_vertices || target >= num_vertices) {
-        return ReachabilityAnswer::Unreachable;
+        return outcome;
     }
 
     if (source == target) {
-        return ReachabilityAnswer::Reachable;
+        outcome.answer = ReachabilityAnswer::Reachable;
+        outcome.tree_certified = true;
+        return outcome;
     }
 
     for (const TreeLabeling& labeling : labelings_) {
         if (intervalContains(labeling, source, target)) {
-            return ReachabilityAnswer::Reachable;
+            outcome.answer = ReachabilityAnswer::Reachable;
+            outcome.tree_certified = true;
+            return outcome;
         }
     }
 
-    return Bfs::reachable(graph_, source, target, scratch);
+    outcome.answer = Bfs::reachable(graph_, source, target, scratch);
+    outcome.tree_certified = false;
+    return outcome;
+}
+
+uint64_t GrailBaseline::labelStorageBytes() const noexcept {
+    if (status_ != BaselineStatus::Completed) {
+        return 0U;
+    }
+
+    uint64_t total_bytes = 0U;
+    for (const TreeLabeling& labeling : labelings_) {
+        total_bytes += static_cast<uint64_t>(labeling.pre.size()) * sizeof(uint32_t);
+        total_bytes += static_cast<uint64_t>(labeling.post.size()) * sizeof(uint32_t);
+    }
+    return total_bytes;
 }
 
 }  // namespace hbrick

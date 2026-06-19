@@ -19,16 +19,16 @@ namespace hbrick {
  * @brief Reference baseline that stores the graph and runs DFS per query.
  * @ingroup hbrick_baselines
  *
- * Preprocessing copies the CSR graph. Each query invokes @ref hbrick::Dfs::reachable
- * with caller-provided scratch memory.
+ * Preprocessing binds the input graph by reference (no index is built).
+ * Each query invokes @ref hbrick::Dfs::reachable with caller-provided scratch memory.
  */
 class CsrDfsBaseline {
 public:
     /**
-     * @brief Stores a copy of @p graph for subsequent queries.
+     * @brief Binds @p graph for subsequent queries without copying it.
      * @ingroup hbrick_baselines
      *
-     * @param graph Input directed graph.
+     * @p graph must outlive this baseline and remain valid for every @ref query call.
      */
     void preprocess(const CsrGraph& graph);
 
@@ -49,12 +49,12 @@ public:
 
     /** @brief Returns the outcome of the most recent @ref preprocess call. @return The outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }
-    /** @brief Returns the stored CSR graph copy. @return The stored CSR graph copy. @ingroup hbrick_baselines */
-    [[nodiscard]] const CsrGraph& graph() const noexcept { return graph_; }
+    /** @brief Returns the bound CSR graph, or an empty graph when not preprocessed. @ingroup hbrick_baselines */
+    [[nodiscard]] const CsrGraph& graph() const noexcept;
 
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
-    CsrGraph graph_;
+    const CsrGraph* graph_ = nullptr;
 };
 
 }  // namespace hbrick

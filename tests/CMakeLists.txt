@@ -257,6 +257,18 @@ target_link_libraries(
 
 hbrick_register_gtests(test_bench)
 
+add_executable(test_reachability_benchmark unit/test_reachability_benchmark.cpp)
+
+target_link_libraries(
+    test_reachability_benchmark
+    PRIVATE
+        hbrick_bench
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_reachability_benchmark)
+
 add_executable(test_correctness_harness integration/test_correctness_harness.cpp)
 
 target_link_libraries(

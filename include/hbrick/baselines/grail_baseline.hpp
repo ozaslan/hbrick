@@ -28,6 +28,17 @@ struct GrailBaselineParams {
 };
 
 /**
+ * @brief Detailed outcome of a @ref GrailBaseline query.
+ * @ingroup hbrick_baselines
+ */
+struct GrailQueryOutcome {
+    /** @brief Reachability answer. @ingroup hbrick_baselines */
+    ReachabilityAnswer answer = ReachabilityAnswer::Unreachable;
+    /** @brief @c true when a DFS tree interval certified reachability. @ingroup hbrick_baselines */
+    bool tree_certified = false;
+};
+
+/**
  * @brief GRAIL positive filter with exact BFS fallback for remaining queries.
  * @ingroup hbrick_baselines
  *
@@ -66,6 +77,16 @@ public:
     ) const noexcept;
 
     /**
+     * @brief Answers reachability and reports whether a tree interval certified it.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] GrailQueryOutcome queryDetailed(
+        uint32_t source,
+        uint32_t target,
+        GraphSearchScratch& scratch
+    ) const noexcept;
+
+    /**
      * @brief Estimates label storage for @p num_vertices and @p num_trees labelings.
      * @ingroup hbrick_baselines
      */
@@ -73,6 +94,12 @@ public:
         uint32_t num_vertices,
         uint32_t num_trees
     ) noexcept;
+
+    /**
+     * @brief Returns stored interval-label bytes after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] uint64_t labelStorageBytes() const noexcept;
 
     /** @brief Returns the outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }

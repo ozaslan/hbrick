@@ -128,4 +128,19 @@ ReachabilityAnswer TwoHopBaseline::query(
         : ReachabilityAnswer::Unreachable;
 }
 
+uint64_t TwoHopBaseline::labelStorageBytes() const noexcept {
+    if (status_ != BaselineStatus::Completed) {
+        return 0U;
+    }
+
+    uint64_t total_bytes = 0U;
+    for (const std::vector<uint32_t>& labels : labels_out_) {
+        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
+    }
+    for (const std::vector<uint32_t>& labels : labels_in_) {
+        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
+    }
+    return total_bytes;
+}
+
 }  // namespace hbrick

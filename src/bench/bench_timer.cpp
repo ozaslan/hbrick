@@ -33,4 +33,8 @@ uint64_t BenchTimer::elapsedNanoseconds() const noexcept {
     return elapsed_nanoseconds_;
 }
 
+uint64_t BenchTimer::steadyNowNanoseconds() noexcept {
+    return nowNanoseconds();
+}
+
 }  // namespace hbrick

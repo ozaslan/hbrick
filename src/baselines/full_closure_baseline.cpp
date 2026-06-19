@@ -7,9 +7,28 @@
 
 namespace hbrick {
 
-void FullClosureBaseline::preprocess(const CsrGraph& graph, const uint64_t max_memory_bytes) {
+namespace {
+
+void warshallPivot(BitMatrix& relation, const uint32_t pivot) noexcept {
+    const uint32_t num_vertices = relation.numRows();
+    for (uint32_t row_index = 0; row_index < num_vertices; ++row_index) {
+        if (relation.test(row_index, pivot)) {
+            relation.row(row_index).rowOr(relation.row(pivot));
+        }
+    }
+}
+
+}  // namespace
+
+void FullClosureBaseline::beginPreprocess(
+    const CsrGraph& graph,
+    const uint64_t max_memory_bytes
+) {
     status_ = BaselineStatus::NotRun;
     num_vertices_ = 0;
+    next_pivot_ = 0U;
+    preprocess_active_ = false;
+    relation_ = BitMatrix{};
     closure_ = BitMatrix{};
 
     const uint32_t num_vertices = graph.numVertices();
@@ -19,15 +38,58 @@ void FullClosureBaseline::preprocess(const CsrGraph& graph, const uint64_t max_m
     }
 
     try {
-        BitMatrix relation = ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
+        relation_ = ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
             graph,
             max_memory_bytes
         );
-        closure_ = BooleanClosure::transitiveClosureWarshall(std::move(relation));
         num_vertices_ = num_vertices;
-        status_ = BaselineStatus::Completed;
+        next_pivot_ = 0U;
+        preprocess_active_ = true;
     } catch (const std::exception&) {
         status_ = BaselineStatus::Failed;
+        relation_ = BitMatrix{};
+    }
+}
+
+bool FullClosureBaseline::stepPreprocessPivots(const uint32_t pivot_count) noexcept {
+    if (!preprocess_active_ || num_vertices_ == 0U || pivot_count == 0U) {
+        return !preprocess_active_;
+    }
+
+    const uint32_t remaining = num_vertices_ - next_pivot_;
+    const uint32_t batch = std::min(pivot_count, remaining);
+    for (uint32_t step = 0U; step < batch; ++step) {
+        warshallPivot(relation_, next_pivot_);
+        ++next_pivot_;
+    }
+
+    if (next_pivot_ < num_vertices_) {
+        return false;
+    }
+
+    closure_ = std::move(relation_);
+    relation_ = BitMatrix{};
+    preprocess_active_ = false;
+    status_ = BaselineStatus::Completed;
+    return true;
+}
+
+void FullClosureBaseline::abortPreprocessSkippedByPolicy() noexcept {
+    relation_ = BitMatrix{};
+    closure_ = BitMatrix{};
+    next_pivot_ = 0U;
+    preprocess_active_ = false;
+    num_vertices_ = 0U;
+    status_ = BaselineStatus::SkippedByPolicy;
+}
+
+void FullClosureBaseline::preprocess(const CsrGraph& graph, const uint64_t max_memory_bytes) {
+    beginPreprocess(graph, max_memory_bytes);
+    if (!preprocess_active_) {
+        return;
+    }
+
+    while (!stepPreprocessPivots(num_vertices_)) {
     }
 }
 
@@ -45,6 +107,14 @@ ReachabilityAnswer FullClosureBaseline::query(
 
     return closure_.test(source, target) ? ReachabilityAnswer::Reachable
                                          : ReachabilityAnswer::Unreachable;
+}
+
+uint64_t FullClosureBaseline::indexStorageBytes() const noexcept {
+    if (status_ != BaselineStatus::Completed) {
+        return 0U;
+    }
+
+    return closure_.memoryBytes();
 }
 
 }  // namespace hbrick

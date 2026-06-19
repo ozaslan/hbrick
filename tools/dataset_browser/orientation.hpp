@@ -9,9 +9,14 @@
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <memory>
+#include <thread>
 #include <vector>
 
+#include "hbrick/bench/reachability_benchmark.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/reachability_density.hpp"
@@ -56,10 +61,26 @@ struct OrientationState {
     ReachabilityDensityEstimate density;
     ReachabilityDensityEstimator density_estimator;
     bool density_modal_requested = false;
+    /** @brief Density estimate runs inside the benchmark modal after a successful run. */
+    bool benchmark_followup_density = false;
     int density_sample_index = 2;  // default 512 in the UI sample-count list
     ReachabilityDensitySampleMode density_sample_mode =
         ReachabilityDensitySampleMode::AutoStopWhenStable;
     bool density_use_parallel = true;
+
+    ReachabilityBenchmarkConfig benchmark_config;
+    std::shared_ptr<hbrick::ReachabilityBenchmarkJob> benchmark_job;
+    std::atomic<bool> benchmark_stop{false};
+    bool benchmark_modal_requested = false;
+    bool benchmark_show_modal = false;
+    std::atomic<bool> benchmark_worker_running{false};
+    int benchmark_query_count_preset = 2;
+    uint32_t benchmark_timed_query_count = 4096U;
+    float benchmark_memory_gib = 8.0F;
+    std::chrono::steady_clock::time_point benchmark_started_at{};
+    std::chrono::steady_clock::time_point benchmark_ended_at{};
+    bool benchmark_timer_frozen = false;
+    std::unique_ptr<std::thread> benchmark_worker;
 
     ProbeMode probe_mode = ProbeMode::Reachability;
     bool probe_valid = false;
@@ -120,6 +141,17 @@ void beginDensityEstimate(
     uint32_t samples
 );
 
+/** @brief Returns the max-sample count selected in the orientation panel UI. */
+[[nodiscard]] uint32_t densitySampleCountFromPanelSettings(
+    const OrientationState& state
+) noexcept;
+
+/** @brief Starts a density job using orientation-panel sample settings. */
+void beginDensityEstimateFromPanelSettings(
+    OrientationState& state,
+    const MazeLayout& layout
+);
+
 /**
  * @brief Runs one serial BFS sample of an active density job.
  *
@@ -169,6 +201,30 @@ void cancelDensityEstimate(OrientationState& state);
  * @param state Panel state holding the active estimator.
  */
 void stopDensityEstimate(OrientationState& state);
+
+/**
+ * @brief Starts an incremental reachability baseline benchmark.
+ *
+ * Uses passable maze vertices as the query universe and the panel's generated
+ * directed CSR graph. No-op when @c state.generated is @c false.
+ */
+void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout);
+
+/**
+ * @brief Advances the active benchmark job by one library step.
+ *
+ * @return @c true when the job finished or was cancelled.
+ */
+[[nodiscard]] bool stepReachabilityBenchmark(OrientationState& state);
+
+/** @brief Aborts an active benchmark job without blocking the caller. */
+void cancelReachabilityBenchmark(OrientationState& state);
+
+/** @brief Joins a finished benchmark worker thread; safe to call each frame. */
+void reapBenchmarkWorker(OrientationState& state);
+
+/** @brief Returns @c true while a benchmark worker thread is still running. */
+[[nodiscard]] bool benchmarkWorkerRunning(const OrientationState& state) noexcept;
 
 /**
  * @brief Computes the forward-reachable set from @p source_vertex with hop

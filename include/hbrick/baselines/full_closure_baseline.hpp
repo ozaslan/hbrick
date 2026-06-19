@@ -36,6 +36,37 @@ public:
     void preprocess(const CsrGraph& graph, uint64_t max_memory_bytes);
 
     /**
+     * @brief Starts incremental transitive-closure preprocessing.
+     * @ingroup hbrick_baselines
+     *
+     * After a successful start, call @ref stepPreprocessPivots until it returns
+     * @c true or invoke @ref abortPreprocessSkippedByPolicy.
+     */
+    void beginPreprocess(const CsrGraph& graph, uint64_t max_memory_bytes);
+
+    /**
+     * @brief Runs up to @p pivot_count Warshall pivot steps.
+     * @ingroup hbrick_baselines
+     *
+     * @return @c true when preprocessing finished or was not active.
+     */
+    [[nodiscard]] bool stepPreprocessPivots(uint32_t pivot_count) noexcept;
+
+    /** @brief Aborts incremental preprocessing and marks @ref SkippedByPolicy. @ingroup hbrick_baselines */
+    void abortPreprocessSkippedByPolicy() noexcept;
+
+    /** @brief Returns completed Warshall pivot count during incremental preprocessing. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t preprocessPivotsCompleted() const noexcept {
+        return next_pivot_;
+    }
+
+    /** @brief Returns total Warshall pivots expected for the active graph. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t preprocessPivotTotal() const noexcept { return num_vertices_; }
+
+    /** @brief Returns @c true while incremental preprocessing is in progress. @ingroup hbrick_baselines */
+    [[nodiscard]] bool preprocessActive() const noexcept { return preprocess_active_; }
+
+    /**
      * @brief Answers a reachability query using the precomputed closure.
      * @ingroup hbrick_baselines
      *
@@ -51,9 +82,18 @@ public:
     /** @brief Returns the vertex count captured during preprocessing. @return The vertex count captured during preprocessing. @ingroup hbrick_baselines */
     [[nodiscard]] uint32_t numVertices() const noexcept { return num_vertices_; }
 
+    /**
+     * @brief Returns closure-matrix storage bytes after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] uint64_t indexStorageBytes() const noexcept;
+
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
     uint32_t num_vertices_ = 0;
+    uint32_t next_pivot_ = 0;
+    bool preprocess_active_ = false;
+    BitMatrix relation_;
     BitMatrix closure_;
 };
 

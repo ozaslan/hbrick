@@ -126,6 +126,7 @@ private:
     void drawInspectorPanel();
     void drawOrientationEditor(MapPanel& panel);
     void drawDensityEstimateModals();
+    void drawBenchmarkModals();
     void drawEdgeArrows(
         ImDrawList* draw_list,
         const MapPanel& panel,

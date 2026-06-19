@@ -43,6 +43,41 @@ public:
     );
 
     /**
+     * @brief Starts incremental component-closure preprocessing.
+     * @ingroup hbrick_baselines
+     *
+     * After a successful start, call @ref stepPreprocessPivots until it returns
+     * @c true or invoke @ref abortPreprocessSkippedByPolicy.
+     */
+    void beginPreprocess(
+        const CsrGraph& graph,
+        GraphSearchScratch& scratch,
+        uint64_t max_memory_bytes
+    );
+
+    /**
+     * @brief Runs up to @p pivot_count Warshall pivot steps on the condensation DAG.
+     * @ingroup hbrick_baselines
+     *
+     * @return @c true when preprocessing finished or was not active.
+     */
+    [[nodiscard]] bool stepPreprocessPivots(uint32_t pivot_count) noexcept;
+
+    /** @brief Aborts incremental preprocessing and marks @ref SkippedByPolicy. @ingroup hbrick_baselines */
+    void abortPreprocessSkippedByPolicy() noexcept;
+
+    /** @brief Returns completed Warshall pivot count during incremental preprocessing. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t preprocessPivotsCompleted() const noexcept {
+        return next_pivot_;
+    }
+
+    /** @brief Returns total Warshall pivots expected for the active condensation DAG. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t preprocessPivotTotal() const noexcept { return num_components_; }
+
+    /** @brief Returns @c true while incremental preprocessing is in progress. @ingroup hbrick_baselines */
+    [[nodiscard]] bool preprocessActive() const noexcept { return preprocess_active_; }
+
+    /**
      * @brief Answers reachability via component ids and the precomputed closure.
      * @ingroup hbrick_baselines
      *
@@ -57,9 +92,19 @@ public:
     /** @brief Returns the outcome of the most recent @ref preprocess call. @return The outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }
 
+    /**
+     * @brief Returns component-closure storage bytes after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] uint64_t indexStorageBytes() const noexcept;
+
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
     SccDecomposition decomposition_;
+    uint32_t num_components_ = 0U;
+    uint32_t next_pivot_ = 0U;
+    bool preprocess_active_ = false;
+    BitMatrix relation_;
     BitMatrix closure_;
 };
 
