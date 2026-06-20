@@ -366,22 +366,13 @@ struct QueryExecutionStats {
             break;
         }
         case ReachabilityBaselineId::BrickSearch:
-            stats.answer = baselines.brick_search.query(
-                pair.source,
-                pair.target,
-                scratch
-            );
+            stats.answer = baselines.brick_search.query(pair.source, pair.target);
             break;
         case ReachabilityBaselineId::BrickClosure:
             stats.answer = baselines.brick_closure.query(pair.source, pair.target);
             break;
         case ReachabilityBaselineId::HBrick:
-            stats.answer = baselines.hbrick.query(
-                pair.source,
-                pair.target,
-                baselines.hbrick.scratch(),
-                scratch
-            );
+            stats.answer = baselines.hbrick.query(pair.source, pair.target);
             break;
     }
 

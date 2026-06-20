@@ -281,7 +281,7 @@ void expectBrickSearchMatchesBfs(
                 target,
                 scratch
             );
-            EXPECT_EQ(brick_search.query(source, target, scratch), expected)
+            EXPECT_EQ(brick_search.query(source, target), expected)
                 << context << " baseline=BrickSearch source=" << source
                 << " target=" << target;
         }

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "hbrick/bit/bit_vector.hpp"
+#include "hbrick/tile/region_node.hpp"
 
 namespace hbrick {
 
@@ -34,8 +35,14 @@ public:
 
     /** @brief Source-side vectors indexed by hierarchy level. @ingroup hbrick_baselines */
     [[nodiscard]] std::vector<BitVector>& sourceChain() noexcept { return source_chain_; }
+    [[nodiscard]] const std::vector<BitVector>& sourceChain() const noexcept {
+        return source_chain_;
+    }
     /** @brief Target-side vectors indexed by hierarchy level. @ingroup hbrick_baselines */
     [[nodiscard]] std::vector<BitVector>& targetChain() noexcept { return target_chain_; }
+    [[nodiscard]] const std::vector<BitVector>& targetChain() const noexcept {
+        return target_chain_;
+    }
     /** @brief Temporary gamma workspace A. @ingroup hbrick_baselines */
     [[nodiscard]] BitVector& gammaA() noexcept { return gamma_a_; }
     /** @brief Temporary gamma workspace B. @ingroup hbrick_baselines */
@@ -43,9 +50,33 @@ public:
     /** @brief Temporary gamma workspace C. @ingroup hbrick_baselines */
     [[nodiscard]] BitVector& gammaC() noexcept { return gamma_c_; }
 
+    /**
+     * @brief Reusable ancestor chain from a base tile up to the root (source side).
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] std::vector<RegionNodeId>& sourceAncestorChain() noexcept {
+        return source_ancestor_chain_;
+    }
+    [[nodiscard]] const std::vector<RegionNodeId>& sourceAncestorChain() const noexcept {
+        return source_ancestor_chain_;
+    }
+
+    /**
+     * @brief Reusable ancestor chain from a base tile up to the root (target side).
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] std::vector<RegionNodeId>& targetAncestorChain() noexcept {
+        return target_ancestor_chain_;
+    }
+    [[nodiscard]] const std::vector<RegionNodeId>& targetAncestorChain() const noexcept {
+        return target_ancestor_chain_;
+    }
+
 private:
     std::vector<BitVector> source_chain_{};
     std::vector<BitVector> target_chain_{};
+    std::vector<RegionNodeId> source_ancestor_chain_{};
+    std::vector<RegionNodeId> target_ancestor_chain_{};
     BitVector gamma_a_{};
     BitVector gamma_b_{};
     BitVector gamma_c_{};

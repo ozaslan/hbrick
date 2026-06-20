@@ -11,6 +11,7 @@
 #include "hbrick/baselines/baseline_status.hpp"
 #include "hbrick/baselines/hbrick_query_scratch.hpp"
 #include "hbrick/core/types.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/tile/hbrick_index.hpp"
 #include "hbrick/tile/brick_index.hpp"
@@ -19,7 +20,6 @@ namespace hbrick {
 
 class DirectedGridGraph;
 class MazeLayout;
-class GraphSearchScratch;
 
 /**
  * @brief H-BRICK baseline: hierarchical boolean propagation with ancestor meet tests.
@@ -41,12 +41,7 @@ public:
      * @brief Answers reachability using hierarchical H-BRICK query steps.
      * @ingroup hbrick_baselines
      */
-    [[nodiscard]] ReachabilityAnswer query(
-        uint32_t source,
-        uint32_t target,
-        HBrickQueryScratch& scratch,
-        GraphSearchScratch& port_bfs_scratch
-    ) const noexcept;
+    [[nodiscard]] ReachabilityAnswer query(uint32_t source, uint32_t target) const noexcept;
 
     /** @brief Returns the outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }
@@ -63,6 +58,15 @@ public:
     /** @brief Returns query scratch sized during the last successful preprocess. @ingroup hbrick_baselines */
     [[nodiscard]] HBrickQueryScratch& scratch() noexcept { return scratch_; }
     [[nodiscard]] const HBrickQueryScratch& scratch() const noexcept { return scratch_; }
+
+    /**
+     * @brief Returns flat-BRICK port BFS scratch sized during the last successful preprocess.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] GraphSearchScratch& portBfsScratch() noexcept { return port_bfs_scratch_; }
+    [[nodiscard]] const GraphSearchScratch& portBfsScratch() const noexcept {
+        return port_bfs_scratch_;
+    }
 
 private:
     [[nodiscard]] static ReachabilityAnswer queryHierarchical(
@@ -81,7 +85,8 @@ private:
 
     BaselineStatus status_ = BaselineStatus::NotRun;
     HBrickIndex index_{};
-    HBrickQueryScratch scratch_{};
+    mutable HBrickQueryScratch scratch_{};
+    mutable GraphSearchScratch port_bfs_scratch_{};
 };
 
 }  // namespace hbrick

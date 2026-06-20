@@ -36,20 +36,14 @@ void expectMatchesBfsOnAllPairs(
     baseline.preprocess(graph, layout, config);
     ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
 
-    hbrick::GraphSearchScratch port_scratch(graph.numVertices());
-    hbrick::HBrickQueryScratch& hbrick_scratch = baseline.scratch();
+    hbrick::GraphSearchScratch bfs_scratch(graph.numVertices());
     const hbrick::CsrGraph& csr = graph.csrGraph();
 
     for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
         for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
             const hbrick::ReachabilityAnswer expected =
-                hbrick::Bfs::reachable(csr, source, target, port_scratch);
-            const hbrick::ReachabilityAnswer actual = baseline.query(
-                source,
-                target,
-                hbrick_scratch,
-                port_scratch
-            );
+                hbrick::Bfs::reachable(csr, source, target, bfs_scratch);
+            const hbrick::ReachabilityAnswer actual = baseline.query(source, target);
             EXPECT_EQ(actual, expected) << "source=" << source << " target=" << target;
         }
     }

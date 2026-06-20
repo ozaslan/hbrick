@@ -26,10 +26,6 @@ ReachabilityAnswer queryPortBfsWithAttachments(
         return ReachabilityAnswer::Unreachable;
     }
 
-    if (scratch.visitedMark().size() < num_port_vertices) {
-        scratch.resetForGraph(num_port_vertices);
-    }
-
     const uint32_t source_tile = tiles.tileIndexForGlobalVertex(source);
     const uint32_t target_tile = tiles.tileIndexForGlobalVertex(target);
     const uint32_t source_local = tiles.localIndexForGlobalVertex(source);
@@ -124,15 +120,18 @@ void BrickSearchBaseline::preprocess(
 ) {
     status_ = BaselineStatus::NotRun;
     index_ = BrickIndex{};
+    port_scratch_ = GraphSearchScratch{};
 
     index_ = BrickIndex::build(graph, layout, nominal_tile_size, max_memory_bytes);
     status_ = index_.status();
+    if (status_ == BaselineStatus::Completed) {
+        port_scratch_.resetForGraph(index_.ports().numPorts());
+    }
 }
 
 ReachabilityAnswer BrickSearchBaseline::query(
     const uint32_t source,
-    const uint32_t target,
-    GraphSearchScratch& scratch
+    const uint32_t target
 ) const noexcept {
     if (status_ != BaselineStatus::Completed) {
         return ReachabilityAnswer::Unreachable;
@@ -149,7 +148,7 @@ ReachabilityAnswer BrickSearchBaseline::query(
         return ReachabilityAnswer::Reachable;
     }
 
-    return queryPortBfsWithAttachments(index_, source, target, scratch);
+    return queryPortBfsWithAttachments(index_, source, target, port_scratch_);
 }
 
 }  // namespace hbrick

@@ -80,15 +80,14 @@ void expectMatchesBfsOnAllPairs(
     );
     ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
 
-    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::GraphSearchScratch bfs_scratch(graph.numVertices());
     const hbrick::CsrGraph& csr = graph.csrGraph();
 
     for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
         for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
             const hbrick::ReachabilityAnswer expected =
-                hbrick::Bfs::reachable(csr, source, target, scratch);
-            const hbrick::ReachabilityAnswer actual =
-                baseline.query(source, target, scratch);
+                hbrick::Bfs::reachable(csr, source, target, bfs_scratch);
+            const hbrick::ReachabilityAnswer actual = baseline.query(source, target);
             EXPECT_EQ(actual, expected) << "source=" << source << " target=" << target;
         }
     }
@@ -145,15 +144,12 @@ TEST(BrickSearchBaseline, SameTileReentryWhenLocalClosureIsZero) {
     ASSERT_NE(target_local, std::numeric_limits<uint32_t>::max());
     EXPECT_FALSE(summary.local_closure.test(source_local, target_local));
 
-    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::GraphSearchScratch bfs_scratch(graph.numVertices());
     EXPECT_EQ(
-        hbrick::Bfs::reachable(graph.csrGraph(), source, target, scratch),
+        hbrick::Bfs::reachable(graph.csrGraph(), source, target, bfs_scratch),
         hbrick::ReachabilityAnswer::Reachable
     );
-    EXPECT_EQ(
-        baseline.query(source, target, scratch),
-        hbrick::ReachabilityAnswer::Reachable
-    );
+    EXPECT_EQ(baseline.query(source, target), hbrick::ReachabilityAnswer::Reachable);
 }
 
 TEST(BrickSearchBaseline, SkippedWhenTileMemoryBudgetExceeded) {

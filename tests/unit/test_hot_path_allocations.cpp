@@ -4,13 +4,21 @@
 
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
+#include "hbrick/baselines/brick_closure_baseline.hpp"
+#include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/full_closure_baseline.hpp"
+#include "hbrick/baselines/hbrick_baseline.hpp"
 #include "hbrick/baselines/scc_dag_closure_baseline.hpp"
 #include "hbrick/baselines/scc_dag_search_baseline.hpp"
 #include "hbrick/graph/bfs.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/dag_reachability.hpp"
 #include "hbrick/graph/dfs.hpp"
+#include "hbrick/graph/directed_grid_graph_builder.hpp"
+#include "hbrick/grid/maze_layout.hpp"
+#include "hbrick/tile/group_size.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
+#include "hbrick/tile/tile_size.hpp"
 #include "maze_generator.hpp"
 #include "reachability_oracle.hpp"
 
@@ -46,6 +54,42 @@ void expectCapacitiesUnchanged(
     EXPECT_EQ(scratch.queue().capacity(), before.queue);
     EXPECT_EQ(scratch.stack().capacity(), before.stack);
     EXPECT_EQ(scratch.visitedMark().capacity(), before.visited);
+}
+
+[[nodiscard]] hbrick::DirectedGridGraph buildSmallGridGraph(hbrick::MazeLayout& layout) {
+    return hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+}
+
+struct HBrickScratchCapacities {
+    std::size_t source_ancestor_chain = 0U;
+    std::size_t target_ancestor_chain = 0U;
+    std::size_t source_bit_chain = 0U;
+    std::size_t target_bit_chain = 0U;
+};
+
+[[nodiscard]] HBrickScratchCapacities captureHBrickScratchCapacities(
+    const hbrick::HBrickQueryScratch& scratch
+) {
+    return HBrickScratchCapacities{
+        scratch.sourceAncestorChain().capacity(),
+        scratch.targetAncestorChain().capacity(),
+        scratch.sourceChain().capacity(),
+        scratch.targetChain().capacity(),
+    };
+}
+
+void expectHBrickScratchCapacitiesUnchanged(
+    const hbrick::HBrickQueryScratch& scratch,
+    const HBrickScratchCapacities& before
+) {
+    const HBrickScratchCapacities after = captureHBrickScratchCapacities(scratch);
+    EXPECT_EQ(after.source_ancestor_chain, before.source_ancestor_chain);
+    EXPECT_EQ(after.target_ancestor_chain, before.target_ancestor_chain);
+    EXPECT_EQ(after.source_bit_chain, before.source_bit_chain);
+    EXPECT_EQ(after.target_bit_chain, before.target_bit_chain);
 }
 
 }  // namespace
@@ -154,4 +198,103 @@ TEST(HotPathAllocations, SccDagClosureQueryDoesNotAllocate) {
             static_cast<void>(baseline.query(source, target));
         }
     }
+}
+
+TEST(HotPathAllocations, BrickSearchQueryDoesNotResizeScratch) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = buildSmallGridGraph(layout);
+
+    hbrick::BrickSearchBaseline baseline;
+    baseline.preprocess(
+        graph,
+        layout,
+        hbrick::TileSize{4U, 4U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    const ScratchCapacities before =
+        captureCapacities(baseline.portScratch());
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            static_cast<void>(baseline.query(source, target));
+        }
+    }
+
+    expectCapacitiesUnchanged(baseline.portScratch(), before);
+}
+
+TEST(HotPathAllocations, BrickClosureQueryDoesNotAllocate) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = buildSmallGridGraph(layout);
+
+    hbrick::BrickClosureBaseline baseline;
+    baseline.preprocess(
+        graph,
+        layout,
+        hbrick::TileSize{4U, 4U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            static_cast<void>(baseline.query(source, target));
+        }
+    }
+}
+
+TEST(HotPathAllocations, HBrickQueryDoesNotResizeScratch) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = buildSmallGridGraph(layout);
+
+    hbrick::HBrickConfig config{};
+    config.base_tile_size = hbrick::TileSize{4U, 4U};
+    config.group_size = hbrick::GroupSize{2U, 2U};
+    config.max_depth = 2U;
+    config.max_memory_bytes = std::numeric_limits<uint64_t>::max();
+
+    hbrick::HBrickBaseline baseline;
+    baseline.preprocess(graph, layout, config);
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    const ScratchCapacities port_before =
+        captureCapacities(baseline.portBfsScratch());
+    const HBrickScratchCapacities hbrick_before =
+        captureHBrickScratchCapacities(baseline.scratch());
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            static_cast<void>(baseline.query(source, target));
+        }
+    }
+
+    expectCapacitiesUnchanged(baseline.portBfsScratch(), port_before);
+    expectHBrickScratchCapacitiesUnchanged(baseline.scratch(), hbrick_before);
+}
+
+TEST(HotPathAllocations, HBrickFlatFallbackQueryDoesNotResizeScratch) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = buildSmallGridGraph(layout);
+
+    hbrick::HBrickConfig config{};
+    config.base_tile_size = hbrick::TileSize{4U, 4U};
+    config.group_size = hbrick::GroupSize{2U, 2U};
+    config.max_depth = 1U;
+    config.max_memory_bytes = std::numeric_limits<uint64_t>::max();
+
+    hbrick::HBrickBaseline baseline;
+    baseline.preprocess(graph, layout, config);
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    const ScratchCapacities before = captureCapacities(baseline.portBfsScratch());
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            static_cast<void>(baseline.query(source, target));
+        }
+    }
+
+    expectCapacitiesUnchanged(baseline.portBfsScratch(), before);
 }

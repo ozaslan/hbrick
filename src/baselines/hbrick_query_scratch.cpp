@@ -49,6 +49,11 @@ void HBrickQueryScratch::prepare(const HBrickIndex& index) {
         source_chain_[level] = BitVector(max_bits);
         target_chain_[level] = BitVector(max_bits);
     }
+
+    source_ancestor_chain_.clear();
+    source_ancestor_chain_.reserve(chain_depth);
+    target_ancestor_chain_.clear();
+    target_ancestor_chain_.reserve(chain_depth);
 }
 
 void HBrickQueryScratch::clearVectors() noexcept {

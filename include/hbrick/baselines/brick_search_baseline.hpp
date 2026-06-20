@@ -43,16 +43,8 @@ public:
     /**
      * @brief Answers reachability using BRICK-Search on the port graph.
      * @ingroup hbrick_baselines
-     *
-     * @param source Source vertex in the global grid graph.
-     * @param target Target vertex in the global grid graph.
-     * @param scratch Traversal workspace sized for at least the port-graph vertex count.
      */
-    [[nodiscard]] ReachabilityAnswer query(
-        uint32_t source,
-        uint32_t target,
-        GraphSearchScratch& scratch
-    ) const noexcept;
+    [[nodiscard]] ReachabilityAnswer query(uint32_t source, uint32_t target) const noexcept;
 
     /** @brief Returns the outcome of the most recent @ref preprocess call. @ingroup hbrick_baselines */
     [[nodiscard]] BaselineStatus status() const noexcept { return status_; }
@@ -60,9 +52,19 @@ public:
     /** @brief Returns the built index when preprocessing completed. @ingroup hbrick_baselines */
     [[nodiscard]] const BrickIndex& index() const noexcept { return index_; }
 
+    /**
+     * @brief Returns port-graph BFS scratch sized during the last successful preprocess.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] GraphSearchScratch& portScratch() noexcept { return port_scratch_; }
+    [[nodiscard]] const GraphSearchScratch& portScratch() const noexcept {
+        return port_scratch_;
+    }
+
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
     BrickIndex index_{};
+    mutable GraphSearchScratch port_scratch_{};
 };
 
 }  // namespace hbrick

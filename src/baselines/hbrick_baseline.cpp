@@ -254,10 +254,6 @@ void propagateTargetExteriorUp(
         return ReachabilityAnswer::Unreachable;
     }
 
-    if (scratch.visitedMark().size() < num_port_vertices) {
-        scratch.resetForGraph(num_port_vertices);
-    }
-
     const uint32_t source_tile = tiles.tileIndexForGlobalVertex(source);
     const uint32_t target_tile = tiles.tileIndexForGlobalVertex(target);
     const uint32_t source_local = tiles.localIndexForGlobalVertex(source);
@@ -404,10 +400,8 @@ ReachabilityAnswer HBrickBaseline::queryHierarchical(
         return ReachabilityAnswer::Unreachable;
     }
 
-    std::vector<RegionNodeId> source_chain;
-    std::vector<RegionNodeId> target_chain;
-    source_chain.reserve(hierarchy.numLevels());
-    target_chain.reserve(hierarchy.numLevels());
+    std::vector<RegionNodeId>& source_chain = scratch.sourceAncestorChain();
+    std::vector<RegionNodeId>& target_chain = scratch.targetAncestorChain();
     buildAncestorChain(hierarchy, RegionNodeId{0U, source_tile}, source_chain);
     buildAncestorChain(hierarchy, RegionNodeId{0U, target_tile}, target_chain);
 
@@ -496,11 +490,13 @@ void HBrickBaseline::preprocess(
     status_ = BaselineStatus::NotRun;
     index_ = HBrickIndex{};
     scratch_ = HBrickQueryScratch{};
+    port_bfs_scratch_ = GraphSearchScratch{};
 
     index_ = HBrickIndex::build(graph, layout, config);
     status_ = index_.status();
     if (status_ == BaselineStatus::Completed) {
         scratch_.prepare(index_);
+        port_bfs_scratch_.resetForGraph(index_.brickIndex().ports().numPorts());
     }
 }
 
@@ -530,9 +526,7 @@ uint64_t HBrickBaseline::indexStorageBytes() const noexcept {
 
 ReachabilityAnswer HBrickBaseline::query(
     const uint32_t source,
-    const uint32_t target,
-    HBrickQueryScratch& scratch,
-    GraphSearchScratch& port_bfs_scratch
+    const uint32_t target
 ) const noexcept {
     if (status_ != BaselineStatus::Completed) {
         return ReachabilityAnswer::Unreachable;
@@ -554,11 +548,11 @@ ReachabilityAnswer HBrickBaseline::query(
             index_.brickIndex(),
             source,
             target,
-            port_bfs_scratch
+            port_bfs_scratch_
         );
     }
 
-    return queryHierarchical(index_, source, target, scratch);
+    return queryHierarchical(index_, source, target, scratch_);
 }
 
 }  // namespace hbrick
