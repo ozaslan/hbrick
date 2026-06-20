@@ -911,4 +911,20 @@ The following additions are **not** H-BRICK tile-index work. They extend the Sta
 | Reachability density | `include/hbrick/graph/reachability_density.hpp`, `test_reachability_density` | Sampled reachable-pair fraction; distinct sources; serial/parallel BFS — see [docs/reachability_density.md](docs/reachability_density.md) |
 | Integration tests | `test_movingai_reachability`, `test_recipe_reachability`, `test_scc_reachability` | Correctness harness over catalog maps, recipes, and all reference baselines |
 
-Stage 11+ (H-BRICK tiles, parent composition, query propagation) remains blocked per §19.
+Stage 11+ (H-BRICK tiles, parent composition, query propagation) was blocked per §19 when this spec was written. That work is now implemented; see §21.
+
+---
+
+# 21. BRICK / H-BRICK implementation status
+
+Flat BRICK and H-BRICK (Stages 11+ in the original roadmap) are implemented per [`docs/brick_implementation.md`](docs/brick_implementation.md):
+
+| Component | Location |
+|-----------|----------|
+| `hbrick_tile` module | `include/hbrick/tile/`, `src/tile/` |
+| Flat BRICK baselines | `BrickSearchBaseline`, `BrickClosureBaseline` |
+| H-BRICK index and query | `HBrickIndex`, `HBrickBaseline` |
+| Benchmark integration | `ReachabilityBaselineId::BrickSearch`, `BrickClosure`, `HBrick` |
+| Verification | `test_super_tile_verify`, `test_hbrick_baseline`, reachability oracle helpers |
+
+§19 readiness items (port rules, flat port graph, BRICK-Search and H-BRICK pseudocode, hand-verified composition) are satisfied in code and tests described in that guide. This specification remains the historical Stages 0–10 design document; for tile-index APIs and phase map, prefer `brick_implementation.md` and [`docs/atlas.md`](docs/atlas.md).

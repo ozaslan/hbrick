@@ -1,8 +1,8 @@
 # hbrick
 
-**hbrick** is a C++20 library for **directed graph reachability** on grid-embedded graphs and general CSR (compressed sparse row) graphs. It provides fast search primitives, bit-parallel closure machinery, SCC condensation, reference baselines, and a correctness harness built around maze fixtures.
+**hbrick** is a C++20 library for **directed graph reachability** on grid-embedded graphs and general CSR (compressed sparse row) graphs. It provides fast search primitives, bit-parallel closure machinery, SCC condensation, reference baselines, tile-based BRICK / H-BRICK reachability indexes for grid maps, and a correctness harness built around maze fixtures.
 
-The project is the implementation foundation for **H-BRICK** (Hierarchical BRICK), a planned reachability index for large grid graphs. The tile index and query propagation layers are **not implemented yet**; this repository currently delivers the infrastructure those layers will build on.
+The library implements **flat BRICK** (port-graph search and closure on non-overlapping cell tiles) and **H-BRICK** (hierarchical composition of tile summaries with boolean propagation queries). See [`docs/brick_implementation.md`](docs/brick_implementation.md) for the full design and phase map.
 
 ---
 
@@ -15,14 +15,15 @@ The project is the implementation foundation for **H-BRICK** (Hierarchical BRICK
 | Reachability density estimation (serial and parallel) | Implemented |
 | Bit vectors, bit matrices, boolean transitive closure | Implemented |
 | SCC decomposition and condensation DAG | Implemented |
-| Reference baselines (search, closure, 2-hop, GRAIL) | Implemented |
+| Reference baselines (search, closure, 2-hop, GRAIL, BRICK, H-BRICK) | Implemented |
+| Flat BRICK tile index (`BrickIndex`, port graph) | Implemented |
+| H-BRICK hierarchy (`HBrickIndex`, super-tile composition) | Implemented |
 | Maze-based correctness harness (BFS oracle) | Implemented |
 | MovingAI map I/O (`hbrick_io`) | Implemented |
 | Dataset browser GUI (optional tools target) | Implemented |
 | SVG grid visualization | Implemented |
-| Lightweight benchmarking helpers | Implemented |
+| Reachability benchmark job (`ReachabilityBenchmarkJob`) | Implemented |
 | Doxygen API documentation | Implemented |
-| H-BRICK tile index / hierarchical queries | **Not started** |
 
 ---
 
@@ -38,7 +39,8 @@ The library is split into target-based CMake modules:
 | `hbrick_graph` | `hbrick::` | CSR storage, BFS/DFS, SCC decomposition, condensation DAG, DAG reachability, reachability density |
 | `hbrick_bit` | `hbrick::` | Bit vectors, bit matrices, boolean closure (pure bit logic) |
 | `hbrick_baselines` | `hbrick::` | Reference preprocess/query algorithms for correctness and benchmarking |
-| `hbrick_bench` | `hbrick::` | Simple timing utilities |
+| `hbrick_tile` | `hbrick::` | Tile decomposition, flat BRICK index, H-BRICK hierarchy and composition |
+| `hbrick_bench` | `hbrick::` | Reachability baseline benchmarking and timing helpers |
 | `hbrick_viz` | `hbrick::` | SVG rendering of grid graphs |
 
 Typical workflow:
@@ -61,11 +63,12 @@ Typical workflow:
 | [`docs/reachability_density.md`](docs/reachability_density.md) | Reachable-pair density estimation (sampling, auto-stop, parallel BFS) |
 | [`docs/reachability_density_algorithm.md`](docs/reachability_density_algorithm.md) | Formal algorithm specification with code references (serial and parallel) |
 | [`docs/dataset_browser.md`](docs/dataset_browser.md) | Interactive GUI for MovingAI maps, directed graphs, and orientation recipes |
+| [`docs/brick_implementation.md`](docs/brick_implementation.md) | BRICK / H-BRICK implementation guide (phases 0–11, APIs, tests) |
 | [`docs/mainpage.md`](docs/mainpage.md) | Doxygen landing page (included in generated HTML docs) |
 
 **API reference:** build with `-DHBRICK_BUILD_DOCS=ON`, then open [`docs/html/index.html`](docs/html/index.html).
 
-**Implementation spec:** [`codex_implementation_spec.md`](codex_implementation_spec.md) describes staged requirements, acceptance criteria, and the roadmap through H-BRICK.
+**Implementation spec:** [`codex_implementation_spec.md`](codex_implementation_spec.md) describes staged requirements and acceptance criteria (Stages 0–10); §21 records BRICK / H-BRICK completion status.
 
 ---
 
@@ -180,18 +183,23 @@ Reference algorithms live under `hbrick_baselines` and share a common preprocess
 | `FullClosureBaseline` | Full boolean transitive closure (bit-parallel Warshall) |
 | `TwoHopBaseline` | Cohen-style all-vertex hub 2-hop labeling; query via sorted label intersection |
 | `GrailBaseline` | Random DFS interval labelings; tree hits return immediately, others fall back to BFS |
+| `BrickSearchBaseline` | Flat BRICK: port-graph BFS with `R_VB` / `R_BV` attachments |
+| `BrickClosureBaseline` | Flat BRICK: Warshall closure on the global port graph |
+| `HBrickBaseline` | H-BRICK: hierarchical boolean propagation + ancestor meet tests |
+
+Grid-embedded BRICK baselines require a `DirectedGridGraph` and matching `MazeLayout`. `ReachabilityBenchmarkJob` accepts a grid overload for `BrickSearch`, `BrickClosure`, and `HBrick`; CSR-only runs skip them with `SkippedByPolicy`.
 
 Shared preprocessing helpers live in `BaselineGraphUtils` (`buildTransposeGraph`, forward reachable collection, sorted label intersection).
 
-These are used for correctness checking and future benchmarking, not as the final H-BRICK index. The reachability oracle in `tests/support/reachability_oracle.*` validates every completed baseline against BFS.
+These are used for correctness checking and benchmarking. The reachability oracle in `tests/support/reachability_oracle.*` validates completed baselines against BFS (including `BrickSearch` where wired).
 
 ---
 
 ## Roadmap
 
-Stages 0–10 (infrastructure, baselines, visualization, correctness harness) are largely complete.
+Infrastructure (Stages 0–10), flat BRICK (Phases 0–5), and H-BRICK (Phases 6–11) described in [`docs/brick_implementation.md`](docs/brick_implementation.md) are implemented in this repository.
 
-**Stage 11+** (H-BRICK tiles, parent composition, query propagation) is blocked until port rules, pseudocode, and hand-verified composition examples are finalized. See the readiness statement at the end of `codex_implementation_spec.md`.
+The older staged spec in [`codex_implementation_spec.md`](codex_implementation_spec.md) remains useful for historical context; see its §21 for how it relates to the BRICK implementation guide.
 
 ---
 

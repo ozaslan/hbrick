@@ -48,12 +48,13 @@ TEST(ReachabilityBenchmark, RunProducesMatchingResultsOnDiamondGraph) {
     ASSERT_TRUE(report.valid);
     EXPECT_EQ(report.num_vertices, 4U);
     EXPECT_EQ(report.query_pair_count, 128U);
-    ASSERT_EQ(report.methods.size(), 9U);
+    ASSERT_EQ(report.methods.size(), 10U);
 
     double reachable_ratio = -1.0;
     for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
         if (metrics.method == hbrick::ReachabilityBaselineId::BrickSearch
-            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure) {
+            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure
+            || metrics.method == hbrick::ReachabilityBaselineId::HBrick) {
             EXPECT_EQ(metrics.status, hbrick::BaselineStatus::SkippedByPolicy);
             EXPECT_FALSE(metrics.policy_skip_detail.empty());
             continue;
@@ -76,7 +77,8 @@ TEST(ReachabilityBenchmark, RunProducesMatchingResultsOnDiamondGraph) {
 
     for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
         if (metrics.method == hbrick::ReachabilityBaselineId::BrickSearch
-            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure) {
+            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure
+            || metrics.method == hbrick::ReachabilityBaselineId::HBrick) {
             continue;
         }
         EXPECT_GT(metrics.total_benchmark_nanoseconds, 0U);
@@ -205,4 +207,35 @@ TEST(ReachabilityBenchmark, BrickBaselinesCompleteOnSmallGrid) {
         EXPECT_EQ(metrics.correctness_mismatches, 0U);
         EXPECT_GT(metrics.query_stats.count, 0U);
     }
+}
+
+TEST(ReachabilityBenchmark, HBrickBaselineCompletesOnSmallGrid) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+    const std::vector<uint32_t> universe = allVertices(graph.csrGraph());
+
+    hbrick::ReachabilityBenchmarkConfig config;
+    config.methods = {hbrick::ReachabilityBaselineId::HBrick};
+    config.query_count = 32U;
+    config.warmup_queries = 4U;
+    config.correctness_check_count = 16U;
+    config.pair_seed = 0x1B11C001ULL;
+    config.max_memory_bytes = std::numeric_limits<uint64_t>::max();
+    config.brick_tile_size = hbrick::TileSize{4U, 4U};
+    config.hbrick_group_size = hbrick::GroupSize{2U, 2U};
+    config.hbrick_max_depth = 2U;
+
+    const hbrick::ReachabilityBenchmarkReport report =
+        hbrick::ReachabilityBenchmarkJob::run(graph, layout, universe, config);
+
+    ASSERT_TRUE(report.valid);
+    ASSERT_EQ(report.methods.size(), 1U);
+    EXPECT_EQ(report.methods.front().method, hbrick::ReachabilityBaselineId::HBrick);
+    EXPECT_EQ(report.methods.front().status, hbrick::BaselineStatus::Completed);
+    EXPECT_EQ(report.methods.front().correctness_mismatches, 0U);
+    EXPECT_GT(report.methods.front().query_stats.count, 0U);
+    EXPECT_GT(report.methods.front().estimated_index_bytes, 0U);
 }

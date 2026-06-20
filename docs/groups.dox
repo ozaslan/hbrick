@@ -29,6 +29,11 @@
  */
 
 /**
+ * @defgroup hbrick_tile Tile indexes
+ * @brief Tile decomposition, flat BRICK port indexing, and H-BRICK hierarchy composition.
+ */
+
+/**
  * @defgroup hbrick_bench Benchmarking
  * @brief Timing helpers for micro-benchmarks.
  */

@@ -14,6 +14,8 @@
 #include "hbrick/baselines/baseline_status.hpp"
 #include "hbrick/baselines/grail_baseline.hpp"
 #include "hbrick/graph/csr_graph.hpp"
+#include "hbrick/tile/group_size.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/tile/tile_size.hpp"
 
 namespace hbrick {
@@ -35,6 +37,7 @@ enum class ReachabilityBaselineId : uint8_t {
     Grail,
     BrickSearch,
     BrickClosure,
+    HBrick,
 };
 
 /**
@@ -88,8 +91,17 @@ struct ReachabilityBenchmarkConfig {
      * When empty, @ref ReachabilityBenchmarkConfig::allMethods() is used.
      */
     std::vector<ReachabilityBaselineId> methods;
-    /** @brief Nominal base tile size for @ref ReachabilityBaselineId::BrickSearch / BrickClosure. @ingroup hbrick_bench */
+    /** @brief Nominal base tile size for BRICK / H-BRICK grid baselines. @ingroup hbrick_bench */
     TileSize brick_tile_size{4U, 4U};
+    /** @brief Child-slot grouping for @ref ReachabilityBaselineId::HBrick. @ingroup hbrick_bench */
+    GroupSize hbrick_group_size{2U, 2U};
+    /**
+     * @brief Hierarchy depth for @ref ReachabilityBaselineId::HBrick.
+     * @ingroup hbrick_bench
+     *
+     * Use @ref kHBrickFullDepth to build until one root remains.
+     */
+    uint32_t hbrick_max_depth = kHBrickFullDepth;
 
     /** @brief Returns a configuration that benchmarks every built-in baseline. @ingroup hbrick_bench */
     [[nodiscard]] static ReachabilityBenchmarkConfig allMethods() noexcept;
@@ -253,7 +265,8 @@ public:
      * @brief Starts a benchmark on a grid-embedded graph with maze passability.
      * @ingroup hbrick_bench
      *
-     * Required for @ref ReachabilityBaselineId::BrickSearch and @ref BrickClosure.
+     * Required for @ref ReachabilityBaselineId::BrickSearch, @ref BrickClosure,
+     * and @ref HBrick.
      */
     void begin(
         const DirectedGridGraph& graph,

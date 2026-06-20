@@ -14,6 +14,7 @@ flowchart TB
     bit[hbrick_bit]
     graphMod[hbrick_graph]
     baselines[hbrick_baselines]
+    tile[hbrick_tile]
     grid[hbrick_grid]
     io[hbrick_io]
     bench[hbrick_bench]
@@ -28,6 +29,11 @@ flowchart TB
     bit --> baselines
     graphMod --> baselines
     grid --> baselines
+    tile --> baselines
+    bit --> tile
+    graphMod --> tile
+    grid --> tile
+    core --> tile
     core --> viz
     graphMod --> viz
     grid --> viz
@@ -151,11 +157,17 @@ flowchart LR
         TwoHopBL[TwoHopBaseline]
         GrailBL[GrailBaseline]
     end
+    subgraph brickPreprocess [Grid tile indexes]
+        BrickSearchBL[BrickSearchBaseline]
+        BrickCloseBL[BrickClosureBaseline]
+        HBrickBL[HBrickBaseline]
+    end
 
     CsrGraph --> noPreprocess
     CsrGraph --> sccSearch
     CsrGraph --> closure
     CsrGraph --> indexPreprocess
+    DirectedGridGraph[DirectedGridGraph + MazeLayout] --> brickPreprocess
 ```
 
 | Name | Header | Represents | Purpose | When to use |
@@ -167,6 +179,9 @@ flowchart LR
 | [`SccDagClosureBaseline`](../include/hbrick/baselines/scc_dag_closure_baseline.hpp) | `baselines/scc_dag_closure_baseline.hpp` | SCC + component closure baseline | Preprocess: SCC + C² component closure; query: O(1) lookup | Closure oracle with lower memory on sparse SCC structure |
 | [`TwoHopBaseline`](../include/hbrick/baselines/two_hop_baseline.hpp) | `baselines/two_hop_baseline.hpp` | 2-hop labeling baseline | Preprocess: all-vertex hub cover; query: sorted label intersection | General reachability index baseline; may skip on dense graphs |
 | [`GrailBaseline`](../include/hbrick/baselines/grail_baseline.hpp) | `baselines/grail_baseline.hpp` | GRAIL + BFS fallback baseline | Preprocess: random DFS interval labelings; query: tree hit or BFS | Lightweight index baseline for comparison with spatial methods |
+| [`BrickSearchBaseline`](../include/hbrick/baselines/brick_search_baseline.hpp) | `baselines/brick_search_baseline.hpp` | Flat BRICK search | Preprocess: `BrickIndex`; query: port-graph BFS with attachments | Grid reachability without global port closure |
+| [`BrickClosureBaseline`](../include/hbrick/baselines/brick_closure_baseline.hpp) | `baselines/brick_closure_baseline.hpp` | Flat BRICK closure | Preprocess: `BrickIndex` + port Warshall; query: bit tests on attachments | Fast grid queries when port count fits memory budget |
+| [`HBrickBaseline`](../include/hbrick/baselines/hbrick_baseline.hpp) | `baselines/hbrick_baseline.hpp` | H-BRICK hierarchical index | Preprocess: `HBrickIndex`; query: boolean propagation up ancestor chain | Configurable `group_size` and `max_depth` on large grids |
 | [`ClosureMatrixBuilder`](../include/hbrick/baselines/closure_matrix_builder.hpp) | `baselines/closure_matrix_builder.hpp` | Closure preprocessing utility | Estimates memory, checks budget, builds reflexive adjacency `BitMatrix` from `CsrGraph` | Shared helper for closure-based baselines |
 | [`BaselineGraphUtils`](../include/hbrick/baselines/baseline_graph_utils.hpp) | `baselines/baseline_graph_utils.hpp` | Baseline preprocessing utility | Transpose CSR, forward reachable sets, sorted label intersection | Shared helper for index baselines |
 
@@ -178,6 +193,29 @@ flowchart LR
 | `SccDagClosureBaseline` | SCC + component Warshall | O(1) bit test | O(C²) bits |
 | `TwoHopBaseline` | O(V · (V + E)) hub BFS scans | O(\|L_out\| + \|L_in\|) intersection | O(label entries), up to O(V²) |
 | `GrailBaseline` | O(k · (V + E)) random DFS trees | O(k) tree checks or O(V + E) BFS fallback | O(k · V) interval labels |
+| `BrickSearchBaseline` | Per-tile + port-graph build | O(P + E_port) port BFS | Tile closures + port CSR |
+| `BrickClosureBaseline` | Per-tile + port Warshall | O(1) bit tests on ports | Tile closures + P² port closure |
+| `HBrickBaseline` | Bottom-up super-tile composition | O(levels × gamma) bit propagation | Base tiles + super summaries |
+
+---
+
+## hbrick_tile
+
+Non-overlapping rectangular tile decomposition, flat BRICK port indexing, and H-BRICK hierarchy composition for grid-embedded graphs.
+
+| Name | Header | Represents | Purpose | When to use |
+|------|--------|------------|---------|-------------|
+| [`TileSize`](../include/hbrick/tile/tile_size.hpp) | `tile/tile_size.hpp` | Nominal cell tile dimensions | Validates `tw, th >= 2` | Configure base decomposition |
+| [`GroupSize`](../include/hbrick/tile/group_size.hpp) | `tile/group_size.hpp` | Child-slot grouping factor | `gw × gh` parent formation at level ≥ 1 | H-BRICK hierarchy config |
+| [`TileDecomposition`](../include/hbrick/tile/tile_decomposition.hpp) | `tile/tile_decomposition.hpp` | Non-overlapping slot partition | Maps fine cells to tile slots | Preprocess entry for any tile index |
+| [`BaseTileSummary`](../include/hbrick/tile/base_tile_summary.hpp) | `tile/base_tile_summary.hpp` | Per-tile closure + boundary projections | `S_T`, `R_VB`, `R_BV` on one slot | Layer A/B flat BRICK data |
+| [`BrickIndex`](../include/hbrick/tile/brick_index.hpp) | `tile/brick_index.hpp` | Flat BRICK product | Base tiles + global port graph + seam edges | `BrickSearch` / `BrickClosure` preprocess |
+| [`HierarchyTree`](../include/hbrick/tile/hierarchy_tree.hpp) | `tile/hierarchy_tree.hpp` | Multi-level region tree | Groups base slots into super-regions | H-BRICK structure |
+| [`SuperTileComposer`](../include/hbrick/tile/super_tile_composer.hpp) | `tile/super_tile_composer.hpp` | Parent composition algebra | `Γ`, embeddings, `S̄`, exterior `S` | Build one super-tile summary |
+| [`HBrickIndex`](../include/hbrick/tile/hbrick_index.hpp) | `tile/hbrick_index.hpp` | Full H-BRICK preprocess product | `BrickIndex` + hierarchy + super summaries | `HBrickBaseline` preprocess |
+| [`HBrickConfig`](../include/hbrick/tile/hbrick_config.hpp) | `tile/hbrick_config.hpp` | Hierarchy configuration | `base_tile_size`, `group_size`, `max_depth`, memory cap | Tune H-BRICK builds |
+
+**Guide:** [brick_implementation.md](brick_implementation.md) — phases, query pseudocode, verification gates, and test file names.
 
 ---
 
@@ -190,10 +228,12 @@ Reachability baseline benchmarking, timing helpers, and report formatting.
 | [`BenchTimer`](../include/hbrick/bench/bench_timer.hpp) | `bench/bench_timer.hpp` | Stopwatch | Monotonic start/stop with nanosecond elapsed total | Manual timing of hot-path routines |
 | [`BenchSample`](../include/hbrick/bench/bench_sample.hpp) | `bench/bench_sample.hpp` | Timing result record | Name, iteration count, total elapsed nanoseconds | Store and report benchmark results |
 | [`measureRepeated`](../include/hbrick/bench/bench_measure.hpp) | `bench/bench_measure.hpp` | Benchmark helper template | Runs a callable N times and returns a `BenchSample` | Repeated micro-benchmark measurement |
-| [`ReachabilityBenchmarkJob`](../include/hbrick/bench/reachability_benchmark.hpp) | `bench/reachability_benchmark.hpp` | Incremental benchmark runner | Shared query workload, per-method preprocess/warmup/query/correctness | Headless or stepped benchmark execution |
+| [`ReachabilityBenchmarkJob`](../include/hbrick/bench/reachability_benchmark.hpp) | `bench/reachability_benchmark.hpp` | Incremental benchmark runner | Shared query workload, per-method preprocess/warmup/query/correctness; grid overload for BRICK / H-BRICK | Headless or stepped benchmark execution |
 | [`ReachabilityBenchmarkRunner`](../include/hbrick/bench/reachability_benchmark_runner.hpp) | `bench/reachability_benchmark_runner.hpp` | Background job wrapper | Worker thread, cancel/skip, elapsed timer | GUI or async benchmark orchestration |
 | [`reachability_benchmark_util`](../include/hbrick/bench/reachability_benchmark_util.hpp) | `bench/reachability_benchmark_util.hpp` | Report helpers | Reference BFS stats, live speedup, step sizing | Interpret benchmark reports |
 | [`reachability_benchmark_format`](../include/hbrick/bench/reachability_benchmark_format.hpp) | `bench/reachability_benchmark_format.hpp` | Text formatters | Bytes, counts, stage detail, table cell text | Display benchmark results |
+
+Built-in `ReachabilityBaselineId` values: `CsrBfs`, `CsrDfs`, `SccDagSearch`, `SccDagClosure`, `TwoHop`, `Grail`, `BrickSearch`, `BrickClosure`, `HBrick`, `FullClosure` (last by default). Config fields `brick_tile_size`, `hbrick_group_size`, and `hbrick_max_depth` tune tile baselines.
 
 ---
 
@@ -235,11 +275,10 @@ SVG rendering for debugging and test artifacts.
 | [`randomParamsForMovingAiMap`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Deterministic params | Seeded orientation params from set + map name | Reproducible per-map graphs in tests |
 | [`buildGraphFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe-to-graph builder | Loads map, applies recipe policy/mode/seed | `test_recipe_reachability` |
 | [`paramsFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe param adapter | Maps saved recipe fields to `RandomAsymmetricParams` | Recipe round-trip tests |
+| [`expectBrickSearchMatchesBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BRICK-Search oracle | All-pairs check vs BFS on a grid graph | Unit tests for flat BRICK search |
 
 ---
 
-## Planned (not implemented)
+## Further reading
 
-| Name | Purpose |
-|------|---------|
-| H-BRICK tile index | Hierarchical reachability index for large grid graphs — the long-term goal this library infrastructure supports |
+- [BRICK / H-BRICK implementation guide](brick_implementation.md) — design, phases 0–11, and verification gates

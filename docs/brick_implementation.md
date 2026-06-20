@@ -2,6 +2,8 @@
 
 Implementation guide for flat BRICK (Phases 0–5) and H-BRICK (Phases 6–11) in `hbrick`.
 
+**Status (June 2026):** Phases 0–11 are implemented. User-facing docs: [`README.md`](../README.md), [`atlas.md`](atlas.md). Doxygen module: `@ref hbrick_tile`.
+
 **Design locked in:**
 
 - Non-overlapping rectangular cell tiles (`tw×th`, both ≥ 2); partial edge tiles OK.
@@ -63,7 +65,7 @@ flowchart LR
 | **6** | `HierarchyTree`, `RegionNode`, `groupTileSlots` | `test_hierarchy_scaffold.cpp` |
 | **7** | `SuperTileComposer` | `test_super_tile_compose.cpp` (smoke) |
 | **8** | Composition vs oracles | **gate** before Phase 9 |
-| **9** | `HierarchyBuilder`, `HBrickIndex` | `test_hierarchy_build.cpp` |
+| **9** | `HBrickIndex` (bottom-up hierarchy build) | `test_hierarchy_build.cpp` |
 | **10** | `HBrickBaseline` query | `test_hbrick_baseline.cpp` + oracle |
 | **11** | Depth/group sweep in benchmarks | integration |
 
@@ -158,7 +160,7 @@ Same attachments; `∃ p,q : R_VB(s,p) ∧ port_closure[p,q] ∧ R_BV(q,t)`.
 - Shared `BrickIndex` preprocess + Warshall on port graph.
 - `ReachabilityBaselineId::BrickSearch`, `BrickClosure`.
 - `SkippedByPolicy` when `P×P` exceeds budget.
-- Update `docs/atlas.md`, `README.md`.
+- Documented in `docs/atlas.md` and `README.md`.
 
 ---
 
@@ -223,7 +225,7 @@ No maze BFS. Boolean vector propagation:
 
 ---
 
-## Phase 9 — HierarchyBuilder
+## Phase 9 — HBrickIndex build
 
 - Bottom-up to root / `max_depth`; `HBrickIndex` owns base + tree.
 
@@ -255,4 +257,4 @@ No maze BFS. Boolean vector propagation:
 
 ## Start here
 
-**Phase 0 + 1:** `hbrick_tile` + `TileDecomposition` + `test_tile_decomposition.cpp` on grids from `DirectedGridGraphBuilder`.
+All phases are complete. For API entry points see [`atlas.md`](atlas.md) (`hbrick_tile`, BRICK/H-BRICK baselines) and unit tests named `test_*` in the phase table above.

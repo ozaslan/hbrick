@@ -27,6 +27,7 @@ bool baselineBuildsPreprocessIndex(const ReachabilityBaselineId method) noexcept
         case ReachabilityBaselineId::Grail:
         case ReachabilityBaselineId::BrickSearch:
         case ReachabilityBaselineId::BrickClosure:
+        case ReachabilityBaselineId::HBrick:
             return true;
     }
 

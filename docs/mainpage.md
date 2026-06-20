@@ -13,7 +13,8 @@ grid-embedded mazes, and high-performance query paths.
 | @ref hbrick_bit | Bit vectors, bit matrices, and boolean closure |
 | @ref hbrick_graph | CSR graphs, search, SCC decomposition, DAG reachability, and reachability density |
 | @ref hbrick_baselines | Reference preprocess/query algorithms for correctness and benchmarking |
-| @ref hbrick_bench | Lightweight timing helpers |
+| @ref hbrick_tile | Tile decomposition, flat BRICK index, and H-BRICK hierarchy |
+| @ref hbrick_bench | Reachability baseline benchmarking and timing helpers |
 | @ref hbrick_viz | SVG rendering of grid graphs |
 | @ref hbrick_test_support | Maze fixtures, MovingAI catalog, recipe graph builder, and reachability oracle utilities used in tests |
 
@@ -24,12 +25,14 @@ grid-embedded mazes, and high-performance query paths.
 3. Answer reachability using search (@ref hbrick::Bfs, @ref hbrick::Dfs,
    condensation (@ref hbrick::CondensationGraph, @ref hbrick::DagReachability),
    a baseline for comparison (@ref hbrick::TwoHopBaseline, @ref hbrick::GrailBaseline,
-   closure and search baselines), or @ref hbrick::ReachabilityDensityEstimator for
-   sampled connectivity density.
+   @ref hbrick::BrickSearchBaseline, @ref hbrick::BrickClosureBaseline,
+   @ref hbrick::HBrickBaseline on grid graphs, closure and search baselines), or
+   @ref hbrick::ReachabilityDensityEstimator for sampled connectivity density.
 
 ## Further reading
 
 - [Atlas](atlas.md) — quick reference for every type, data structure, and algorithm
+- [BRICK / H-BRICK implementation guide](brick_implementation.md) — tile index design, phases, and verification gates
 - [Representations guide](representations.md) — how mazes, grids, and graphs relate and why conversion happens
 - [Traversal storage](traversal_storage.md) — why CSR is used for BFS, DFS, and SCC; sparse formats vs hash tables
 - [Closure storage](closure_storage.md) — why reachability oracles use dense BitMatrix and Warshall

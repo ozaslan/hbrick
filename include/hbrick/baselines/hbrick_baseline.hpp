@@ -54,6 +54,12 @@ public:
     /** @brief Returns the built index when preprocessing completed. @ingroup hbrick_baselines */
     [[nodiscard]] const HBrickIndex& index() const noexcept { return index_; }
 
+    /**
+     * @brief Returns hierarchical summary storage bytes after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] uint64_t indexStorageBytes() const noexcept;
+
     /** @brief Returns query scratch sized during the last successful preprocess. @ingroup hbrick_baselines */
     [[nodiscard]] HBrickQueryScratch& scratch() noexcept { return scratch_; }
     [[nodiscard]] const HBrickQueryScratch& scratch() const noexcept { return scratch_; }

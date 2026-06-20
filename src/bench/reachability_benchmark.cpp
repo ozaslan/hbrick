@@ -25,6 +25,8 @@
 #include "hbrick/baselines/grail_baseline.hpp"
 #include "hbrick/baselines/brick_closure_baseline.hpp"
 #include "hbrick/baselines/brick_search_baseline.hpp"
+#include "hbrick/baselines/hbrick_baseline.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/bench/process_memory.hpp"
 #include "hbrick/graph/bfs.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
@@ -52,6 +54,7 @@ namespace {
         ReachabilityBaselineId::Grail,
         ReachabilityBaselineId::BrickSearch,
         ReachabilityBaselineId::BrickClosure,
+        ReachabilityBaselineId::HBrick,
         ReachabilityBaselineId::FullClosure,
     };
 }
@@ -181,7 +184,27 @@ struct BaselineInstances {
     GrailBaseline grail;
     BrickSearchBaseline brick_search;
     BrickClosureBaseline brick_closure;
+    HBrickBaseline hbrick;
 };
+
+[[nodiscard]] HBrickConfig hbrickConfigFromBenchmark(
+    const ReachabilityBenchmarkConfig& config
+) noexcept {
+    HBrickConfig hbrick_config{};
+    hbrick_config.base_tile_size = config.brick_tile_size;
+    hbrick_config.group_size = config.hbrick_group_size;
+    hbrick_config.max_depth = config.hbrick_max_depth;
+    hbrick_config.max_memory_bytes = config.max_memory_bytes;
+    return hbrick_config;
+}
+
+[[nodiscard]] bool gridBaselineRequiresMazeContext(
+    const ReachabilityBaselineId method
+) noexcept {
+    return method == ReachabilityBaselineId::BrickSearch
+        || method == ReachabilityBaselineId::BrickClosure
+        || method == ReachabilityBaselineId::HBrick;
+}
 
 struct GridBenchmarkContext {
     bool has_grid = false;
@@ -234,6 +257,17 @@ struct GridBenchmarkContext {
                 config.max_memory_bytes
             );
             return baselines.brick_closure.status();
+        case ReachabilityBaselineId::HBrick:
+            if (!grid_context.has_grid || grid_context.grid_graph == nullptr
+                || grid_context.layout == nullptr) {
+                return BaselineStatus::SkippedByPolicy;
+            }
+            baselines.hbrick.preprocess(
+                *grid_context.grid_graph,
+                *grid_context.layout,
+                hbrickConfigFromBenchmark(config)
+            );
+            return baselines.hbrick.status();
         case ReachabilityBaselineId::TwoHop:
             baselines.two_hop.preprocess(
                 graph,
@@ -280,6 +314,8 @@ struct GridBenchmarkContext {
             return 0U;
         case ReachabilityBaselineId::BrickClosure:
             return baselines.brick_closure.indexStorageBytes();
+        case ReachabilityBaselineId::HBrick:
+            return baselines.hbrick.indexStorageBytes();
     }
 
     return 0U;
@@ -338,6 +374,14 @@ struct QueryExecutionStats {
             break;
         case ReachabilityBaselineId::BrickClosure:
             stats.answer = baselines.brick_closure.query(pair.source, pair.target);
+            break;
+        case ReachabilityBaselineId::HBrick:
+            stats.answer = baselines.hbrick.query(
+                pair.source,
+                pair.target,
+                baselines.hbrick.scratch(),
+                scratch
+            );
             break;
     }
 
@@ -508,6 +552,7 @@ void setMemoryCapSkipDetail(
         case ReachabilityBaselineId::SccDagSearch:
         case ReachabilityBaselineId::BrickSearch:
         case ReachabilityBaselineId::BrickClosure:
+        case ReachabilityBaselineId::HBrick:
             return 0U;
     }
 
@@ -745,6 +790,8 @@ const char* reachabilityBaselineName(const ReachabilityBaselineId id) noexcept {
             return "BrickSearch";
         case ReachabilityBaselineId::BrickClosure:
             return "BrickClosure";
+        case ReachabilityBaselineId::HBrick:
+            return "HBrick";
     }
 
     return "Unknown";
@@ -1297,12 +1344,11 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                     impl_->advanceWork(1U);
 
                     if (metrics.status == BaselineStatus::SkippedByPolicy) {
-                        if ((method == ReachabilityBaselineId::BrickSearch
-                                || method == ReachabilityBaselineId::BrickClosure)
+                        if (gridBaselineRequiresMazeContext(method)
                             && !impl_->has_grid_benchmark) {
                             metrics.policy_skip_detail =
-                                "Brick baselines require DirectedGridGraph and MazeLayout "
-                                "benchmark input.";
+                                "Brick and H-BRICK baselines require DirectedGridGraph "
+                                "and MazeLayout benchmark input.";
                         } else {
                             const uint64_t actual_index_bytes = indexStorageBytesForBaseline(
                                 method,
