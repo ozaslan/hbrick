@@ -20,6 +20,7 @@
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/scc_decomposition.hpp"
 #include "hbrick/grid/maze_layout.hpp"
+#include "hbrick/tile/tile_size.hpp"
 #include "test_limits.hpp"
 
 namespace hbrick::test_support {
@@ -66,6 +67,14 @@ void expectAllBaselinesMatchBfs(
 void expectSearchBaselinesMatchBfs(
     const CsrGraph& graph,
     const std::string& context
+);
+
+void expectBrickSearchMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 
 [[nodiscard]] bool mutuallyReachableViaBidirectionalBfs(

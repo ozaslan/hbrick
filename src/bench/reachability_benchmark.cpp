@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "hbrick/bench/bench_timer.hpp"
+#include "hbrick/bench/reachability_benchmark_format.hpp"
+#include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/baselines/closure_matrix_builder.hpp"
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
@@ -20,8 +22,13 @@
 #include "hbrick/baselines/scc_dag_closure_baseline.hpp"
 #include "hbrick/baselines/scc_dag_search_baseline.hpp"
 #include "hbrick/baselines/two_hop_baseline.hpp"
+#include "hbrick/baselines/grail_baseline.hpp"
+#include "hbrick/baselines/brick_closure_baseline.hpp"
+#include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/bench/process_memory.hpp"
 #include "hbrick/graph/bfs.hpp"
+#include "hbrick/graph/directed_grid_graph.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 
 namespace hbrick {
 
@@ -43,6 +50,8 @@ namespace {
         ReachabilityBaselineId::SccDagClosure,
         ReachabilityBaselineId::TwoHop,
         ReachabilityBaselineId::Grail,
+        ReachabilityBaselineId::BrickSearch,
+        ReachabilityBaselineId::BrickClosure,
         ReachabilityBaselineId::FullClosure,
     };
 }
@@ -170,6 +179,14 @@ struct BaselineInstances {
     FullClosureBaseline full_closure;
     TwoHopBaseline two_hop;
     GrailBaseline grail;
+    BrickSearchBaseline brick_search;
+    BrickClosureBaseline brick_closure;
+};
+
+struct GridBenchmarkContext {
+    bool has_grid = false;
+    const DirectedGridGraph* grid_graph = nullptr;
+    const MazeLayout* layout = nullptr;
 };
 
 [[nodiscard]] BaselineStatus preprocessBaseline(
@@ -177,7 +194,8 @@ struct BaselineInstances {
     BaselineInstances& baselines,
     const CsrGraph& graph,
     GraphSearchScratch& preprocess_scratch,
-    const ReachabilityBenchmarkConfig& config
+    const ReachabilityBenchmarkConfig& config,
+    const GridBenchmarkContext& grid_context
 ) {
     switch (method) {
         case ReachabilityBaselineId::CsrBfs:
@@ -192,6 +210,30 @@ struct BaselineInstances {
         case ReachabilityBaselineId::SccDagClosure:
         case ReachabilityBaselineId::FullClosure:
             return BaselineStatus::Failed;
+        case ReachabilityBaselineId::BrickSearch:
+            if (!grid_context.has_grid || grid_context.grid_graph == nullptr
+                || grid_context.layout == nullptr) {
+                return BaselineStatus::SkippedByPolicy;
+            }
+            baselines.brick_search.preprocess(
+                *grid_context.grid_graph,
+                *grid_context.layout,
+                config.brick_tile_size,
+                config.max_memory_bytes
+            );
+            return baselines.brick_search.status();
+        case ReachabilityBaselineId::BrickClosure:
+            if (!grid_context.has_grid || grid_context.grid_graph == nullptr
+                || grid_context.layout == nullptr) {
+                return BaselineStatus::SkippedByPolicy;
+            }
+            baselines.brick_closure.preprocess(
+                *grid_context.grid_graph,
+                *grid_context.layout,
+                config.brick_tile_size,
+                config.max_memory_bytes
+            );
+            return baselines.brick_closure.status();
         case ReachabilityBaselineId::TwoHop:
             baselines.two_hop.preprocess(
                 graph,
@@ -209,24 +251,6 @@ struct BaselineInstances {
     }
 
     return BaselineStatus::Failed;
-}
-
-[[nodiscard]] bool baselineBuildsPreprocessIndex(
-    const ReachabilityBaselineId method
-) noexcept {
-    switch (method) {
-        case ReachabilityBaselineId::CsrBfs:
-        case ReachabilityBaselineId::CsrDfs:
-            return false;
-        case ReachabilityBaselineId::SccDagSearch:
-        case ReachabilityBaselineId::SccDagClosure:
-        case ReachabilityBaselineId::FullClosure:
-        case ReachabilityBaselineId::TwoHop:
-        case ReachabilityBaselineId::Grail:
-            return true;
-    }
-
-    return true;
 }
 
 [[nodiscard]] uint64_t indexStorageBytesForBaseline(
@@ -252,6 +276,10 @@ struct BaselineInstances {
             return baselines.two_hop.labelStorageBytes();
         case ReachabilityBaselineId::Grail:
             return baselines.grail.labelStorageBytes();
+        case ReachabilityBaselineId::BrickSearch:
+            return 0U;
+        case ReachabilityBaselineId::BrickClosure:
+            return baselines.brick_closure.indexStorageBytes();
     }
 
     return 0U;
@@ -301,6 +329,16 @@ struct QueryExecutionStats {
             stats.grail_tree_certified = outcome.tree_certified;
             break;
         }
+        case ReachabilityBaselineId::BrickSearch:
+            stats.answer = baselines.brick_search.query(
+                pair.source,
+                pair.target,
+                scratch
+            );
+            break;
+        case ReachabilityBaselineId::BrickClosure:
+            stats.answer = baselines.brick_closure.query(pair.source, pair.target);
+            break;
     }
 
     stats.elapsed_nanoseconds = monotonicNowNanoseconds() - start;
@@ -425,40 +463,6 @@ void formatDurationSeconds(
     std::snprintf(buffer, size, "%.0f ns", nanoseconds);
 }
 
-void formatByteCount(char* buffer, const std::size_t size, const uint64_t bytes) noexcept {
-    if (bytes >= (1ULL << 30)) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f GiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 30)
-        );
-        return;
-    }
-
-    if (bytes >= (1ULL << 20)) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f MiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 20)
-        );
-        return;
-    }
-
-    if (bytes >= 1024ULL) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f KiB",
-            static_cast<double>(bytes) / 1024.0
-        );
-        return;
-    }
-
-    std::snprintf(buffer, size, "%llu B", static_cast<unsigned long long>(bytes));
-}
-
 void setMemoryCapSkipDetail(
     BaselineBenchmarkMetrics& metrics,
     const ReachabilityBaselineId method,
@@ -467,8 +471,8 @@ void setMemoryCapSkipDetail(
 ) {
     char estimated_label[32];
     char cap_label[32];
-    formatByteCount(estimated_label, sizeof(estimated_label), estimated_bytes);
-    formatByteCount(cap_label, sizeof(cap_label), max_memory_bytes);
+    formatBenchmarkBytes(estimated_label, sizeof(estimated_label), estimated_bytes);
+    formatBenchmarkBytes(cap_label, sizeof(cap_label), max_memory_bytes);
     char buffer[256];
     std::snprintf(
         buffer,
@@ -502,6 +506,8 @@ void setMemoryCapSkipDetail(
         case ReachabilityBaselineId::CsrBfs:
         case ReachabilityBaselineId::CsrDfs:
         case ReachabilityBaselineId::SccDagSearch:
+        case ReachabilityBaselineId::BrickSearch:
+        case ReachabilityBaselineId::BrickClosure:
             return 0U;
     }
 
@@ -529,29 +535,6 @@ void setMemoryCapSkipDetail(
     return static_cast<uint64_t>(config.query_count) * 100ULL;
 }
 
-void formatSpeedupRatio(
-    char* buffer,
-    const std::size_t size,
-    const double speedup
-) noexcept {
-    if (speedup <= 0.0 || !std::isfinite(speedup)) {
-        std::snprintf(buffer, size, "-");
-        return;
-    }
-
-    if (speedup >= 0.01) {
-        std::snprintf(buffer, size, "%.2fx", speedup);
-        return;
-    }
-
-    if (speedup >= 0.0001) {
-        std::snprintf(buffer, size, "%.4fx", speedup);
-        return;
-    }
-
-    std::snprintf(buffer, size, "<0.0001x");
-}
-
 void setClosureProjectedSpeedupSkipDetail(
     BaselineBenchmarkMetrics& metrics,
     const ReachabilityBaselineId method,
@@ -565,7 +548,7 @@ void setClosureProjectedSpeedupSkipDetail(
     char speedup_label[32];
     char bfs_total_label[32];
     char projected_total_label[32];
-    formatSpeedupRatio(speedup_label, sizeof(speedup_label), projected_speedup);
+    formatBenchmarkSpeedupRatio(speedup_label, sizeof(speedup_label), projected_speedup);
     formatDurationSeconds(
         bfs_total_label,
         sizeof(bfs_total_label),
@@ -758,6 +741,10 @@ const char* reachabilityBaselineName(const ReachabilityBaselineId id) noexcept {
             return "TwoHop";
         case ReachabilityBaselineId::Grail:
             return "Grail";
+        case ReachabilityBaselineId::BrickSearch:
+            return "BrickSearch";
+        case ReachabilityBaselineId::BrickClosure:
+            return "BrickClosure";
     }
 
     return "Unknown";
@@ -771,6 +758,9 @@ ReachabilityBenchmarkConfig ReachabilityBenchmarkConfig::allMethods() noexcept {
 
 struct ReachabilityBenchmarkJob::Impl {
     CsrGraph graph;
+    DirectedGridGraph grid_graph;
+    MazeLayout layout{1U, 1U, true};
+    bool has_grid_benchmark = false;
     ReachabilityBenchmarkConfig config;
     std::vector<uint32_t> query_universe;
     std::vector<ReachabilityQueryPair> pairs;
@@ -795,6 +785,16 @@ struct ReachabilityBenchmarkJob::Impl {
     uint64_t incremental_closure_pivot_start_ns = 0U;
     uint64_t incremental_closure_rss_before = 0U;
     std::atomic<bool> skip_current_method_requested{false};
+
+    [[nodiscard]] GridBenchmarkContext gridContext() const noexcept {
+        GridBenchmarkContext context;
+        if (has_grid_benchmark) {
+            context.has_grid = true;
+            context.grid_graph = &grid_graph;
+            context.layout = &layout;
+        }
+        return context;
+    }
 
     template<typename Baseline>
     void skipClosurePreprocessByUser(
@@ -1088,6 +1088,7 @@ void ReachabilityBenchmarkJob::begin(
 ) {
     impl_ = std::make_unique<Impl>();
     impl_->graph = graph;
+    impl_->has_grid_benchmark = false;
     impl_->config = std::move(config);
     if (impl_->config.methods.empty()) {
         impl_->config.methods = defaultMethodList();
@@ -1130,6 +1131,22 @@ void ReachabilityBenchmarkJob::begin(
     impl_->query_index = 0U;
     impl_->correctness_index = 0U;
     impl_->active_job = true;
+}
+
+void ReachabilityBenchmarkJob::begin(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const std::span<const uint32_t> query_universe,
+    ReachabilityBenchmarkConfig config
+) {
+    begin(graph.csrGraph(), query_universe, std::move(config));
+    if (!impl_ || !impl_->active_job) {
+        return;
+    }
+
+    impl_->grid_graph = graph;
+    impl_->layout = layout;
+    impl_->has_grid_benchmark = true;
 }
 
 bool ReachabilityBenchmarkJob::active() const noexcept {
@@ -1246,7 +1263,8 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                             impl_->baselines,
                             impl_->graph,
                             impl_->preprocess_scratch,
-                            impl_->config
+                            impl_->config,
+                            impl_->gridContext()
                         );
                         timer.stop();
                         impl_->progress.preprocess_started_ns = 0U;
@@ -1266,7 +1284,8 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                             impl_->baselines,
                             impl_->graph,
                             impl_->preprocess_scratch,
-                            impl_->config
+                            impl_->config,
+                            impl_->gridContext()
                         );
                         metrics.preprocess_nanoseconds = 0U;
                         metrics.estimated_index_bytes = 0U;
@@ -1278,23 +1297,39 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                     impl_->advanceWork(1U);
 
                     if (metrics.status == BaselineStatus::SkippedByPolicy) {
-                        const uint64_t actual_index_bytes = indexStorageBytesForBaseline(
-                            method,
-                            impl_->baselines,
-                            impl_->graph
-                        );
-                        setMemoryCapSkipDetail(
-                            metrics,
-                            method,
-                            actual_index_bytes > 0U
-                                ? actual_index_bytes
-                                : estimatedIndexBytesForMethod(
-                                    method,
-                                    impl_->graph,
-                                    impl_->config
-                                ),
-                            impl_->config.max_memory_bytes
-                        );
+                        if ((method == ReachabilityBaselineId::BrickSearch
+                                || method == ReachabilityBaselineId::BrickClosure)
+                            && !impl_->has_grid_benchmark) {
+                            metrics.policy_skip_detail =
+                                "Brick baselines require DirectedGridGraph and MazeLayout "
+                                "benchmark input.";
+                        } else {
+                            const uint64_t actual_index_bytes = indexStorageBytesForBaseline(
+                                method,
+                                impl_->baselines,
+                                impl_->graph
+                            );
+                            setMemoryCapSkipDetail(
+                                metrics,
+                                method,
+                                actual_index_bytes > 0U
+                                    ? actual_index_bytes
+                                    : estimatedIndexBytesForMethod(
+                                        method,
+                                        impl_->graph,
+                                        impl_->config
+                                    ),
+                                impl_->config.max_memory_bytes
+                            );
+                        }
+                    }
+
+                    if (method == ReachabilityBaselineId::BrickClosure
+                        && metrics.status == BaselineStatus::Completed) {
+                        metrics.warshall_matrix_order =
+                            impl_->baselines.brick_closure.index().ports().numPorts();
+                        metrics.warshall_pivot_total = metrics.warshall_matrix_order;
+                        metrics.warshall_pivots_completed = metrics.warshall_pivot_total;
                     }
 
                     if (metrics.status != BaselineStatus::Completed) {
@@ -1603,6 +1638,19 @@ ReachabilityBenchmarkReport ReachabilityBenchmarkJob::run(
 ) {
     ReachabilityBenchmarkJob job;
     job.begin(graph, query_universe, std::move(config));
+    while (!job.step()) {
+    }
+    return job.report();
+}
+
+ReachabilityBenchmarkReport ReachabilityBenchmarkJob::run(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const std::span<const uint32_t> query_universe,
+    ReachabilityBenchmarkConfig config
+) {
+    ReachabilityBenchmarkJob job;
+    job.begin(graph, layout, query_universe, std::move(config));
     while (!job.step()) {
     }
     return job.report();

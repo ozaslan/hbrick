@@ -116,6 +116,144 @@ target_link_libraries(
 
 hbrick_register_gtests(test_maze_layout)
 
+add_executable(test_tile_size unit/test_tile_size.cpp)
+
+target_link_libraries(
+    test_tile_size
+    PRIVATE
+        hbrick_tile
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_tile_size)
+
+add_executable(test_tile_decomposition unit/test_tile_decomposition.cpp)
+
+target_link_libraries(
+    test_tile_decomposition
+    PRIVATE
+        hbrick_tile
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_tile_decomposition)
+
+add_executable(test_hierarchy_scaffold unit/test_hierarchy_scaffold.cpp)
+
+target_link_libraries(
+    test_hierarchy_scaffold
+    PRIVATE
+        hbrick_tile
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_hierarchy_scaffold)
+
+add_executable(test_super_tile_compose unit/test_super_tile_compose.cpp)
+
+target_link_libraries(
+    test_super_tile_compose
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_super_tile_compose)
+
+add_executable(test_super_tile_verify unit/test_super_tile_verify.cpp)
+
+target_link_libraries(
+    test_super_tile_verify
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_super_tile_verify)
+
+add_executable(test_hierarchy_build unit/test_hierarchy_build.cpp)
+
+target_link_libraries(
+    test_hierarchy_build
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_hierarchy_build)
+
+add_executable(test_base_tile_summary unit/test_base_tile_summary.cpp)
+
+target_link_libraries(
+    test_base_tile_summary
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_base_tile_summary)
+
+add_executable(test_port_graph unit/test_port_graph.cpp)
+
+target_link_libraries(
+    test_port_graph
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_port_graph)
+
+add_executable(test_brick_search_baseline unit/test_brick_search_baseline.cpp)
+
+target_link_libraries(
+    test_brick_search_baseline
+    PRIVATE
+        hbrick_baselines
+        hbrick_test_support
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_brick_search_baseline)
+
+add_executable(test_brick_closure_baseline unit/test_brick_closure_baseline.cpp)
+
+target_link_libraries(
+    test_brick_closure_baseline
+    PRIVATE
+        hbrick_baselines
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_brick_closure_baseline)
+
+add_executable(test_hbrick_baseline unit/test_hbrick_baseline.cpp)
+
+target_link_libraries(
+    test_hbrick_baseline
+    PRIVATE
+        hbrick_baselines
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_hbrick_baseline)
+
 add_executable(test_csr_graph unit/test_csr_graph.cpp)
 
 target_link_libraries(
@@ -268,6 +406,30 @@ target_link_libraries(
 )
 
 hbrick_register_gtests(test_reachability_benchmark)
+
+add_executable(test_reachability_benchmark_format unit/test_reachability_benchmark_format.cpp)
+
+target_link_libraries(
+    test_reachability_benchmark_format
+    PRIVATE
+        hbrick_bench
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_reachability_benchmark_format)
+
+add_executable(test_reachability_benchmark_runner unit/test_reachability_benchmark_runner.cpp)
+
+target_link_libraries(
+    test_reachability_benchmark_runner
+    PRIVATE
+        hbrick_bench
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_reachability_benchmark_runner)
 
 add_executable(test_correctness_harness integration/test_correctness_harness.cpp)
 

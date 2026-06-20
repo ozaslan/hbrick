@@ -14,8 +14,12 @@
 #include "hbrick/baselines/baseline_status.hpp"
 #include "hbrick/baselines/grail_baseline.hpp"
 #include "hbrick/graph/csr_graph.hpp"
+#include "hbrick/tile/tile_size.hpp"
 
 namespace hbrick {
+
+class DirectedGridGraph;
+class MazeLayout;
 
 /**
  * @brief Identifiers for built-in reachability baseline methods.
@@ -29,6 +33,8 @@ enum class ReachabilityBaselineId : uint8_t {
     FullClosure,
     TwoHop,
     Grail,
+    BrickSearch,
+    BrickClosure,
 };
 
 /**
@@ -82,6 +88,8 @@ struct ReachabilityBenchmarkConfig {
      * When empty, @ref ReachabilityBenchmarkConfig::allMethods() is used.
      */
     std::vector<ReachabilityBaselineId> methods;
+    /** @brief Nominal base tile size for @ref ReachabilityBaselineId::BrickSearch / BrickClosure. @ingroup hbrick_bench */
+    TileSize brick_tile_size{4U, 4U};
 
     /** @brief Returns a configuration that benchmarks every built-in baseline. @ingroup hbrick_bench */
     [[nodiscard]] static ReachabilityBenchmarkConfig allMethods() noexcept;
@@ -241,6 +249,19 @@ public:
         ReachabilityBenchmarkConfig config
     );
 
+    /**
+     * @brief Starts a benchmark on a grid-embedded graph with maze passability.
+     * @ingroup hbrick_bench
+     *
+     * Required for @ref ReachabilityBaselineId::BrickSearch and @ref BrickClosure.
+     */
+    void begin(
+        const DirectedGridGraph& graph,
+        const MazeLayout& layout,
+        std::span<const uint32_t> query_universe,
+        ReachabilityBenchmarkConfig config
+    );
+
     /** @brief Returns @c true while a job is active. @ingroup hbrick_bench */
     [[nodiscard]] bool active() const noexcept;
 
@@ -275,6 +296,14 @@ public:
      */
     [[nodiscard]] static ReachabilityBenchmarkReport run(
         const CsrGraph& graph,
+        std::span<const uint32_t> query_universe,
+        ReachabilityBenchmarkConfig config
+    );
+
+    /** @brief Grid overload for benchmarks that include BRICK baselines. @ingroup hbrick_bench */
+    [[nodiscard]] static ReachabilityBenchmarkReport run(
+        const DirectedGridGraph& graph,
+        const MazeLayout& layout,
         std::span<const uint32_t> query_universe,
         ReachabilityBenchmarkConfig config
     );

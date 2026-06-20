@@ -14,6 +14,14 @@ DirectedGridGraph::DirectedGridGraph(
 )
     : width_(width), height_(height), graph_(std::move(graph)) {}
 
+DirectedGridGraph DirectedGridGraph::fromCsr(
+    const uint32_t width,
+    const uint32_t height,
+    CsrGraph graph
+) {
+    return DirectedGridGraph{width, height, std::move(graph)};
+}
+
 GridCoord DirectedGridGraph::coordFromVertex(const uint32_t vertex) const noexcept {
     return coordFromLinearIndex(width_, vertex);
 }

@@ -9,14 +9,13 @@
 
 #pragma once
 
-#include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <memory>
-#include <thread>
 #include <vector>
 
 #include "hbrick/bench/reachability_benchmark.hpp"
+#include "hbrick/bench/reachability_benchmark_runner.hpp"
+#include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/reachability_density.hpp"
@@ -69,21 +68,15 @@ struct OrientationState {
     bool density_use_parallel = true;
 
     ReachabilityBenchmarkConfig benchmark_config;
-    std::shared_ptr<hbrick::ReachabilityBenchmarkJob> benchmark_job;
-    std::atomic<bool> benchmark_stop{false};
+    std::unique_ptr<hbrick::ReachabilityBenchmarkRunner> benchmark_runner;
     bool benchmark_modal_requested = false;
     bool benchmark_show_modal = false;
-    std::atomic<bool> benchmark_worker_running{false};
     int benchmark_query_count_preset = 2;
     uint32_t benchmark_timed_query_count = 4096U;
     int benchmark_correctness_check_preset = 1;  // default 256 in the UI preset list
     float benchmark_memory_gib = 8.0F;
     /** @brief Auto-stop SccDagClosure / FullClosure when projected total speedup vs CsrBfs is too low. */
     bool benchmark_closure_early_stop = false;
-    std::chrono::steady_clock::time_point benchmark_started_at{};
-    std::chrono::steady_clock::time_point benchmark_ended_at{};
-    bool benchmark_timer_frozen = false;
-    std::unique_ptr<std::thread> benchmark_worker;
 
     ProbeMode probe_mode = ProbeMode::Reachability;
     bool probe_valid = false;
@@ -212,13 +205,6 @@ void stopDensityEstimate(OrientationState& state);
  * directed CSR graph. No-op when @c state.generated is @c false.
  */
 void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout);
-
-/**
- * @brief Advances the active benchmark job by one library step.
- *
- * @return @c true when the job finished or was cancelled.
- */
-[[nodiscard]] bool stepReachabilityBenchmark(OrientationState& state);
 
 /** @brief Aborts an active benchmark job without blocking the caller. */
 void cancelReachabilityBenchmark(OrientationState& state);

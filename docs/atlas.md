@@ -183,13 +183,17 @@ flowchart LR
 
 ## hbrick_bench
 
-Lightweight timing helpers for micro-benchmarks.
+Reachability baseline benchmarking, timing helpers, and report formatting.
 
 | Name | Header | Represents | Purpose | When to use |
 |------|--------|------------|---------|-------------|
 | [`BenchTimer`](../include/hbrick/bench/bench_timer.hpp) | `bench/bench_timer.hpp` | Stopwatch | Monotonic start/stop with nanosecond elapsed total | Manual timing of hot-path routines |
 | [`BenchSample`](../include/hbrick/bench/bench_sample.hpp) | `bench/bench_sample.hpp` | Timing result record | Name, iteration count, total elapsed nanoseconds | Store and report benchmark results |
 | [`measureRepeated`](../include/hbrick/bench/bench_measure.hpp) | `bench/bench_measure.hpp` | Benchmark helper template | Runs a callable N times and returns a `BenchSample` | Repeated micro-benchmark measurement |
+| [`ReachabilityBenchmarkJob`](../include/hbrick/bench/reachability_benchmark.hpp) | `bench/reachability_benchmark.hpp` | Incremental benchmark runner | Shared query workload, per-method preprocess/warmup/query/correctness | Headless or stepped benchmark execution |
+| [`ReachabilityBenchmarkRunner`](../include/hbrick/bench/reachability_benchmark_runner.hpp) | `bench/reachability_benchmark_runner.hpp` | Background job wrapper | Worker thread, cancel/skip, elapsed timer | GUI or async benchmark orchestration |
+| [`reachability_benchmark_util`](../include/hbrick/bench/reachability_benchmark_util.hpp) | `bench/reachability_benchmark_util.hpp` | Report helpers | Reference BFS stats, live speedup, step sizing | Interpret benchmark reports |
+| [`reachability_benchmark_format`](../include/hbrick/bench/reachability_benchmark_format.hpp) | `bench/reachability_benchmark_format.hpp` | Text formatters | Bytes, counts, stage detail, table cell text | Display benchmark results |
 
 ---
 

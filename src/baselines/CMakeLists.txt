@@ -9,6 +9,10 @@ add_library(
     full_closure_baseline.cpp
     two_hop_baseline.cpp
     grail_baseline.cpp
+    brick_search_baseline.cpp
+    brick_closure_baseline.cpp
+    hbrick_query_scratch.cpp
+    hbrick_baseline.cpp
 )
 
 target_include_directories(
@@ -25,6 +29,7 @@ target_link_libraries(
         hbrick_grid
         hbrick_graph
         hbrick_bit
+        hbrick_tile
         hbrick_project_options
 )
 target_link_libraries(hbrick_baselines PRIVATE hbrick_project_warnings)

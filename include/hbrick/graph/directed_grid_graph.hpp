@@ -74,6 +74,16 @@ public:
     [[nodiscard]] const CsrGraph& csrGraph() const noexcept { return graph_; }
 
     /**
+     * @brief Wraps an existing CSR graph with grid coordinate metadata.
+     * @ingroup hbrick_graph
+     */
+    [[nodiscard]] static DirectedGridGraph fromCsr(
+        uint32_t width,
+        uint32_t height,
+        CsrGraph graph
+    );
+
+    /**
      * @brief Materializes all directed edges with endpoint indices.
      * @ingroup hbrick_graph
      *

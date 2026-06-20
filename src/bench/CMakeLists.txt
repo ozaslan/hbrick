@@ -4,6 +4,9 @@ add_library(
     bench_sample.cpp
     process_memory.cpp
     reachability_benchmark.cpp
+    reachability_benchmark_format.cpp
+    reachability_benchmark_util.cpp
+    reachability_benchmark_runner.cpp
 )
 
 target_include_directories(

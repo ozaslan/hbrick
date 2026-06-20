@@ -9,7 +9,8 @@
 
 #include <imgui_internal.h>
 
-#include "hbrick/bench/bench_timer.hpp"
+#include "hbrick/bench/reachability_benchmark_format.hpp"
+#include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/core/status_reporting.hpp"
 #include "hbrick/io/movingai_loader.hpp"
 
@@ -1913,7 +1914,7 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
     ImGui::BeginDisabled(
         !orient.generated
         || benchmarkWorkerRunning(orient)
-        || (orient.benchmark_job != nullptr && orient.benchmark_job->active())
+        || (orient.benchmark_runner != nullptr && orient.benchmark_runner->active())
     );
     ImGui::SetNextItemWidth(120.0F);
     if (ImGui::Combo(
@@ -2246,176 +2247,9 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
 
 namespace {
 
-const char* benchmarkStageLabel(
-    const hbrick::ReachabilityBenchmarkProgress::Stage stage
-) {
-    using Stage = hbrick::ReachabilityBenchmarkProgress::Stage;
-    switch (stage) {
-        case Stage::Idle:
-            return "Idle";
-        case Stage::GeneratingPairs:
-            return "Generating query pairs";
-        case Stage::Preprocessing:
-            return "Preprocessing";
-        case Stage::WarmingUp:
-            return "Warmup queries";
-        case Stage::Querying:
-            return "Timed queries";
-        case Stage::CorrectnessCheck:
-            return "Correctness checks";
-        case Stage::Finished:
-            return "Finished";
-        case Stage::Cancelled:
-            return "Cancelled";
-    }
-    return "Unknown";
-}
-
-void formatNanoseconds(char* buffer, const std::size_t size, const double ns) {
-    if (ns >= 1.0e9) {
-        std::snprintf(buffer, size, "%.2f s", ns / 1.0e9);
-    } else if (ns >= 1.0e6) {
-        std::snprintf(buffer, size, "%.2f ms", ns / 1.0e6);
-    } else if (ns >= 1.0e3) {
-        std::snprintf(buffer, size, "%.2f us", ns / 1.0e3);
-    } else {
-        std::snprintf(buffer, size, "%.0f ns", ns);
-    }
-}
-
-void formatLargeCount(char* buffer, const std::size_t size, const uint64_t value) {
-    if (value >= 1'000'000'000'000ULL) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f T",
-            static_cast<double>(value) / 1'000'000'000'000.0
-        );
-    } else if (value >= 1'000'000'000ULL) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f B",
-            static_cast<double>(value) / 1'000'000'000.0
-        );
-    } else if (value >= 1'000'000ULL) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f M",
-            static_cast<double>(value) / 1'000'000.0
-        );
-    } else if (value >= 10'000ULL) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f K",
-            static_cast<double>(value) / 1'000.0
-        );
-    } else {
-        std::snprintf(buffer, size, "%llu", static_cast<unsigned long long>(value));
-    }
-}
-
-void formatLargeCountPair(
-    char* buffer,
-    const std::size_t size,
-    const uint64_t completed,
-    const uint64_t total
-) {
-    char completed_label[24];
-    char total_label[24];
-    formatLargeCount(completed_label, sizeof(completed_label), completed);
-    formatLargeCount(total_label, sizeof(total_label), total);
-    std::snprintf(buffer, size, "%s / %s", completed_label, total_label);
-}
-
-void formatBytes(char* buffer, const std::size_t size, const uint64_t bytes) {
-    if (bytes >= 1ULL << 40) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f TiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 40)
-        );
-    } else if (bytes >= 1ULL << 30) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f GiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 30)
-        );
-    } else if (bytes >= 1ULL << 20) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f MiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 20)
-        );
-    } else if (bytes >= 1ULL << 10) {
-        std::snprintf(
-            buffer,
-            size,
-            "%.2f KiB",
-            static_cast<double>(bytes) / static_cast<double>(1ULL << 10)
-        );
-    } else {
-        std::snprintf(buffer, size, "%llu B", static_cast<unsigned long long>(bytes));
-    }
-}
-
 const char* activityDots() {
     static const char* kDots[] = {"", ".", "..", "..."};
     return kDots[static_cast<int>(ImGui::GetTime() * 2.5) % 4];
-}
-
-double benchmarkElapsedSeconds(const OrientationState& orient) {
-    if (orient.benchmark_started_at.time_since_epoch().count() == 0) {
-        return 0.0;
-    }
-
-    const std::chrono::steady_clock::time_point end_time =
-        orient.benchmark_timer_frozen
-            ? orient.benchmark_ended_at
-            : std::chrono::steady_clock::now();
-    const auto elapsed = end_time - orient.benchmark_started_at;
-    return std::chrono::duration<double>(elapsed).count();
-}
-
-[[nodiscard]] bool benchmarkJobActive(const OrientationState& orient) noexcept {
-    return orient.benchmark_job != nullptr && orient.benchmark_job->active();
-}
-
-[[nodiscard]] int benchmarkActiveMethodColumn(
-    const hbrick::ReachabilityBenchmarkReport& report,
-    const hbrick::ReachabilityBenchmarkProgress& progress,
-    const bool running
-) noexcept {
-    if (!running || report.methods.empty()) {
-        return -1;
-    }
-
-    using Stage = hbrick::ReachabilityBenchmarkProgress::Stage;
-    switch (progress.stage) {
-        case Stage::Preprocessing:
-        case Stage::WarmingUp:
-        case Stage::Querying:
-        case Stage::CorrectnessCheck:
-            for (std::size_t method_index = 0; method_index < report.methods.size();
-                 ++method_index) {
-                if (report.methods[method_index].method == progress.current_method) {
-                    return static_cast<int>(method_index);
-                }
-            }
-            return -1;
-        case Stage::GeneratingPairs:
-        case Stage::Idle:
-        case Stage::Finished:
-        case Stage::Cancelled:
-            return -1;
-    }
-
-    return -1;
 }
 
 [[nodiscard]] bool benchmarkActiveColumnBlinkPhase() noexcept {
@@ -2446,80 +2280,6 @@ void drawBenchmarkActiveColumnText(
     }
 }
 
-[[nodiscard]] bool benchmarkMethodBuildsIndex(
-    const hbrick::ReachabilityBaselineId method
-) noexcept {
-    switch (method) {
-        case hbrick::ReachabilityBaselineId::CsrBfs:
-        case hbrick::ReachabilityBaselineId::CsrDfs:
-            return false;
-        case hbrick::ReachabilityBaselineId::SccDagSearch:
-        case hbrick::ReachabilityBaselineId::SccDagClosure:
-        case hbrick::ReachabilityBaselineId::FullClosure:
-        case hbrick::ReachabilityBaselineId::TwoHop:
-        case hbrick::ReachabilityBaselineId::Grail:
-            return true;
-    }
-
-    return true;
-}
-
-void formatBenchmarkPreprocessCell(
-    char* buffer,
-    const std::size_t size,
-    const hbrick::BaselineBenchmarkMetrics& metrics,
-    const hbrick::ReachabilityBenchmarkReport& report,
-    const hbrick::ReachabilityBenchmarkProgress& progress,
-    const std::size_t row_index,
-    const bool running
-) {
-    using Stage = hbrick::ReachabilityBenchmarkProgress::Stage;
-    const int active_column =
-        benchmarkActiveMethodColumn(report, progress, running);
-    if (running
-        && progress.stage == Stage::Preprocessing
-        && static_cast<int>(row_index) == active_column
-        && metrics.preprocess_nanoseconds > 0U) {
-        formatNanoseconds(
-            buffer,
-            size,
-            static_cast<double>(metrics.preprocess_nanoseconds)
-        );
-        return;
-    }
-
-    if (running
-        && progress.stage == Stage::Preprocessing
-        && static_cast<int>(row_index) == active_column
-        && progress.preprocess_started_ns > 0U) {
-        const uint64_t now = hbrick::BenchTimer::steadyNowNanoseconds();
-        formatNanoseconds(
-            buffer,
-            size,
-            static_cast<double>(now - progress.preprocess_started_ns)
-        );
-        return;
-    }
-
-    if (!benchmarkMethodBuildsIndex(metrics.method)
-        && metrics.status != hbrick::BaselineStatus::NotRun) {
-        std::snprintf(buffer, size, "none");
-        return;
-    }
-
-    if (metrics.preprocess_nanoseconds > 0U
-        || metrics.status != hbrick::BaselineStatus::NotRun) {
-        formatNanoseconds(
-            buffer,
-            size,
-            static_cast<double>(metrics.preprocess_nanoseconds)
-        );
-        return;
-    }
-
-    std::snprintf(buffer, size, "-");
-}
-
 void drawBenchmarkMethodStatusCell(
     const hbrick::BaselineBenchmarkMetrics& metrics,
     const hbrick::ReachabilityBenchmarkReport& report,
@@ -2529,7 +2289,7 @@ void drawBenchmarkMethodStatusCell(
 ) {
     using Stage = hbrick::ReachabilityBenchmarkProgress::Stage;
     const int active_column =
-        benchmarkActiveMethodColumn(report, progress, running);
+        hbrick::activeReachabilityBenchmarkMethodIndex(report, progress, running);
     if (running
         && progress.stage == Stage::Preprocessing
         && static_cast<int>(row_index) == active_column) {
@@ -2543,83 +2303,6 @@ void drawBenchmarkMethodStatusCell(
     }
 
     ImGui::TextUnformatted("-");
-}
-
-[[nodiscard]] uint64_t referenceBfsTotalNanoseconds(
-    const hbrick::ReachabilityBenchmarkReport& report
-) noexcept {
-    if (report.reference_bfs_total_benchmark_nanoseconds > 0U) {
-        return report.reference_bfs_total_benchmark_nanoseconds;
-    }
-
-    for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
-        if (metrics.method == hbrick::ReachabilityBaselineId::CsrBfs
-            && metrics.total_benchmark_nanoseconds > 0U) {
-            return metrics.total_benchmark_nanoseconds;
-        }
-    }
-
-    return 0U;
-}
-
-[[nodiscard]] double referenceBfsMeanQueryNanoseconds(
-    const hbrick::ReachabilityBenchmarkReport& report
-) noexcept {
-    if (report.reference_bfs_mean_query_nanoseconds > 0.0) {
-        return report.reference_bfs_mean_query_nanoseconds;
-    }
-
-    for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
-        if (metrics.method == hbrick::ReachabilityBaselineId::CsrBfs
-            && metrics.query_stats.count > 0U
-            && metrics.query_stats.mean_nanoseconds > 0.0) {
-            return metrics.query_stats.mean_nanoseconds;
-        }
-    }
-
-    return 0.0;
-}
-
-[[nodiscard]] double liveQuerySpeedupVsBfs(
-    const hbrick::ReachabilityBenchmarkReport& report,
-    const hbrick::BaselineBenchmarkMetrics& metrics
-) noexcept {
-    if (metrics.speedup_vs_bfs > 0.0) {
-        return metrics.speedup_vs_bfs;
-    }
-
-    if (metrics.query_stats.count == 0U
-        || metrics.query_stats.mean_nanoseconds <= 0.0) {
-        return 0.0;
-    }
-
-    if (metrics.method == hbrick::ReachabilityBaselineId::CsrBfs) {
-        return 1.0;
-    }
-
-    const double reference_mean = referenceBfsMeanQueryNanoseconds(report);
-    if (reference_mean <= 0.0) {
-        return 0.0;
-    }
-
-    return reference_mean / metrics.query_stats.mean_nanoseconds;
-}
-
-[[nodiscard]] bool benchmarkClosurePreprocessActive(
-    const hbrick::ReachabilityBenchmarkProgress& progress,
-    const bool running
-) noexcept {
-    if (!running) {
-        return false;
-    }
-
-    using Stage = hbrick::ReachabilityBenchmarkProgress::Stage;
-    if (progress.stage != Stage::Preprocessing) {
-        return false;
-    }
-
-    return progress.current_method == hbrick::ReachabilityBaselineId::SccDagClosure
-        || progress.current_method == hbrick::ReachabilityBaselineId::FullClosure;
 }
 
 void drawBenchmarkResultsTable(
@@ -2663,12 +2346,12 @@ void drawBenchmarkResultsTable(
     }
 
     const int active_method_column =
-        benchmarkActiveMethodColumn(report, progress, running);
+        hbrick::activeReachabilityBenchmarkMethodIndex(report, progress, running);
     const bool active_blink =
         running
         && active_method_column >= 0
         && benchmarkActiveColumnBlinkPhase();
-    const uint64_t reference_total = referenceBfsTotalNanoseconds(report);
+    const uint64_t reference_total = hbrick::referenceBfsTotalNanoseconds(report);
 
     ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
     ImGui::TableSetColumnIndex(0);
@@ -2737,7 +2420,7 @@ void drawBenchmarkResultsTable(
         "One-time index build time. Query-only baselines (CsrBfs, CsrDfs) show none.",
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t row_index) {
         char buffer[64];
-        formatBenchmarkPreprocessCell(
+        hbrick::formatReachabilityBenchmarkPreprocessCell(
             buffer,
             sizeof(buffer),
             metrics,
@@ -2757,9 +2440,9 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t row_index) {
         (void)row_index;
         char buffer[64];
-        if (benchmarkMethodBuildsIndex(metrics.method)
+        if (hbrick::baselineBuildsPreprocessIndex(metrics.method)
             && metrics.estimated_index_bytes > 0U) {
-            formatBytes(buffer, sizeof(buffer), metrics.estimated_index_bytes);
+            hbrick::formatBenchmarkBytes(buffer, sizeof(buffer), metrics.estimated_index_bytes);
             ImGui::TextUnformatted(buffer);
             if (metrics.method == hbrick::ReachabilityBaselineId::TwoHop) {
                 itemTooltip(
@@ -2767,7 +2450,7 @@ void drawBenchmarkResultsTable(
                     "measured label storage; preprocessing stops only if that exceeds the cap."
                 );
             }
-        } else if (!benchmarkMethodBuildsIndex(metrics.method)
+        } else if (!hbrick::baselineBuildsPreprocessIndex(metrics.method)
             && metrics.status != hbrick::BaselineStatus::NotRun) {
             ImGui::TextUnformatted("none");
         } else {
@@ -2784,16 +2467,16 @@ void drawBenchmarkResultsTable(
         char buffer[64];
         if (metrics.method == hbrick::ReachabilityBaselineId::SccDagClosure
             && metrics.warshall_matrix_order > 0U) {
-            formatLargeCount(buffer, sizeof(buffer), metrics.warshall_matrix_order);
+            hbrick::formatBenchmarkLargeCount(buffer, sizeof(buffer), metrics.warshall_matrix_order);
             ImGui::TextUnformatted(buffer);
         } else if (metrics.method == hbrick::ReachabilityBaselineId::FullClosure
             && metrics.warshall_matrix_order > 0U) {
-            formatLargeCount(buffer, sizeof(buffer), metrics.warshall_matrix_order);
+            hbrick::formatBenchmarkLargeCount(buffer, sizeof(buffer), metrics.warshall_matrix_order);
             ImGui::TextUnformatted(buffer);
         } else if (metrics.method == hbrick::ReachabilityBaselineId::FullClosure
             && report.num_vertices > 0U
             && metrics.status != hbrick::BaselineStatus::NotRun) {
-            formatLargeCount(buffer, sizeof(buffer), report.num_vertices);
+            hbrick::formatBenchmarkLargeCount(buffer, sizeof(buffer), report.num_vertices);
             ImGui::TextUnformatted(buffer);
         } else {
             ImGui::TextUnformatted("-");
@@ -2810,7 +2493,7 @@ void drawBenchmarkResultsTable(
                 || metrics.method == hbrick::ReachabilityBaselineId::FullClosure)
             && metrics.warshall_pivot_total > 0U) {
             char buffer[64];
-            formatLargeCountPair(
+            hbrick::formatBenchmarkLargeCountPair(
                 buffer,
                 sizeof(buffer),
                 metrics.warshall_pivots_completed,
@@ -2828,7 +2511,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.preprocess_rss_delta_bytes > 0U) {
-            formatBytes(buffer, sizeof(buffer), metrics.preprocess_rss_delta_bytes);
+            hbrick::formatBenchmarkBytes(buffer, sizeof(buffer), metrics.preprocess_rss_delta_bytes);
             ImGui::TextUnformatted(buffer);
         } else {
             ImGui::TextUnformatted("-");
@@ -2841,7 +2524,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.query_stats.count > 0U) {
-            formatNanoseconds(
+            hbrick::formatBenchmarkNanoseconds(
                 buffer,
                 sizeof(buffer),
                 metrics.query_stats.mean_nanoseconds
@@ -2858,7 +2541,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.query_stats.count > 0U) {
-            formatNanoseconds(
+            hbrick::formatBenchmarkNanoseconds(
                 buffer,
                 sizeof(buffer),
                 static_cast<double>(metrics.query_stats.p95_nanoseconds)
@@ -2875,7 +2558,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.query_stats.queries_per_second > 0.0) {
-            formatLargeCount(
+            hbrick::formatBenchmarkLargeCount(
                 buffer,
                 sizeof(buffer),
                 static_cast<uint64_t>(metrics.query_stats.queries_per_second)
@@ -2910,7 +2593,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.positive_query_count > 0U) {
-            formatNanoseconds(
+            hbrick::formatBenchmarkNanoseconds(
                 buffer,
                 sizeof(buffer),
                 metrics.mean_positive_query_nanoseconds
@@ -2927,7 +2610,7 @@ void drawBenchmarkResultsTable(
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
         if (metrics.negative_query_count > 0U) {
-            formatNanoseconds(
+            hbrick::formatBenchmarkNanoseconds(
                 buffer,
                 sizeof(buffer),
                 metrics.mean_negative_query_nanoseconds
@@ -2945,7 +2628,7 @@ void drawBenchmarkResultsTable(
         if (metrics.method == hbrick::ReachabilityBaselineId::Grail
             && metrics.query_stats.count > 0U) {
             char buffer[64];
-            formatLargeCount(buffer, sizeof(buffer), metrics.grail_tree_hits);
+            hbrick::formatBenchmarkLargeCount(buffer, sizeof(buffer), metrics.grail_tree_hits);
             ImGui::TextUnformatted(buffer);
         } else {
             ImGui::TextUnformatted("-");
@@ -2959,7 +2642,7 @@ void drawBenchmarkResultsTable(
         if (metrics.method == hbrick::ReachabilityBaselineId::Grail
             && metrics.query_stats.count > 0U) {
             char buffer[64];
-            formatLargeCount(buffer, sizeof(buffer), metrics.grail_bfs_fallbacks);
+            hbrick::formatBenchmarkLargeCount(buffer, sizeof(buffer), metrics.grail_bfs_fallbacks);
             ImGui::TextUnformatted(buffer);
         } else {
             ImGui::TextUnformatted("-");
@@ -2973,7 +2656,7 @@ void drawBenchmarkResultsTable(
         char buffer[64];
         if (metrics.total_benchmark_nanoseconds > 0U
             || metrics.status != hbrick::BaselineStatus::NotRun) {
-            formatNanoseconds(
+            hbrick::formatBenchmarkNanoseconds(
                 buffer,
                 sizeof(buffer),
                 static_cast<double>(metrics.total_benchmark_nanoseconds)
@@ -2989,7 +2672,7 @@ void drawBenchmarkResultsTable(
         "Mean timed-query speedup vs CsrBfs (>1 is faster). Updates live during querying.",
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
         char buffer[64];
-        const double query_speedup = liveQuerySpeedupVsBfs(report, metrics);
+        const double query_speedup = hbrick::liveQuerySpeedupVsBfs(report, metrics);
         if (query_speedup > 0.0) {
             std::snprintf(buffer, sizeof(buffer), "%.2fx", query_speedup);
             ImGui::TextUnformatted(buffer);
@@ -3175,80 +2858,6 @@ void drawBenchmarkDensityReference(const OrientationState& orient) {
     }
 }
 
-void formatBenchmarkStageDetail(
-    char* buffer,
-    const std::size_t size,
-    const hbrick::ReachabilityBenchmarkProgress& progress
-) {
-    const char* method_name =
-        hbrick::reachabilityBaselineName(progress.current_method);
-
-    switch (progress.stage) {
-        case hbrick::ReachabilityBenchmarkProgress::Stage::GeneratingPairs:
-            std::snprintf(buffer, size, "Generating shared query pairs");
-            break;
-        case hbrick::ReachabilityBenchmarkProgress::Stage::Preprocessing:
-            if (progress.current_method
-                    == hbrick::ReachabilityBaselineId::SccDagClosure
-                || progress.current_method
-                    == hbrick::ReachabilityBaselineId::FullClosure) {
-                std::snprintf(
-                    buffer,
-                    size,
-                    "Preprocessing %s  Warshall k=%u/%u  (method %u / %u)",
-                    method_name,
-                    progress.stage_work_completed,
-                    progress.stage_work_total,
-                    std::min(progress.methods_completed + 1U, progress.methods_total),
-                    progress.methods_total
-                );
-            } else {
-                std::snprintf(
-                    buffer,
-                    size,
-                    "Preprocessing %s  (method %u / %u)",
-                    method_name,
-                    std::min(progress.methods_completed + 1U, progress.methods_total),
-                    progress.methods_total
-                );
-            }
-            break;
-        case hbrick::ReachabilityBenchmarkProgress::Stage::WarmingUp:
-            std::snprintf(
-                buffer,
-                size,
-                "Warmup on %s  %u / %u",
-                method_name,
-                progress.stage_work_completed,
-                progress.stage_work_total
-            );
-            break;
-        case hbrick::ReachabilityBenchmarkProgress::Stage::Querying:
-            std::snprintf(
-                buffer,
-                size,
-                "Timed queries on %s  %u / %u",
-                method_name,
-                progress.stage_work_completed,
-                progress.stage_work_total
-            );
-            break;
-        case hbrick::ReachabilityBenchmarkProgress::Stage::CorrectnessCheck:
-            std::snprintf(
-                buffer,
-                size,
-                "Correctness checks on %s  %u / %u",
-                method_name,
-                progress.stage_work_completed,
-                progress.stage_work_total
-            );
-            break;
-        default:
-            std::snprintf(buffer, size, "%s", benchmarkStageLabel(progress.stage));
-            break;
-    }
-}
-
 void drawBenchmarkFollowupDensityProgress(
     OrientationState& orient,
     const MazeLayout& layout
@@ -3329,7 +2938,8 @@ void BrowserApp::drawBenchmarkModals() {
             orient.benchmark_modal_requested = false;
             ImGui::OpenPopup(popup_id);
         }
-        if (benchmarkWorkerRunning(orient) || benchmarkJobActive(orient)) {
+        if (benchmarkWorkerRunning(orient)
+            || (orient.benchmark_runner != nullptr && orient.benchmark_runner->active())) {
             ImGui::OpenPopup(popup_id);
         }
 
@@ -3341,21 +2951,24 @@ void BrowserApp::drawBenchmarkModals() {
         ImGui::PushItemWidth(608.0F);
 
         const hbrick::ReachabilityBenchmarkProgress progress =
-            orient.benchmark_job != nullptr
-                ? orient.benchmark_job->progress()
+            orient.benchmark_runner != nullptr
+                ? orient.benchmark_runner->progress()
                 : hbrick::ReachabilityBenchmarkProgress{};
         const hbrick::ReachabilityBenchmarkReport& report =
-            orient.benchmark_job != nullptr
-                ? orient.benchmark_job->report()
+            orient.benchmark_runner != nullptr
+                ? orient.benchmark_runner->report()
                 : hbrick::ReachabilityBenchmarkReport{};
         const bool worker_running = benchmarkWorkerRunning(orient);
-        const bool running = worker_running || benchmarkJobActive(orient);
+        const bool job_active =
+            orient.benchmark_runner != nullptr && orient.benchmark_runner->active();
+        const bool running = worker_running || job_active;
         const bool finished = !running && report.valid;
         const bool cancelled =
             !running
             && !report.valid
             && progress.stage == hbrick::ReachabilityBenchmarkProgress::Stage::Cancelled;
-        const double elapsed_seconds = benchmarkElapsedSeconds(orient);
+        const double elapsed_seconds =
+            orient.benchmark_runner != nullptr ? orient.benchmark_runner->elapsedSeconds() : 0.0;
 
         if (finished
             && !orient.density.valid
@@ -3379,7 +2992,7 @@ void BrowserApp::drawBenchmarkModals() {
 
         if (running) {
             char stage_detail[160];
-            formatBenchmarkStageDetail(stage_detail, sizeof(stage_detail), progress);
+            hbrick::formatReachabilityBenchmarkStageDetail(stage_detail, sizeof(stage_detail), progress);
             ImGui::TextWrapped("%s", stage_detail);
 
             const float fraction = progress.work_total > 0U
@@ -3388,7 +3001,7 @@ void BrowserApp::drawBenchmarkModals() {
                 : 0.0F;
             ImGui::ProgressBar(fraction, ImVec2(-1.0F, 20.0F), "");
             char steps_label[96];
-            formatLargeCountPair(
+            hbrick::formatBenchmarkLargeCountPair(
                 steps_label,
                 sizeof(steps_label),
                 progress.work_completed,
@@ -3431,7 +3044,7 @@ void BrowserApp::drawBenchmarkModals() {
         }
 
         if (running) {
-            if (benchmarkClosurePreprocessActive(progress, running)) {
+            if (hbrick::closurePreprocessActive(progress, running)) {
                 if (ImGui::Button("Skip closure method", ImVec2(180.0F, 0.0F))) {
                     skipCurrentBenchmarkMethod(orient);
                 }

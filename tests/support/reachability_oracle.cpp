@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 
+#include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
 #include "hbrick/baselines/full_closure_baseline.hpp"
@@ -15,6 +16,7 @@
 #include "hbrick/baselines/two_hop_baseline.hpp"
 #include "hbrick/graph/bfs.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
+#include "hbrick/graph/directed_grid_graph.hpp"
 
 namespace hbrick::test_support {
 
@@ -245,6 +247,45 @@ std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
     }
 
     return results;
+}
+
+void expectBrickSearchMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const TileSize tile_size,
+    const std::string& context,
+    const uint64_t max_memory_bytes
+) {
+    if (graph.numVertices() == 0U) {
+        return;
+    }
+
+    if (layout.width() * layout.height() != graph.numVertices()) {
+        ADD_FAILURE() << context << " layout dimensions do not match graph vertex count";
+        return;
+    }
+
+    const DirectedGridGraph grid_graph =
+        DirectedGridGraph::fromCsr(layout.width(), layout.height(), graph);
+
+    BrickSearchBaseline brick_search;
+    brick_search.preprocess(grid_graph, layout, tile_size, max_memory_bytes);
+    ASSERT_EQ(brick_search.status(), BaselineStatus::Completed) << context;
+
+    GraphSearchScratch scratch(graph.numVertices());
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            const ReachabilityAnswer expected = bfsReference(
+                graph,
+                source,
+                target,
+                scratch
+            );
+            EXPECT_EQ(brick_search.query(source, target, scratch), expected)
+                << context << " baseline=BrickSearch source=" << source
+                << " target=" << target;
+        }
+    }
 }
 
 void expectAllBaselinesMatchBfs(
