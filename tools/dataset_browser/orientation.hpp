@@ -46,6 +46,11 @@ struct OrientationState {
     float p_against_gradient = 0.02F;
     bool auto_generate = true;
 
+    /** @brief Incremented on each successful graph regeneration; invalidates BRICK index. */
+    uint64_t graph_epoch = 0U;
+    /** @brief One-shot signal consumed by the map panel loop to auto-open the BRICK panel. */
+    bool request_brick_panel_open = false;
+
     DirectedGridGraph graph;
 
     bool scc_valid = false;

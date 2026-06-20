@@ -44,6 +44,8 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout) {
 
     state.graph = DirectedGridGraphBuilder::build(layout, state.mode, params);
     state.generated = true;
+    ++state.graph_epoch;
+    state.request_brick_panel_open = true;
 
     state.scc_valid = false;
     state.num_components = 0;

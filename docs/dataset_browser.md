@@ -130,6 +130,7 @@ Switch with the Inspector radio buttons or `Alt+1/2/3`:
 |---------|--------|-------------|
 | **Grid lines** | `Ctrl+Shift+G` | Visible at zoom ≥ 8× |
 | **Directed edge arrows** | (automatic) | Visible at zoom ≥ 10× when a graph is generated; one-way arcs in orange, bidirectional corridors in gray |
+| **BRICK overlays** | BRICK panel toggles | Hierarchy regions from 1× (labels 6×); tile fills/outlines from 1×; labels from 12×; ports from 5×; seams from 7× |
 | **Loupe** | `Ctrl+L` | Picture-in-picture magnifier (12×) in a corner when the main zoom is below 12× and the canvas is large enough; shows edge arrows when a graph exists |
 | **Probe overlay** | (via right click) | Semi-transparent reachability or SCC highlight on top of the base view |
 
@@ -202,7 +203,7 @@ Choose a **conversion mode** and parameters, then generate a directed graph.
 
 **Regenerate on change** — When checked, parameter edits trigger immediate regeneration. Otherwise use **Generate** (`Ctrl+Shift+Enter`).
 
-After generation, the status area reports passable cell count and directed edge count. Edge arrows appear on the canvas at sufficient zoom.
+After generation, the status area reports passable cell count and directed edge count. Edge arrows appear on the canvas at sufficient zoom. The **BRICK** panel auto-opens for tile decomposition visualization (see [BRICK panel](#brick-panel)).
 
 ### SCC analysis
 
@@ -275,6 +276,36 @@ Example recipe fields:
 
 ---
 
+## BRICK panel
+
+The **BRICK** window opens automatically after you generate a directed graph or load a saved recipe. You can also open it from **Open BRICK panel** in the orientation editor. Like the orientation editor, it is tied to one map panel and hides when that map tab is not visible.
+
+The panel builds a flat `BrickIndex` from the current `MazeLayout` and `DirectedGridGraph` and draws optional overlays on the map canvas:
+
+| Overlay | Zoom | Description |
+|---------|------|-------------|
+| **Hierarchy regions** | ≥ 1× | Super-level exterior boundary cells; `L{level} (i,j)` labels from 6×. Hidden when super regions have no passable base tiles |
+| **Tile boundaries** | ≥ 1× | L0 base tiles: semi-transparent fills plus outlines; `(i,j)` labels from 12× |
+| **Port cells** | ≥ 5× | Side-colored rings (N/E/S/W) on passable boundary ports |
+| **Seam edges** | ≥ 7× | Cyan arrows with dark stroke, drawn above maze arrows |
+
+### Parameters
+
+| Control | Purpose |
+|---------|---------|
+| **Tile width / height** | Nominal base tile size (`TileSize`; both ≥ 2) |
+| **Group width / height** | H-BRICK grouping (`GroupSize`); drawn as **Hierarchy regions** when super levels exist |
+| **Max depth** | H-BRICK hierarchy depth (`0` = full depth); limits how many super levels are built and drawn |
+| **Benchmark memory cap (GiB)** | Copied into the reachability benchmark config via **Sync to benchmark config**; panel builds ignore it and always allocate closures |
+| **Build / rebuild index** | Runs full `HBrickIndexBuilder` preprocess (base closures, port graph, hierarchy, super-tile composition) with a progress bar |
+| **Sync to benchmark config** | Copies tile parameters into the reachability benchmark job config |
+| **Hierarchy level** | `All` = L0 base tiles/ports/seams + L1..Lmax boundary cells; `L0 base` = flat BRICK only; `L1`+ = that level's boundary cells and cross-region seam arrows |
+| **Impassable-only tiles** | When unchecked (default), skip tile outlines and labels for tiles that contain only blocked cells |
+
+Regenerating the directed graph invalidates the cached index until you rebuild. Tile outlines appear below the grid lines; seam arrows render before maze adjacency arrows so both remain visible.
+
+---
+
 ## Keyboard shortcuts
 
 Shortcuts are disabled while a text input field has focus. Full list: **Help → Keyboard shortcuts** (`F1`).
@@ -333,6 +364,7 @@ The browser exercises these hbrick components end to end:
 | `SccDecomposition` | Component labeling and condensation stats |
 | `Bfs` | Right-click reachability probes |
 | `ReachabilityDensityEstimator` | Reachable-pair density via library API ([guide](reachability_density.md)) |
+| `BrickIndex` | Flat BRICK tile decomposition, ports, and seam edges (BRICK panel) |
 
 The browser does not implement density logic locally; `orientation.cpp` builds the passable vertex universe and delegates to `ReachabilityDensityEstimator`.
 

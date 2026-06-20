@@ -288,21 +288,23 @@ SuperTileSummary composeSuperTile(
     SuperTileSummary result{};
     result.slot = parent_bbox;
 
-    if (children.empty()) {
-        result.status = BaselineStatus::Failed;
+    std::vector<ChildBoundarySummary> active_children;
+    active_children.reserve(children.size());
+    for (const ChildBoundarySummary& child : children) {
+        if (child.boundary_summary == nullptr || child.port_coords.empty()) {
+            continue;
+        }
+        active_children.push_back(child);
+    }
+
+    if (active_children.empty()) {
+        result.status = BaselineStatus::SkippedByPolicy;
         return result;
     }
 
-    for (const ChildBoundarySummary& child : children) {
-        if (child.boundary_summary == nullptr || child.port_coords.empty()) {
-            result.status = BaselineStatus::Failed;
-            return result;
-        }
-    }
-
-    result.gamma = buildGammaOrdering(parent_bbox, children);
+    result.gamma = buildGammaOrdering(parent_bbox, active_children);
     if (result.gamma.ports.empty()) {
-        result.status = BaselineStatus::Failed;
+        result.status = BaselineStatus::SkippedByPolicy;
         return result;
     }
 
@@ -312,8 +314,8 @@ SuperTileSummary composeSuperTile(
         return result;
     }
 
-    result.child_embeddings.reserve(children.size());
-    for (const ChildBoundarySummary& child : children) {
+    result.child_embeddings.reserve(active_children.size());
+    for (const ChildBoundarySummary& child : active_children) {
         result.child_embeddings.push_back(buildEmbedding(child.port_coords, result.gamma));
     }
 
@@ -321,7 +323,7 @@ SuperTileSummary composeSuperTile(
         buildIfaceAdjacency(result.gamma, port_index, seam_edges);
     BitMatrix composed = composeInterfaceAdjacency(
         result.gamma,
-        children,
+        active_children,
         result.child_embeddings,
         iface_adjacency
     );

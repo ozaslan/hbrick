@@ -12,6 +12,7 @@
 
 #include "hbrick/core/types.hpp"
 #include "hbrick/tile/brick_index.hpp"
+#include "hbrick/tile/hbrick_build_report.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/tile/hierarchy_tree.hpp"
 #include "hbrick/tile/super_tile_summary.hpp"
@@ -20,6 +21,22 @@ namespace hbrick {
 
 class DirectedGridGraph;
 class MazeLayout;
+
+/**
+ * @brief Resident-storage estimate split between flat BRICK and hierarchical extras.
+ * @ingroup hbrick_tile
+ */
+struct HBrickStorageEstimate {
+    /** @brief Flat BRICK: L0 closures, attachments, port index, port CSR, seams. @ingroup hbrick_tile */
+    uint64_t brick_bytes = 0U;
+    /** @brief H-BRICK hierarchy: composed super-tile closure and boundary data. @ingroup hbrick_tile */
+    uint64_t hbrick_extra_bytes = 0U;
+
+    /** @brief Sum of @ref brick_bytes and @ref hbrick_extra_bytes. @ingroup hbrick_tile */
+    [[nodiscard]] uint64_t totalBytes() const noexcept {
+        return brick_bytes + hbrick_extra_bytes;
+    }
+};
 
 /**
  * @brief H-BRICK index owning flat base tiles plus bottom-up composed super summaries.
@@ -79,7 +96,26 @@ public:
         uint32_t level
     ) const noexcept;
 
+    /**
+     * @brief Estimates resident storage for closures and boundary summaries.
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
+
+    /**
+     * @brief Estimates flat-BRICK vs hierarchical storage separately.
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] HBrickStorageEstimate estimateStorageBreakdown() const noexcept;
+
+    /**
+     * @brief Returns port-graph and super-interface graph vertex counts per level.
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] std::vector<HBrickLevelGraphStats> levelGraphStats() const noexcept;
+
 private:
+    friend class HBrickIndexBuilder;
     BaselineStatus status_ = BaselineStatus::NotRun;
     HBrickConfig config_{};
     BrickIndex brick_index_{};

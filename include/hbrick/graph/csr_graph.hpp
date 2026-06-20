@@ -55,6 +55,9 @@ public:
      */
     [[nodiscard]] std::vector<Edge32> edges() const;
 
+    /** @brief Estimates heap storage for CSR row pointers and column indices. @ingroup hbrick_graph */
+    [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
+
 private:
     friend class CsrGraphBuilder;
 

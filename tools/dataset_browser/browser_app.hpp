@@ -16,6 +16,7 @@
 #include "hbrick/io/movingai_map.hpp"
 
 #include "dataset_index.hpp"
+#include "brick_panel.hpp"
 #include "map_render.hpp"
 #include "orientation.hpp"
 #include "recipe.hpp"
@@ -74,6 +75,9 @@ struct MapPanel {
 
     // Directed-orientation editor state (graph, SCCs, probe).
     OrientationState orient;
+
+    // Flat BRICK tile index visualization and parameters.
+    BrickPanelState brick;
 
     // Saved recipes for this exact map, shown inside the orientation editor.
     std::vector<SavedRecipeEntry> map_recipes;

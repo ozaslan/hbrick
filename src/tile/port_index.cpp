@@ -86,4 +86,10 @@ uint32_t PortIndex::portIdForTilePort(
     return tile_port_lookup_[lookup_index];
 }
 
+uint64_t PortIndex::estimateStorageBytes() const noexcept {
+    return static_cast<uint64_t>(ports_.size()) * sizeof(PortRecord)
+        + static_cast<uint64_t>(global_vertex_to_port_id_.size()) * sizeof(uint32_t)
+        + static_cast<uint64_t>(tile_port_lookup_.size()) * sizeof(uint32_t);
+}
+
 }  // namespace hbrick

@@ -2,6 +2,8 @@
 
 #include <stdexcept>
 
+#include "hbrick/tile/hbrick_config.hpp"
+
 namespace hbrick {
 
 namespace {
@@ -14,6 +16,10 @@ constexpr uint64_t kBitsPerWord = 64U;
 
 }  // namespace
 
+bool isUnlimitedMemoryBudget(const uint64_t max_memory_bytes) noexcept {
+    return max_memory_bytes >= kHBrickUnlimitedMemoryBytes;
+}
+
 uint64_t estimateTileReflexiveAdjacencyBytes(const uint32_t num_vertices) noexcept {
     const uint64_t rows = num_vertices;
     return rows * wordsPerRow(num_vertices) * sizeof(uint64_t);
@@ -23,6 +29,9 @@ bool canAllocateTileReflexiveAdjacency(
     const uint32_t num_vertices,
     const uint64_t max_memory_bytes
 ) noexcept {
+    if (isUnlimitedMemoryBudget(max_memory_bytes)) {
+        return true;
+    }
     return estimateTileReflexiveAdjacencyBytes(num_vertices) <= max_memory_bytes;
 }
 

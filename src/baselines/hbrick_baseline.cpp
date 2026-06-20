@@ -501,27 +501,7 @@ void HBrickBaseline::preprocess(
 }
 
 uint64_t HBrickBaseline::indexStorageBytes() const noexcept {
-    if (status_ != BaselineStatus::Completed) {
-        return 0U;
-    }
-
-    uint64_t bytes = 0U;
-    for (uint32_t level = 1U; level < index_.hierarchy().numLevels(); ++level) {
-        for (const SuperTileSummary& summary : index_.superLevel(level)) {
-            bytes += summary.interface_closure.memoryBytes();
-            bytes += summary.boundary_summary.memoryBytes();
-            for (const BitMatrix& embedding : summary.child_embeddings) {
-                bytes += embedding.memoryBytes();
-            }
-        }
-    }
-
-    for (const BaseTileSummary& summary : index_.brickIndex().tiles().summaries()) {
-        bytes += summary.local_closure.memoryBytes();
-        bytes += summary.boundary_summary.memoryBytes();
-    }
-
-    return bytes;
+    return index_.estimateStorageBytes();
 }
 
 ReachabilityAnswer HBrickBaseline::query(

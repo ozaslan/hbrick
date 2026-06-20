@@ -90,6 +90,68 @@ TEST(SuperTileCompose, ComposesFourBaseTilesIntoOneParent) {
     }
 }
 
+TEST(SuperTileCompose, SkipsImpassableChildrenWithEmptyPorts) {
+    hbrick::MazeLayout layout(16U, 16U, true);
+    for (uint32_t y = 0U; y < 8U; ++y) {
+        for (uint32_t x = 0U; x < 8U; ++x) {
+            layout.setPassable(x, y, false);
+        }
+    }
+
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+
+    const hbrick::BrickIndex brick_index = hbrick::BrickIndex::build(
+        graph,
+        layout,
+        hbrick::TileSize{8U, 8U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
+
+    const hbrick::TileDecomposition decomposition =
+        brick_index.tiles().decomposition();
+    const hbrick::HierarchyTree tree = hbrick::HierarchyTree::build(
+        decomposition,
+        hbrick::GroupSize{2U, 2U},
+        2U
+    );
+    ASSERT_EQ(tree.numLevels(), 2U);
+
+    const hbrick::RegionNode& parent_region = tree.node(1U, 0U);
+    const hbrick::TileSlot parent_slot = parentSlotFromRegion(parent_region);
+
+    std::vector<hbrick::ChildBoundarySummary> children;
+    std::vector<std::vector<hbrick::GridCoord>> child_port_storage;
+    child_port_storage.reserve(parent_region.children.size());
+    children.reserve(parent_region.children.size());
+
+    for (const hbrick::RegionNodeId& child_id : parent_region.children) {
+        child_port_storage.emplace_back();
+        const hbrick::BaseTileSummary& summary =
+            brick_index.tiles().summaryByIndex(child_id.index);
+        children.push_back(hbrick::childBoundaryFromBaseTile(
+            summary,
+            child_id.index,
+            child_port_storage.back()
+        ));
+    }
+
+    const hbrick::SuperTileSummary composed = hbrick::composeSuperTile(
+        parent_slot,
+        children,
+        brick_index.ports(),
+        brick_index.seamEdges(),
+        std::numeric_limits<uint64_t>::max()
+    );
+
+    EXPECT_EQ(composed.status, hbrick::BaselineStatus::Completed);
+    EXPECT_FALSE(composed.gamma.ports.empty());
+    EXPECT_LT(composed.child_embeddings.size(), children.size());
+}
+
 TEST(SuperTileCompose, GammaOrderingIsDeterministic) {
     const hbrick::TileSlot parent{
         0U,

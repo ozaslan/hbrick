@@ -1,5 +1,6 @@
 #include "hbrick/tile/base_tile_summary.hpp"
 
+#include <chrono>
 #include <limits>
 
 #include "hbrick/bit/boolean_closure.hpp"
@@ -13,6 +14,13 @@
 namespace hbrick {
 
 namespace {
+
+[[nodiscard]] uint64_t monotonicNowNanoseconds() noexcept {
+    using clock = std::chrono::steady_clock;
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        clock::now().time_since_epoch()
+    ).count());
+}
 
 void collectLocalVertices(
     const MazeLayout& layout,
@@ -145,7 +153,8 @@ BaseTileSummary buildBaseTile(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSlot& slot,
-    const uint64_t max_memory_bytes
+    const uint64_t max_memory_bytes,
+    uint64_t* closure_nanoseconds
 ) {
     BaseTileSummary summary{};
     summary.slot = slot;
@@ -154,21 +163,31 @@ BaseTileSummary buildBaseTile(
     collectLocalVertices(layout, slot, summary.local_coords, summary.global_vertices);
     const uint32_t num_local = summary.numLocalVertices();
     if (num_local == 0U) {
+        if (closure_nanoseconds != nullptr) {
+            *closure_nanoseconds = 0U;
+        }
         summary.status = BaselineStatus::Completed;
         return summary;
     }
 
     if (!canAllocateTileReflexiveAdjacency(num_local, max_memory_bytes)) {
+        if (closure_nanoseconds != nullptr) {
+            *closure_nanoseconds = 0U;
+        }
         summary.status = BaselineStatus::SkippedByPolicy;
         return summary;
     }
 
+    const uint64_t closure_started_ns = monotonicNowNanoseconds();
     const CsrGraph local_graph = buildInducedSubgraph(graph, layout, slot, summary.global_vertices);
     summary.local_closure = buildTileReflexiveAdjacencyOrThrow(
         local_graph,
         max_memory_bytes
     );
     BooleanClosure::transitiveClosureWarshallInPlace(summary.local_closure);
+    if (closure_nanoseconds != nullptr) {
+        *closure_nanoseconds = monotonicNowNanoseconds() - closure_started_ns;
+    }
 
     collectPorts(layout, slot, summary.local_coords, summary.ports);
     projectBoundaryMatrices(summary);

@@ -17,6 +17,10 @@ namespace hbrick {
 /** @brief Build super-levels until a single root region remains. @ingroup hbrick_tile */
 inline constexpr uint32_t kHBrickFullDepth = std::numeric_limits<uint32_t>::max();
 
+/** @brief Disable per-matrix memory preflight checks during preprocess. @ingroup hbrick_tile */
+inline constexpr uint64_t kHBrickUnlimitedMemoryBytes =
+    std::numeric_limits<uint64_t>::max();
+
 /**
  * @brief Parameters controlling base tiling, grouping, and hierarchy depth.
  * @ingroup hbrick_tile

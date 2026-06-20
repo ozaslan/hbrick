@@ -79,6 +79,9 @@ public:
         uint32_t tile_port_index
     ) const noexcept;
 
+    /** @brief Estimates heap storage for port records and lookup tables. @ingroup hbrick_tile */
+    [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
+
 private:
     std::vector<PortRecord> ports_{};
     std::vector<uint32_t> global_vertex_to_port_id_{};

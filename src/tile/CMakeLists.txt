@@ -14,6 +14,8 @@ add_library(
     super_tile_composer.cpp
     super_tile_oracle.cpp
     hbrick_index.cpp
+    hbrick_index_builder.cpp
+    hbrick_build_format.cpp
 )
 
 target_include_directories(

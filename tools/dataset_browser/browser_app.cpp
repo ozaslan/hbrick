@@ -13,6 +13,7 @@
 #include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/core/status_reporting.hpp"
 #include "hbrick/io/movingai_loader.hpp"
+#include "hbrick/tile/hbrick_build_format.hpp"
 
 #ifndef HBRICK_RECIPES_DIR
 #define HBRICK_RECIPES_DIR "recipes"
@@ -187,6 +188,8 @@ void resetOrientationData(OrientationState& orient) {
     clearProbe(orient);
     orient.generated = false;
     orient.graph = DirectedGridGraph{};
+    orient.graph_epoch = 0U;
+    orient.request_brick_panel_open = false;
     orient.scc_valid = false;
     orient.num_components = 0;
     orient.largest_component = 0;
@@ -315,6 +318,9 @@ BrowserApp::~BrowserApp() {
 void BrowserApp::prepareFrame() {
     if (ui_font_dirty_) {
         rebuildUiFont();
+    }
+    for (const std::unique_ptr<MapPanel>& panel : panels_) {
+        tickBrickIndexBuild(panel->brick);
     }
 }
 
@@ -552,6 +558,36 @@ void BrowserApp::drawStatusBar() {
             ImGui::GetFrameHeight(),
             flags)) {
         if (ImGui::BeginMenuBar()) {
+            const MapPanel* building_panel = nullptr;
+            for (const std::unique_ptr<MapPanel>& panel : panels_) {
+                if (panel->brick.build_in_progress) {
+                    building_panel = panel.get();
+                    break;
+                }
+            }
+
+            if (building_panel != nullptr) {
+                const HBrickBuildProgress& progress =
+                    building_panel->brick.index_builder.progress();
+                const float fraction = progress.work_total > 0U
+                    ? static_cast<float>(progress.work_completed)
+                        / static_cast<float>(progress.work_total)
+                    : 0.0F;
+                ImGui::ProgressBar(
+                    std::clamp(fraction, 0.0F, 1.0F),
+                    ImVec2(180.0F, 0.0F),
+                    hbrickBuildStageLabel(progress.stage)
+                );
+                ImGui::SameLine();
+                char detail[96];
+                formatHBrickBuildProgressDetail(detail, sizeof(detail), progress);
+                ImGui::Text(
+                    "H-BRICK %s/%s: %s",
+                    building_panel->set_name.c_str(),
+                    building_panel->map_name.c_str(),
+                    detail
+                );
+            } else {
             MapPanel* active = activePanel();
             // Hover data is from the previous frame's panel pass; at frame
             // rate that lag is invisible.
@@ -582,6 +618,7 @@ void BrowserApp::drawStatusBar() {
                 );
             } else {
                 ImGui::TextUnformatted(status_.c_str());
+            }
             }
             ImGui::EndMenuBar();
         }
@@ -835,6 +872,7 @@ void BrowserApp::openMap(
     // A reused preview panel keeps its editor and parameters but any graph or
     // analysis derived from the previous map is stale.
     resetOrientationData(target->orient);
+    resetBrickPanel(target->brick);
     if (target->view_mode == ViewMode::Scc) {
         target->view_mode = ViewMode::Passability;
     }
@@ -1101,6 +1139,16 @@ void BrowserApp::drawMapPanels() {
     // tab and reappears when that tab is selected again, so edits always
     // target a map the user can see.
     for (const std::unique_ptr<MapPanel>& panel_ptr : panels_) {
+        if (panel_ptr->orient.request_brick_panel_open) {
+            requestBrickPanelOpen(panel_ptr->brick);
+            panel_ptr->orient.request_brick_panel_open = false;
+        }
+        if (panel_ptr->brick.panel_open && panel_ptr->open) {
+            beginBrickPanelFrame(panel_ptr->brick);
+            drawBrickPanel(*panel_ptr);
+        }
+    }
+    for (const std::unique_ptr<MapPanel>& panel_ptr : panels_) {
         if (panel_ptr->orient.editor_open && panel_ptr->visible_now) {
             drawOrientationEditor(*panel_ptr);
         }
@@ -1240,7 +1288,62 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
         }
     }
 
-    // Directed edge arrows once cells are large enough to read them.
+    // BRICK overlays: hierarchy under base tiles/ports; maze arrows; seam arcs on top.
+    if (panel.orient.generated) {
+        syncBrickIndexWithGraph(panel.brick, panel.orient.graph_epoch);
+        const int hlevel = panel.brick.hierarchy_display_level;
+        const bool draw_super_layer = panel.brick.index_valid
+            && panel.brick.num_hierarchy_levels > 1U
+            && hlevel != 0
+            && (panel.brick.overlay_tiles
+                || panel.brick.overlay_ports
+                || panel.brick.overlay_hierarchy
+                || (panel.brick.overlay_seams && hlevel >= 1));
+        const bool draw_tiles_ports = panel.brick.index_valid
+            && (panel.brick.overlay_tiles || panel.brick.overlay_ports)
+            && hlevel <= 0;
+        if (draw_super_layer || draw_tiles_ports) {
+            const float vx0 = std::max(0.0F, (canvas_pos.x - image_min.x) / panel.zoom);
+            const float vx1 = std::min(map_width, (canvas_end.x - image_min.x) / panel.zoom);
+            const float vy0 = std::max(0.0F, (canvas_pos.y - image_min.y) / panel.zoom);
+            const float vy1 = std::min(map_height, (canvas_end.y - image_min.y) / panel.zoom);
+            if (vx1 > vx0 && vy1 > vy0) {
+                const uint32_t ix0 = static_cast<uint32_t>(vx0);
+                const uint32_t ix1 = static_cast<uint32_t>(std::ceil(vx1));
+                const uint32_t iy0 = static_cast<uint32_t>(vy0);
+                const uint32_t iy1 = static_cast<uint32_t>(std::ceil(vy1));
+                if (draw_super_layer) {
+                    drawBrickOverlays(
+                        draw_list,
+                        panel.brick,
+                        panel.layout,
+                        panel.zoom,
+                        image_min,
+                        ix0,
+                        ix1,
+                        iy0,
+                        iy1,
+                        BrickOverlayPass::Hierarchy
+                    );
+                }
+                if (draw_tiles_ports) {
+                    drawBrickOverlays(
+                        draw_list,
+                        panel.brick,
+                        panel.layout,
+                        panel.zoom,
+                        image_min,
+                        ix0,
+                        ix1,
+                        iy0,
+                        iy1,
+                        BrickOverlayPass::TilesAndPorts
+                    );
+                }
+            }
+        }
+    }
+
     if (panel.orient.generated && panel.zoom >= kArrowZoomThreshold) {
         const float vx0 = std::max(0.0F, (canvas_pos.x - image_min.x) / panel.zoom);
         const float vx1 = std::min(map_width, (canvas_end.x - image_min.x) / panel.zoom);
@@ -1257,6 +1360,28 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
                 static_cast<uint32_t>(std::ceil(vx1)),
                 static_cast<uint32_t>(vy0),
                 static_cast<uint32_t>(std::ceil(vy1))
+            );
+        }
+    }
+
+    if (panel.orient.generated && panel.brick.index_valid && panel.brick.overlay_seams
+        && panel.brick.hierarchy_display_level <= 0) {
+        const float vx0 = std::max(0.0F, (canvas_pos.x - image_min.x) / panel.zoom);
+        const float vx1 = std::min(map_width, (canvas_end.x - image_min.x) / panel.zoom);
+        const float vy0 = std::max(0.0F, (canvas_pos.y - image_min.y) / panel.zoom);
+        const float vy1 = std::min(map_height, (canvas_end.y - image_min.y) / panel.zoom);
+        if (vx1 > vx0 && vy1 > vy0) {
+            drawBrickOverlays(
+                draw_list,
+                panel.brick,
+                panel.layout,
+                panel.zoom,
+                image_min,
+                static_cast<uint32_t>(vx0),
+                static_cast<uint32_t>(std::ceil(vx1)),
+                static_cast<uint32_t>(vy0),
+                static_cast<uint32_t>(std::ceil(vy1)),
+                BrickOverlayPass::Seams
             );
         }
     }
@@ -1290,6 +1415,19 @@ void BrowserApp::drawPanelCanvas(MapPanel& panel) {
                 );
                 draw_list->AddRect(cell_min, cell_max,
                                    IM_COL32(255, 200, 0, 255), 0.0F, 0, 1.5F);
+            }
+
+            if (panel.brick.index_valid
+                && brickIndexMatchesEpoch(panel.brick, panel.orient.graph_epoch)
+                && ImGui::BeginTooltip()) {
+                ImGui::PushTextWrapPos(360.0F);
+                (void)drawBrickTileHoverInfo(
+                    panel.brick,
+                    panel.layout,
+                    GridCoord{hover_x_, hover_y_}
+                );
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
             }
         }
     }
@@ -1744,6 +1882,7 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
 
     if (generate_clicked || (params_changed && orient.auto_generate)) {
         regenerateGraph(orient, panel.layout);
+        syncBrickIndexWithGraph(panel.brick, orient.graph_epoch);
         if (panel.view_mode == ViewMode::Scc) {
             // SCC labels died with the old graph; fall back until recomputed.
             panel.view_mode = ViewMode::Passability;
@@ -1756,6 +1895,18 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
             "Graph: %u cells passable, %llu directed edges",
             panel.layout.passableCount(),
             static_cast<unsigned long long>(orient.graph.numEdges())
+        );
+        if (ImGui::Button(panel.brick.panel_open ? "Close BRICK panel" : "Open BRICK panel")) {
+            if (panel.brick.panel_open) {
+                panel.brick.panel_open = false;
+            } else {
+                requestBrickPanelOpen(panel.brick);
+                panel.brick.panel_open = true;
+            }
+        }
+        itemTooltip(
+            "Tile decomposition, boundary ports, and cross-tile seam edges.\n"
+            "Auto-opens after graph generation or recipe load."
         );
     } else {
         ImGui::TextDisabled("No graph generated yet");
@@ -3315,6 +3466,8 @@ void BrowserApp::applyRecipeToPanel(MapPanel& panel, const Recipe& recipe) {
     orient.editor_open = true;
 
     regenerateGraph(orient, panel.layout);
+    syncBrickIndexWithGraph(panel.brick, orient.graph_epoch);
+    requestBrickPanelOpen(panel.brick);
     computeScc(orient, panel.layout);
     panel.view_mode = ViewMode::Scc;
     rebuildPanelTexture(panel);
@@ -3469,6 +3622,12 @@ void BrowserApp::drawInspectorPanel() {
                 "Probe reachable: %s",
                 active->orient.probe_reachable[vertex.value] != 0U ? "yes" : "no"
             );
+        }
+
+        if (active->brick.index_valid
+            && brickIndexMatchesEpoch(active->brick, active->orient.graph_epoch)) {
+            ImGui::SeparatorText("BRICK tile (L0 index)");
+            (void)drawBrickTileHoverInfo(active->brick, active->layout, coord);
         }
     } else {
         ImGui::TextDisabled("Hover a map canvas");

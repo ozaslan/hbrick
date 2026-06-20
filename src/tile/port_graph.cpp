@@ -1,5 +1,6 @@
 #include "hbrick/tile/port_graph.hpp"
 
+#include <algorithm>
 #include <limits>
 
 #include "hbrick/graph/csr_graph_builder.hpp"
@@ -8,14 +9,16 @@
 
 namespace hbrick {
 
-std::vector<SeamEdge> collectSeamEdges(
+void collectSeamEdgesForVertexRange(
     const CsrGraph& graph,
     const BrickTileIndex& tile_index,
-    const PortIndex& port_index
+    const PortIndex& port_index,
+    const uint32_t vertex_begin,
+    const uint32_t vertex_end,
+    std::vector<SeamEdge>& out
 ) {
-    std::vector<SeamEdge> seam_edges;
-
-    for (uint32_t global_from = 0U; global_from < graph.numVertices(); ++global_from) {
+    const uint32_t end = std::min(vertex_end, graph.numVertices());
+    for (uint32_t global_from = vertex_begin; global_from < end; ++global_from) {
         const uint32_t from_port_id = port_index.portIdForGlobalVertex(global_from);
         if (from_port_id == std::numeric_limits<uint32_t>::max()) {
             continue;
@@ -33,11 +36,71 @@ std::vector<SeamEdge> collectSeamEdges(
                 continue;
             }
 
-            seam_edges.push_back(SeamEdge{from_port_id, to_port_id});
+            out.push_back(SeamEdge{from_port_id, to_port_id});
         }
     }
+}
 
+std::vector<SeamEdge> collectSeamEdges(
+    const CsrGraph& graph,
+    const BrickTileIndex& tile_index,
+    const PortIndex& port_index
+) {
+    std::vector<SeamEdge> seam_edges;
+    collectSeamEdgesForVertexRange(
+        graph,
+        tile_index,
+        port_index,
+        0U,
+        graph.numVertices(),
+        seam_edges
+    );
     return seam_edges;
+}
+
+void addIntraTilePortEdgesForTile(
+    const uint32_t tile_index_value,
+    const BrickTileIndex& tile_index,
+    const PortIndex& port_index,
+    CsrGraphBuilder& builder
+) {
+    const BaseTileSummary& summary = tile_index.summaryByIndex(tile_index_value);
+    if (summary.status != BaselineStatus::Completed) {
+        return;
+    }
+
+    for (uint32_t port_from = 0U; port_from < summary.numPorts(); ++port_from) {
+        const uint32_t global_from_port_id =
+            port_index.portIdForTilePort(tile_index_value, port_from);
+        if (global_from_port_id == std::numeric_limits<uint32_t>::max()) {
+            continue;
+        }
+
+        for (uint32_t port_to = 0U; port_to < summary.numPorts(); ++port_to) {
+            if (!summary.boundary_summary.test(port_from, port_to)) {
+                continue;
+            }
+
+            const uint32_t global_to_port_id =
+                port_index.portIdForTilePort(tile_index_value, port_to);
+            if (global_to_port_id == std::numeric_limits<uint32_t>::max()) {
+                continue;
+            }
+
+            if (global_from_port_id != global_to_port_id) {
+                builder.addEdge(global_from_port_id, global_to_port_id);
+            }
+        }
+    }
+}
+
+void addSeamEdgesToPortGraph(
+    CsrGraphBuilder& builder,
+    const std::span<const SeamEdge> seam_edges
+) {
+    for (const SeamEdge& seam_edge : seam_edges) {
+        builder.addEdge(seam_edge.from_port_id, seam_edge.to_port_id);
+    }
 }
 
 CsrGraph buildPortGraphCsr(
@@ -50,40 +113,10 @@ CsrGraph buildPortGraphCsr(
     for (uint32_t tile_index_value = 0U;
          tile_index_value < tile_index.decomposition().numSlots();
          ++tile_index_value) {
-        const BaseTileSummary& summary = tile_index.summaryByIndex(tile_index_value);
-        if (summary.status != BaselineStatus::Completed) {
-            continue;
-        }
-
-        for (uint32_t port_from = 0U; port_from < summary.numPorts(); ++port_from) {
-            const uint32_t global_from_port_id =
-                port_index.portIdForTilePort(tile_index_value, port_from);
-            if (global_from_port_id == std::numeric_limits<uint32_t>::max()) {
-                continue;
-            }
-
-            for (uint32_t port_to = 0U; port_to < summary.numPorts(); ++port_to) {
-                if (!summary.boundary_summary.test(port_from, port_to)) {
-                    continue;
-                }
-
-                const uint32_t global_to_port_id =
-                    port_index.portIdForTilePort(tile_index_value, port_to);
-                if (global_to_port_id == std::numeric_limits<uint32_t>::max()) {
-                    continue;
-                }
-
-                if (global_from_port_id != global_to_port_id) {
-                    builder.addEdge(global_from_port_id, global_to_port_id);
-                }
-            }
-        }
+        addIntraTilePortEdgesForTile(tile_index_value, tile_index, port_index, builder);
     }
 
-    for (const SeamEdge& seam_edge : seam_edges) {
-        builder.addEdge(seam_edge.from_port_id, seam_edge.to_port_id);
-    }
-
+    addSeamEdgesToPortGraph(builder, seam_edges);
     return builder.build();
 }
 

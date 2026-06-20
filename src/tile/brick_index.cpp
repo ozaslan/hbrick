@@ -26,12 +26,29 @@ BrickIndex BrickIndex::build(
         graph.height(),
         nominal_tile_size
     );
-    index.tile_index_ = BrickTileIndex::build(
+    BrickTileIndex tile_index = BrickTileIndex::build(
         graph,
         layout,
         decomposition,
         max_memory_bytes
     );
+
+    if (!tile_index.allTilesCompleted()) {
+        BrickIndex failed_index;
+        failed_index.status_ = BaselineStatus::SkippedByPolicy;
+        failed_index.tile_index_ = std::move(tile_index);
+        return failed_index;
+    }
+
+    return BrickIndex::assemble(std::move(tile_index), graph);
+}
+
+BrickIndex BrickIndex::assemble(
+    BrickTileIndex tile_index,
+    const DirectedGridGraph& graph
+) {
+    BrickIndex index;
+    index.tile_index_ = std::move(tile_index);
 
     if (!index.tile_index_.allTilesCompleted()) {
         index.status_ = BaselineStatus::SkippedByPolicy;

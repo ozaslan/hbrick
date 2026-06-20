@@ -5,6 +5,7 @@ add_executable(
     map_render.cpp
     orientation.cpp
     recipe.cpp
+    brick_panel.cpp
     browser_app.cpp
 )
 
@@ -20,6 +21,7 @@ target_link_libraries(
     PRIVATE
         hbrick_io
         hbrick_graph
+        hbrick_tile
         hbrick_bench
         hbrick_imgui
         hbrick_project_options

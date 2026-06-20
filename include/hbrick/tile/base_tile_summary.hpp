@@ -72,12 +72,14 @@ struct BaseTileSummary {
  * @param layout Passability bitmap aligned with @p graph.
  * @param slot Tile slot to summarize.
  * @param max_memory_bytes Maximum bytes allowed for the local closure matrix.
+ * @param closure_nanoseconds When non-null, receives adjacency-build + Warshall time only.
  */
 [[nodiscard]] BaseTileSummary buildBaseTile(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSlot& slot,
-    uint64_t max_memory_bytes
+    uint64_t max_memory_bytes,
+    uint64_t* closure_nanoseconds = nullptr
 );
 
 }  // namespace hbrick

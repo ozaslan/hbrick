@@ -191,6 +191,19 @@ target_link_libraries(
 
 hbrick_register_gtests(test_hierarchy_build)
 
+add_executable(test_hbrick_index_builder unit/test_hbrick_index_builder.cpp)
+
+target_link_libraries(
+    test_hbrick_index_builder
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_hbrick_index_builder)
+
 add_executable(test_base_tile_summary unit/test_base_tile_summary.cpp)
 
 target_link_libraries(

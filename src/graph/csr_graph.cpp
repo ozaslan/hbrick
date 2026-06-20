@@ -45,4 +45,9 @@ std::vector<Edge32> CsrGraph::edges() const {
     return result;
 }
 
+uint64_t CsrGraph::estimateStorageBytes() const noexcept {
+    return static_cast<uint64_t>(row_ptrs_.size()) * sizeof(uint32_t)
+        + static_cast<uint64_t>(col_indices_.size()) * sizeof(uint32_t);
+}
+
 }  // namespace hbrick
