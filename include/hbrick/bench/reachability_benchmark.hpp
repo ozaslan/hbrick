@@ -64,9 +64,17 @@ struct ReachabilityBenchmarkConfig {
     /** @brief GRAIL preprocessing parameters. @ingroup hbrick_bench */
     GrailBaselineParams grail_params{};
     /** @brief Random pairs verified against BFS after timing completes. @ingroup hbrick_bench */
-    uint32_t correctness_check_count = 64U;
+    uint32_t correctness_check_count = 256U;
     /** @brief Timed queries executed per @ref ReachabilityBenchmarkJob::step call. @ingroup hbrick_bench */
     uint32_t queries_per_step = 256U;
+    /**
+     * @brief When @c true, incremental closure preprocess may stop early if projected
+     *        total speedup vs CsrBfs drops below @ref closure_min_projected_total_speedup_vs_bfs.
+     * @ingroup hbrick_bench
+     */
+    bool closure_enable_projected_speedup_early_stop = false;
+    /** @brief Minimum projected end-to-end speedup vs CsrBfs required to continue closure preprocess. @ingroup hbrick_bench */
+    float closure_min_projected_total_speedup_vs_bfs = 0.5F;
     /**
      * @brief Baseline methods to benchmark.
      * @ingroup hbrick_bench
@@ -135,6 +143,15 @@ struct BaselineBenchmarkMetrics {
      * @ingroup hbrick_bench
      */
     double projected_total_speedup_vs_bfs = 0.0;
+    /**
+     * @brief Order of the bit matrix used for Warshall preprocessing (|V| or SCC count C).
+     * @ingroup hbrick_bench
+     */
+    uint32_t warshall_matrix_order = 0U;
+    /** @brief Completed Floyd-Warshall pivot steps (outer index k). @ingroup hbrick_bench */
+    uint32_t warshall_pivots_completed = 0U;
+    /** @brief Total Floyd-Warshall pivot steps expected for this method. @ingroup hbrick_bench */
+    uint32_t warshall_pivot_total = 0U;
     /**
      * @brief Human-readable explanation when @ref status is @ref BaselineStatus::SkippedByPolicy.
      * @ingroup hbrick_bench
@@ -229,6 +246,14 @@ public:
 
     /** @brief Aborts the active job without producing a valid report. @ingroup hbrick_bench */
     void cancel() noexcept;
+
+    /**
+     * @brief Skips the active method's remaining work (e.g. aborts closure preprocessing).
+     * @ingroup hbrick_bench
+     *
+     * Safe to call from the UI thread while @ref step runs on a worker thread.
+     */
+    void requestSkipCurrentMethod() noexcept;
 
     /**
      * @brief Advances the job by up to @p config.queries_per_step timed queries.

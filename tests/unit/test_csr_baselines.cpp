@@ -192,19 +192,32 @@ TEST(CsrBaselines, QueryReturnsUnreachableWhenNotPreprocessed) {
     );
 }
 
-TEST(TwoHopBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {
+TEST(TwoHopBaseline, SkippedByPolicyWhenMemoryCapExceededDuringBuild) {
     hbrick::CsrGraphBuilder builder{65U};
     const hbrick::CsrGraph graph = builder.build();
-    const uint64_t estimate = hbrick::TwoHopBaseline::estimateMaxLabelBytes(
-        graph.numVertices()
-    );
 
     hbrick::GraphSearchScratch scratch(graph.numVertices());
     hbrick::TwoHopBaseline baseline;
-    baseline.preprocess(graph, scratch, estimate - 1U);
+    baseline.preprocess(graph, scratch, 16U);
 
     EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_GT(baseline.labelStorageBytes(), 16U);
     EXPECT_EQ(baseline.query(0U, 1U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(TwoHopBaseline, RunsWhenCapIsBelowWorstCaseBound) {
+    hbrick::CsrGraphBuilder builder{256U};
+    const hbrick::CsrGraph graph = builder.build();
+    const uint64_t worst_case =
+        hbrick::TwoHopBaseline::estimateMaxLabelBytes(graph.numVertices());
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::TwoHopBaseline baseline;
+    baseline.preprocess(graph, scratch, worst_case - 1U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+    EXPECT_GT(baseline.labelStorageBytes(), 0U);
+    EXPECT_LT(baseline.labelStorageBytes(), worst_case);
 }
 
 TEST(GrailBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {

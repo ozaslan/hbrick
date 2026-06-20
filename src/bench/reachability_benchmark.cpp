@@ -1,6 +1,7 @@
 #include "hbrick/bench/reachability_benchmark.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -122,6 +123,36 @@ void finalizeQueryStatistics(
         stats.queries_per_second =
             static_cast<double>(stats.count)
             / (static_cast<double>(stats.total_nanoseconds) / 1.0e9);
+    }
+}
+
+void refreshPartialQueryStatistics(
+    const std::vector<uint64_t>& query_times_ns,
+    QueryTimingStatistics& stats
+) noexcept {
+    stats.count = static_cast<uint64_t>(query_times_ns.size());
+    if (query_times_ns.empty()) {
+        stats.total_nanoseconds = 0U;
+        stats.mean_nanoseconds = 0.0;
+        stats.queries_per_second = 0.0;
+        return;
+    }
+
+    uint64_t total_nanoseconds = 0U;
+    for (const uint64_t elapsed : query_times_ns) {
+        total_nanoseconds += elapsed;
+    }
+
+    stats.total_nanoseconds = total_nanoseconds;
+    stats.mean_nanoseconds =
+        static_cast<double>(total_nanoseconds)
+        / static_cast<double>(stats.count);
+    if (total_nanoseconds > 0U) {
+        stats.queries_per_second =
+            static_cast<double>(stats.count)
+            / (static_cast<double>(total_nanoseconds) / 1.0e9);
+    } else {
+        stats.queries_per_second = 0.0;
     }
 }
 
@@ -358,8 +389,6 @@ enum class MethodPhase : uint8_t {
     Correctness,
 };
 
-constexpr double kClosureMinProjectedTotalSpeedupVsBfs = 0.5;
-
 [[nodiscard]] bool usesIncrementalClosurePreprocess(
     const ReachabilityBaselineId method
 ) noexcept {
@@ -444,7 +473,7 @@ void setMemoryCapSkipDetail(
     std::snprintf(
         buffer,
         sizeof(buffer),
-        "%s estimated index size (%s) exceeds the benchmark memory cap (%s).",
+        "%s index size (%s) exceeds the benchmark memory cap (%s).",
         reachabilityBaselineName(method),
         estimated_label,
         cap_label
@@ -464,7 +493,7 @@ void setMemoryCapSkipDetail(
                 graph.numVertices()
             );
         case ReachabilityBaselineId::TwoHop:
-            return TwoHopBaseline::estimateMaxLabelBytes(graph.numVertices());
+            return 0U;
         case ReachabilityBaselineId::Grail:
             return GrailBaseline::estimateLabelBytes(
                 graph.numVertices(),
@@ -530,7 +559,8 @@ void setClosureProjectedSpeedupSkipDetail(
     const uint32_t pivots_completed,
     const uint32_t pivot_total,
     const uint64_t bfs_total_nanoseconds,
-    const uint64_t projected_total_nanoseconds
+    const uint64_t projected_total_nanoseconds,
+    const double minimum_projected_speedup
 ) {
     char speedup_label[32];
     char bfs_total_label[32];
@@ -555,7 +585,7 @@ void setClosureProjectedSpeedupSkipDetail(
         "preprocessing after %u / %u Warshall pivots "
         "(CsrBfs end-to-end %s vs projected %s end-to-end).",
         speedup_label,
-        kClosureMinProjectedTotalSpeedupVsBfs,
+        minimum_projected_speedup,
         reachabilityBaselineName(method),
         pivots_completed,
         pivot_total,
@@ -764,6 +794,31 @@ struct ReachabilityBenchmarkJob::Impl {
     uint64_t incremental_closure_setup_nanoseconds = 0U;
     uint64_t incremental_closure_pivot_start_ns = 0U;
     uint64_t incremental_closure_rss_before = 0U;
+    std::atomic<bool> skip_current_method_requested{false};
+
+    template<typename Baseline>
+    void skipClosurePreprocessByUser(
+        BaselineBenchmarkMetrics& metrics,
+        const ReachabilityBaselineId method,
+        Baseline& baseline
+    ) {
+        baseline.abortPreprocessSkippedByPolicy();
+        metrics.status = BaselineStatus::SkippedByPolicy;
+        metrics.estimated_index_bytes = 0U;
+        metrics.preprocess_rss_delta_bytes = 0U;
+        progress.preprocess_started_ns = 0U;
+        incremental_closure_running = false;
+        metrics.policy_skip_detail =
+            std::string("Stopped by user during ")
+            + reachabilityBaselineName(method)
+            + " preprocessing after "
+            + std::to_string(metrics.warshall_pivots_completed)
+            + " / "
+            + std::to_string(metrics.warshall_pivot_total)
+            + " Warshall pivots.";
+        refreshTotalBenchmarkNanoseconds(metrics);
+        skipRemainingWorkForCurrentMethod();
+    }
 
     void advanceWork(const uint64_t units) noexcept {
         if (units == 0U) {
@@ -850,6 +905,11 @@ struct ReachabilityBenchmarkJob::Impl {
         BaselineBenchmarkMetrics& metrics,
         const ReachabilityBaselineId method
     ) {
+        if (skip_current_method_requested.exchange(false, std::memory_order_acq_rel)) {
+            skipClosurePreprocessByUser(metrics, method, baseline);
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
         if (!incremental_closure_running) {
             incremental_closure_rss_before = currentProcessRssBytes();
             const uint64_t setup_start = BenchTimer::steadyNowNanoseconds();
@@ -881,6 +941,9 @@ struct ReachabilityBenchmarkJob::Impl {
             incremental_closure_running = true;
             incremental_closure_pivot_start_ns = BenchTimer::steadyNowNanoseconds();
             progress.preprocess_started_ns = incremental_closure_pivot_start_ns;
+            metrics.warshall_matrix_order = baseline.preprocessPivotTotal();
+            metrics.warshall_pivot_total = baseline.preprocessPivotTotal();
+            metrics.warshall_pivots_completed = 0U;
             setStageWork(0U, baseline.preprocessPivotTotal());
         }
 
@@ -889,6 +952,9 @@ struct ReachabilityBenchmarkJob::Impl {
         const uint32_t pivot_batch = closurePivotBatchSize(pivot_total);
         const bool finished = baseline.stepPreprocessPivots(pivot_batch);
         const uint32_t pivots_after = baseline.preprocessPivotsCompleted();
+        metrics.warshall_matrix_order = pivot_total;
+        metrics.warshall_pivot_total = pivot_total;
+        metrics.warshall_pivots_completed = pivots_after;
         advanceWork(static_cast<uint64_t>(pivots_after - pivots_before));
         setStageWork(pivots_after, pivot_total);
 
@@ -899,7 +965,8 @@ struct ReachabilityBenchmarkJob::Impl {
         metrics.preprocess_nanoseconds = live_preprocess;
         refreshTotalBenchmarkNanoseconds(metrics);
 
-        if (!finished && pivots_after >= closureAbortMinPivots(pivot_total)) {
+        if (!finished && config.closure_enable_projected_speedup_early_stop
+            && pivots_after >= closureAbortMinPivots(pivot_total)) {
             const uint64_t bfs_total = referenceBfsTotalBenchmark(report);
             if (bfs_total > 0U) {
                 const ClosureSpeedupProjection projection =
@@ -912,9 +979,11 @@ struct ReachabilityBenchmarkJob::Impl {
                         pivot_total
                     );
                 metrics.projected_total_speedup_vs_bfs = projection.speedup_vs_bfs;
+                const double minimum_speedup = static_cast<double>(
+                    config.closure_min_projected_total_speedup_vs_bfs
+                );
                 if (projection.speedup_vs_bfs > 0.0
-                    && projection.speedup_vs_bfs
-                        < kClosureMinProjectedTotalSpeedupVsBfs) {
+                    && projection.speedup_vs_bfs < minimum_speedup) {
                     baseline.abortPreprocessSkippedByPolicy();
                     metrics.status = BaselineStatus::SkippedByPolicy;
                     metrics.estimated_index_bytes = 0U;
@@ -928,7 +997,8 @@ struct ReachabilityBenchmarkJob::Impl {
                         pivots_after,
                         pivot_total,
                         bfs_total,
-                        projection.projected_total_nanoseconds
+                        projection.projected_total_nanoseconds,
+                        minimum_speedup
                     );
                     refreshTotalBenchmarkNanoseconds(metrics);
                     skipRemainingWorkForCurrentMethod();
@@ -1078,6 +1148,14 @@ void ReachabilityBenchmarkJob::cancel() noexcept {
     impl_->report.valid = false;
 }
 
+void ReachabilityBenchmarkJob::requestSkipCurrentMethod() noexcept {
+    if (!impl_ || !impl_->active_job) {
+        return;
+    }
+
+    impl_->skip_current_method_requested.store(true, std::memory_order_release);
+}
+
 bool ReachabilityBenchmarkJob::step() noexcept {
     if (!impl_ || !impl_->active_job) {
         return true;
@@ -1200,14 +1278,21 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                     impl_->advanceWork(1U);
 
                     if (metrics.status == BaselineStatus::SkippedByPolicy) {
+                        const uint64_t actual_index_bytes = indexStorageBytesForBaseline(
+                            method,
+                            impl_->baselines,
+                            impl_->graph
+                        );
                         setMemoryCapSkipDetail(
                             metrics,
                             method,
-                            estimatedIndexBytesForMethod(
-                                method,
-                                impl_->graph,
-                                impl_->config
-                            ),
+                            actual_index_bytes > 0U
+                                ? actual_index_bytes
+                                : estimatedIndexBytesForMethod(
+                                    method,
+                                    impl_->graph,
+                                    impl_->config
+                                ),
                             impl_->config.max_memory_bytes
                         );
                     }
@@ -1354,12 +1439,12 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                     }
 
                     impl_->query_index += batch;
-                    uint64_t partial_query_total = 0U;
-                    for (const uint64_t elapsed : impl_->current_query_times) {
-                        partial_query_total += elapsed;
-                    }
-                    metrics.query_stats.total_nanoseconds = partial_query_total;
+                    refreshPartialQueryStatistics(
+                        impl_->current_query_times,
+                        metrics.query_stats
+                    );
                     impl_->refreshTotalBenchmarkNanoseconds(metrics);
+                    applySpeedups(impl_->report);
                     impl_->progress.queries_completed =
                         impl_->config.warmup_queries
                         + static_cast<uint32_t>(impl_->query_index);
@@ -1397,6 +1482,7 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                         metrics.query_stats
                     );
                     impl_->refreshTotalBenchmarkNanoseconds(metrics);
+                    applySpeedups(impl_->report);
 
                     impl_->method_phase = MethodPhase::Correctness;
                     impl_->correctness_index = 0U;

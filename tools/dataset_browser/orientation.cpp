@@ -115,6 +115,12 @@ void cancelReachabilityBenchmark(OrientationState& state) {
     state.benchmark_worker_running.store(false, std::memory_order_release);
 }
 
+void skipCurrentBenchmarkMethod(OrientationState& state) {
+    if (state.benchmark_job != nullptr) {
+        state.benchmark_job->requestSkipCurrentMethod();
+    }
+}
+
 void reapBenchmarkWorker(OrientationState& state) {
     if (state.benchmark_worker == nullptr) {
         return;
@@ -175,6 +181,8 @@ void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layou
     }
 
     state.benchmark_config.pair_seed = state.seed;
+    state.benchmark_config.closure_enable_projected_speedup_early_stop =
+        state.benchmark_closure_early_stop;
     state.benchmark_config.max_memory_bytes = static_cast<uint64_t>(
         static_cast<double>(state.benchmark_memory_gib) * (1024.0 * 1024.0 * 1024.0)
     );

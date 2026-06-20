@@ -8,27 +8,21 @@ namespace hbrick {
 
 namespace {
 
-[[nodiscard]] uint64_t currentLabelBytes(
+[[nodiscard]] uint64_t liveLabelStorageBytes(
     const std::vector<std::vector<uint32_t>>& labels_out,
     const std::vector<std::vector<uint32_t>>& labels_in
 ) noexcept {
     uint64_t total_bytes = 0U;
+    constexpr uint64_t kVectorShellBytes = 24U;
     for (const std::vector<uint32_t>& labels : labels_out) {
-        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
+        total_bytes += kVectorShellBytes;
+        total_bytes += static_cast<uint64_t>(labels.capacity()) * sizeof(uint32_t);
     }
     for (const std::vector<uint32_t>& labels : labels_in) {
-        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
+        total_bytes += kVectorShellBytes;
+        total_bytes += static_cast<uint64_t>(labels.capacity()) * sizeof(uint32_t);
     }
     return total_bytes;
-}
-
-[[nodiscard]] bool canAddLabels(
-    const uint64_t current_bytes,
-    const uint64_t additional_labels,
-    const uint64_t max_memory_bytes
-) noexcept {
-    const uint64_t additional_bytes = additional_labels * sizeof(uint32_t);
-    return current_bytes <= max_memory_bytes && additional_bytes <= max_memory_bytes - current_bytes;
 }
 
 }  // namespace
@@ -45,6 +39,7 @@ void TwoHopBaseline::preprocess(
 ) {
     status_ = BaselineStatus::NotRun;
     num_vertices_ = 0U;
+    skipped_label_storage_bytes_ = 0U;
     labels_out_.clear();
     labels_in_.clear();
 
@@ -54,15 +49,19 @@ void TwoHopBaseline::preprocess(
         return;
     }
 
-    if (estimateMaxLabelBytes(num_vertices) > max_memory_bytes) {
-        status_ = BaselineStatus::SkippedByPolicy;
-        return;
-    }
-
     try {
         const CsrGraph transpose = buildTransposeGraph(graph);
         labels_out_.assign(num_vertices, {});
         labels_in_.assign(num_vertices, {});
+
+        if (liveLabelStorageBytes(labels_out_, labels_in_) > max_memory_bytes) {
+            skipped_label_storage_bytes_ =
+                liveLabelStorageBytes(labels_out_, labels_in_);
+            labels_out_.clear();
+            labels_in_.clear();
+            status_ = BaselineStatus::SkippedByPolicy;
+            return;
+        }
 
         std::vector<uint32_t> forward_reachable;
         std::vector<uint32_t> backward_reachable;
@@ -71,22 +70,20 @@ void TwoHopBaseline::preprocess(
             collectForwardReachable(graph, hub, scratch, forward_reachable);
             collectForwardReachable(transpose, hub, scratch, backward_reachable);
 
-            const uint64_t current_bytes = currentLabelBytes(labels_out_, labels_in_);
-            const uint64_t additional_labels =
-                static_cast<uint64_t>(forward_reachable.size())
-                + static_cast<uint64_t>(backward_reachable.size());
-            if (!canAddLabels(current_bytes, additional_labels, max_memory_bytes)) {
-                labels_out_.clear();
-                labels_in_.clear();
-                status_ = BaselineStatus::SkippedByPolicy;
-                return;
-            }
-
             for (const uint32_t vertex : backward_reachable) {
                 labels_out_[vertex].push_back(hub);
             }
             for (const uint32_t vertex : forward_reachable) {
                 labels_in_[vertex].push_back(hub);
+            }
+
+            const uint64_t live_bytes = liveLabelStorageBytes(labels_out_, labels_in_);
+            if (live_bytes > max_memory_bytes) {
+                skipped_label_storage_bytes_ = live_bytes;
+                labels_out_.clear();
+                labels_in_.clear();
+                status_ = BaselineStatus::SkippedByPolicy;
+                return;
             }
         }
 
@@ -129,18 +126,15 @@ ReachabilityAnswer TwoHopBaseline::query(
 }
 
 uint64_t TwoHopBaseline::labelStorageBytes() const noexcept {
-    if (status_ != BaselineStatus::Completed) {
-        return 0U;
+    if (status_ == BaselineStatus::Completed) {
+        return liveLabelStorageBytes(labels_out_, labels_in_);
     }
 
-    uint64_t total_bytes = 0U;
-    for (const std::vector<uint32_t>& labels : labels_out_) {
-        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
+    if (status_ == BaselineStatus::SkippedByPolicy) {
+        return skipped_label_storage_bytes_;
     }
-    for (const std::vector<uint32_t>& labels : labels_in_) {
-        total_bytes += static_cast<uint64_t>(labels.size()) * sizeof(uint32_t);
-    }
-    return total_bytes;
+
+    return 0U;
 }
 
 }  // namespace hbrick

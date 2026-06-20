@@ -153,8 +153,7 @@ TEST(ReachabilityBenchmark, SkippedBaselineStillReportsStatus) {
     config.query_count = 8U;
     config.warmup_queries = 0U;
     config.correctness_check_count = 0U;
-    config.max_memory_bytes =
-        hbrick::TwoHopBaseline::estimateMaxLabelBytes(graph.numVertices()) - 1U;
+    config.max_memory_bytes = 16U;
 
     const hbrick::ReachabilityBenchmarkReport report =
         hbrick::ReachabilityBenchmarkJob::run(graph, universe, config);

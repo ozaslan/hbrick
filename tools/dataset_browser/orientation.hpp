@@ -76,7 +76,10 @@ struct OrientationState {
     std::atomic<bool> benchmark_worker_running{false};
     int benchmark_query_count_preset = 2;
     uint32_t benchmark_timed_query_count = 4096U;
+    int benchmark_correctness_check_preset = 1;  // default 256 in the UI preset list
     float benchmark_memory_gib = 8.0F;
+    /** @brief Auto-stop SccDagClosure / FullClosure when projected total speedup vs CsrBfs is too low. */
+    bool benchmark_closure_early_stop = false;
     std::chrono::steady_clock::time_point benchmark_started_at{};
     std::chrono::steady_clock::time_point benchmark_ended_at{};
     bool benchmark_timer_frozen = false;
@@ -219,6 +222,9 @@ void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layou
 
 /** @brief Aborts an active benchmark job without blocking the caller. */
 void cancelReachabilityBenchmark(OrientationState& state);
+
+/** @brief Skips the active benchmark method (e.g. aborts closure Warshall preprocessing). */
+void skipCurrentBenchmarkMethod(OrientationState& state);
 
 /** @brief Joins a finished benchmark worker thread; safe to call each frame. */
 void reapBenchmarkWorker(OrientationState& state);

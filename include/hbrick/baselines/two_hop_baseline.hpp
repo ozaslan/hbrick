@@ -54,16 +54,22 @@ public:
     ) const noexcept;
 
     /**
-     * @brief Estimates the worst-case label storage for @p num_vertices hubs.
+     * @brief Returns a coarse theoretical upper bound on label bytes for @p num_vertices.
      * @ingroup hbrick_baselines
+     *
+     * This is @c 8|V|^2 bytes and is not used for skip policy. Preprocessing enforces
+     * @p max_memory_bytes incrementally from measured label storage while building.
      */
     [[nodiscard]] static uint64_t estimateMaxLabelBytes(
         uint32_t num_vertices
     ) noexcept;
 
     /**
-     * @brief Returns stored label bytes after successful preprocessing.
+     * @brief Returns approximate label heap bytes after successful preprocessing.
      * @ingroup hbrick_baselines
+     *
+     * Counts stored label capacity plus per-vector allocator overhead. This is
+     * actual index storage, not @ref estimateMaxLabelBytes.
      */
     [[nodiscard]] uint64_t labelStorageBytes() const noexcept;
 
@@ -73,6 +79,7 @@ public:
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
     uint32_t num_vertices_ = 0U;
+    uint64_t skipped_label_storage_bytes_ = 0U;
     std::vector<std::vector<uint32_t>> labels_out_;
     std::vector<std::vector<uint32_t>> labels_in_;
 };
