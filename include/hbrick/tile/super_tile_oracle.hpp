@@ -23,7 +23,7 @@ class DirectedGridGraph;
 class MazeLayout;
 
 /**
- * @brief Warshall closure on passable cells induced inside one region bbox.
+ * @brief Warshall closure on passable cells induced inside one region bbox (Oracle B ground truth).
  * @ingroup hbrick_tile
  */
 struct RegionCellClosure {
@@ -54,7 +54,7 @@ struct RegionCellClosure {
 );
 
 /**
- * @brief Runs Warshall on the flat region port graph and projects to the exterior.
+ * @brief Runs Warshall on the flat region port graph and projects to the exterior (Oracle A ground truth).
  * @ingroup hbrick_tile
  */
 [[nodiscard]] BitMatrix buildFlatRegionPortBoundarySummary(

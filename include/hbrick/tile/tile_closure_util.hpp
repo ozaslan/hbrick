@@ -35,4 +35,14 @@ namespace hbrick {
     uint64_t max_memory_bytes
 );
 
+/**
+ * @brief Returns the largest undirected component size in a reflexive adjacency matrix.
+ * @ingroup hbrick_tile
+ *
+ * Treats @c adjacency[i][j] as an undirected link when @c i != @c j.
+ */
+[[nodiscard]] uint32_t largestUndirectedComponentSizeFromAdjacency(
+    const BitMatrix& adjacency
+) noexcept;
+
 }  // namespace hbrick

@@ -76,10 +76,19 @@ struct ChildBoundarySummary {
 );
 
 /**
- * @brief Runs Warshall on @p composed_adjacency to produce @c S̄_U.
+ * @brief Runs truncated Kleene squaring on @p composed_adjacency to produce @c S̄_U.
  * @ingroup hbrick_tile
+ *
+ * Uses @c ceil(log2(n_max)) squaring rounds where @c n_max is the largest undirected
+ * component in @p composed_adjacency.
+ *
+ * @param composed_adjacency Reflexive interface relation @c I | A on @c Gamma_U.
+ * @param scratch Optional reusable buffer; resized when dimensions change.
  */
-[[nodiscard]] BitMatrix computeInterfaceClosure(BitMatrix composed_adjacency);
+[[nodiscard]] BitMatrix computeInterfaceClosure(
+    BitMatrix composed_adjacency,
+    BitMatrix* scratch = nullptr
+);
 
 /**
  * @brief Projects @p interface_closure to the exterior perimeter of @p parent_bbox.
@@ -100,7 +109,8 @@ struct ChildBoundarySummary {
     std::span<const ChildBoundarySummary> children,
     const PortIndex& port_index,
     std::span<const SeamEdge> seam_edges,
-    uint64_t max_memory_bytes
+    uint64_t max_memory_bytes,
+    BitMatrix* closure_scratch = nullptr
 );
 
 /**

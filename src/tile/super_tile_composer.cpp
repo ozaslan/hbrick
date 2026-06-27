@@ -232,8 +232,19 @@ BitMatrix composeInterfaceAdjacency(
     return composed;
 }
 
-BitMatrix computeInterfaceClosure(BitMatrix composed_adjacency) {
-    BooleanClosure::transitiveClosureWarshallInPlace(composed_adjacency);
+BitMatrix computeInterfaceClosure(
+    BitMatrix composed_adjacency,
+    BitMatrix* scratch
+) {
+    const uint32_t largest_component_size =
+        largestUndirectedComponentSizeFromAdjacency(composed_adjacency);
+    const uint32_t squaring_count =
+        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        composed_adjacency,
+        squaring_count,
+        scratch
+    );
     return composed_adjacency;
 }
 
@@ -266,7 +277,8 @@ SuperTileSummary composeSuperTile(
     const std::span<const ChildBoundarySummary> children,
     const PortIndex& port_index,
     const std::span<const SeamEdge> seam_edges,
-    const uint64_t max_memory_bytes
+    const uint64_t max_memory_bytes,
+    BitMatrix* closure_scratch
 ) {
     SuperTileSummary result{};
     result.slot = parent_bbox;
@@ -310,7 +322,7 @@ SuperTileSummary composeSuperTile(
         result.child_embeddings,
         iface_adjacency
     );
-    result.interface_closure = computeInterfaceClosure(std::move(composed));
+    result.interface_closure = computeInterfaceClosure(std::move(composed), closure_scratch);
     result.boundary_summary =
         projectExternalSummary(parent_bbox, result.gamma, result.interface_closure);
 

@@ -428,7 +428,8 @@ bool HBrickIndexBuilder::step() noexcept {
                 children,
                 index_.brick_index_.ports(),
                 index_.brick_index_.seamEdges(),
-                config_.max_memory_bytes
+                config_.max_memory_bytes,
+                &base_tile_closure_scratch_
             );
             const uint64_t node_elapsed_ns = monotonicNowNanoseconds() - node_started_ns;
 
