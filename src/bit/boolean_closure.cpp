@@ -1,6 +1,155 @@
 #include "hbrick/bit/boolean_closure.hpp"
 
+#include <bit>
+#include <utility>
+
 namespace hbrick {
+
+namespace {
+
+[[nodiscard]] bool rowsDiffer(
+    const BitVector& lhs,
+    const BitVector& rhs
+) noexcept {
+    const size_t num_words = lhs.numWords();
+    for (size_t word_index = 0U; word_index < num_words; ++word_index) {
+        if (lhs.word(word_index) != rhs.word(word_index)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void accumulateBooleanProductRow(
+    const BitVector& lhs_row,
+    const BitMatrix& rhs,
+    BitVector& out_row,
+    const uint32_t num_vertices
+) {
+    out_row.clear();
+
+    const size_t num_words = lhs_row.numWords();
+    if (num_words == 0U) {
+        return;
+    }
+
+    const size_t full_words = static_cast<size_t>(num_vertices) / 64U;
+    const uint32_t tail_bits = num_vertices % 64U;
+    const uint64_t tail_mask =
+        tail_bits == 0U ? ~0ULL : ((1ULL << tail_bits) - 1ULL);
+
+    for (size_t word_index = 0U; word_index < num_words; ++word_index) {
+        uint64_t bits = lhs_row.word(word_index);
+        if (word_index == full_words && tail_bits != 0U) {
+            bits &= tail_mask;
+        }
+        while (bits != 0U) {
+            const uint32_t inner = static_cast<uint32_t>(
+                word_index * 64U + static_cast<size_t>(std::countr_zero(bits))
+            );
+            out_row.rowOr(rhs.row(inner));
+            bits &= bits - 1U;
+        }
+    }
+}
+
+[[nodiscard]] bool booleanMultiplyInto(
+    const BitMatrix& lhs,
+    const BitMatrix& rhs,
+    BitMatrix& out
+) noexcept {
+    const uint32_t num_vertices = lhs.numRows();
+    bool changed = false;
+
+    for (uint32_t row = 0U; row < num_vertices; ++row) {
+        accumulateBooleanProductRow(lhs.row(row), rhs, out.row(row), num_vertices);
+        if (rowsDiffer(out.row(row), lhs.row(row))) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+[[nodiscard]] BitMatrix& ensureScratch(
+    BitMatrix& owned_scratch,
+    BitMatrix* external_scratch,
+    const uint32_t num_vertices
+) {
+    if (external_scratch != nullptr) {
+        if (external_scratch->numRows() != num_vertices
+            || external_scratch->numCols() != num_vertices) {
+            *external_scratch = BitMatrix(num_vertices, num_vertices);
+        }
+        return *external_scratch;
+    }
+
+    if (owned_scratch.numRows() != num_vertices || owned_scratch.numCols() != num_vertices) {
+        owned_scratch = BitMatrix(num_vertices, num_vertices);
+    }
+    return owned_scratch;
+}
+
+}  // namespace
+
+BitMatrix booleanMultiply(const BitMatrix& lhs, const BitMatrix& rhs) {
+    if (lhs.numCols() != rhs.numRows()) {
+        return BitMatrix{};
+    }
+
+    BitMatrix product(lhs.numRows(), rhs.numCols());
+    (void)booleanMultiplyInto(lhs, rhs, product);
+    return product;
+}
+
+bool bitMatricesEqual(const BitMatrix& lhs, const BitMatrix& rhs) noexcept {
+    if (lhs.numRows() != rhs.numRows() || lhs.numCols() != rhs.numCols()) {
+        return false;
+    }
+
+    for (uint32_t row = 0U; row < lhs.numRows(); ++row) {
+        if (rowsDiffer(lhs.row(row), rhs.row(row))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+uint32_t BooleanClosure::kleeneSquaringCountForLargestComponent(
+    const uint32_t largest_component_size
+) noexcept {
+    if (largest_component_size <= 1U) {
+        return 0U;
+    }
+
+    uint32_t squaring_count = 0U;
+    uint32_t covered = 1U;
+    while (covered < largest_component_size) {
+        covered <<= 1U;
+        ++squaring_count;
+    }
+    return squaring_count;
+}
+
+void BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+    BitMatrix& relation,
+    const uint32_t squaring_count,
+    BitMatrix* scratch
+) {
+    const uint32_t num_vertices = relation.numRows();
+    if (num_vertices != relation.numCols() || squaring_count == 0U) {
+        return;
+    }
+
+    BitMatrix owned_scratch{};
+    BitMatrix& scratch_matrix = ensureScratch(owned_scratch, scratch, num_vertices);
+
+    for (uint32_t step = 0U; step < squaring_count; ++step) {
+        if (!booleanMultiplyInto(relation, relation, scratch_matrix)) {
+            return;
+        }
+        std::swap(relation, scratch_matrix);
+    }
+}
 
 void BooleanClosure::transitiveClosureWarshallInPlace(BitMatrix& relation) {
     const uint32_t num_vertices = relation.numRows();
@@ -8,10 +157,17 @@ void BooleanClosure::transitiveClosureWarshallInPlace(BitMatrix& relation) {
         return;
     }
 
-    for (uint32_t pivot = 0; pivot < num_vertices; ++pivot) {
-        for (uint32_t row_index = 0; row_index < num_vertices; ++row_index) {
-            if (relation.test(row_index, pivot)) {
-                relation.row(row_index).rowOr(relation.row(pivot));
+    for (uint32_t pivot = 0U; pivot < num_vertices; ++pivot) {
+        const BitVector& pivot_row = relation.row(pivot);
+        const size_t pivot_word_index = static_cast<size_t>(pivot) / 64U;
+        const uint64_t pivot_mask = 1ULL << (static_cast<size_t>(pivot) % 64U);
+
+        for (uint32_t row_index = 0U; row_index < num_vertices; ++row_index) {
+            if (row_index == pivot) {
+                continue;
+            }
+            if ((relation.row(row_index).word(pivot_word_index) & pivot_mask) != 0U) {
+                relation.row(row_index).rowOr(pivot_row);
             }
         }
     }

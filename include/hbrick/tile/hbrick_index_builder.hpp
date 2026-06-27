@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/hbrick_build_report.hpp"
@@ -93,6 +94,8 @@ private:
     uint64_t phase_started_ns_ = 0U;
     uint64_t base_tile_started_ns_ = 0U;
     uint64_t super_compose_started_ns_ = 0U;
+
+    BitMatrix base_tile_closure_scratch_{};
 
     bool cancelled_ = false;
 };

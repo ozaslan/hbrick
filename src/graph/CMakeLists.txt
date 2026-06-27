@@ -11,6 +11,7 @@ add_library(
     condensation_graph.cpp
     dag_reachability.cpp
     reachability_density.cpp
+    connected_components.cpp
 )
 
 target_include_directories(

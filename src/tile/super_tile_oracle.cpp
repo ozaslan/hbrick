@@ -280,22 +280,6 @@ RegionCellClosure buildRegionCellClosure(
     return result;
 }
 
-bool bitMatricesEqual(const BitMatrix& lhs, const BitMatrix& rhs) noexcept {
-    if (lhs.numRows() != rhs.numRows() || lhs.numCols() != rhs.numCols()) {
-        return false;
-    }
-
-    for (uint32_t row = 0U; row < lhs.numRows(); ++row) {
-        for (uint32_t col = 0U; col < lhs.numCols(); ++col) {
-            if (lhs.test(row, col) != rhs.test(row, col)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 bool boundarySummaryMatchesCellClosure(
     const RegionCellClosure& region_closure,
     const std::span<const GridCoord> exterior_ports,

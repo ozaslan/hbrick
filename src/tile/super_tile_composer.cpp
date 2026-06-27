@@ -92,23 +92,6 @@ namespace {
     return transposed;
 }
 
-[[nodiscard]] BitMatrix booleanMultiply(const BitMatrix& lhs, const BitMatrix& rhs) {
-    if (lhs.numCols() != rhs.numRows()) {
-        throw std::invalid_argument("booleanMultiply: inner dimensions must match");
-    }
-
-    BitMatrix product(lhs.numRows(), rhs.numCols());
-    for (uint32_t row = 0U; row < lhs.numRows(); ++row) {
-        for (uint32_t inner = 0U; inner < lhs.numCols(); ++inner) {
-            if (!lhs.test(row, inner)) {
-                continue;
-            }
-            product.row(row).rowOr(rhs.row(inner));
-        }
-    }
-    return product;
-}
-
 void booleanOrInPlace(BitMatrix& target, const BitMatrix& source) {
     if (target.numRows() != source.numRows() || target.numCols() != source.numCols()) {
         throw std::invalid_argument("booleanOrInPlace: matrix dimensions must match");

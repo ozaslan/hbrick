@@ -216,7 +216,8 @@ bool HBrickIndexBuilder::step() noexcept {
                 *layout_,
                 slot,
                 config_.max_memory_bytes,
-                &tile_closure_ns
+                &tile_closure_ns,
+                &base_tile_closure_scratch_
             );
             report_.base_tile_closure_nanoseconds += tile_closure_ns;
             tile_index_.summaries_[next_base_tile_index_] = std::move(summary);

@@ -931,7 +931,7 @@ void drawBrickPanel(MapPanel& panel) {
             brick.build_report.base_tile_closure_nanoseconds
         );
         ImGui::TextWrapped(
-            "L0 cell closure (adjacency + Warshall): %s across %u tiles",
+            "L0 cell closure (adjacency + Kleene): %s across %u tiles",
             phase_buf,
             brick.build_report.num_base_with_closure
         );

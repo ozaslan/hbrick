@@ -26,3 +26,14 @@ target_link_libraries(
 target_link_libraries(hbrick_bench PRIVATE hbrick_project_warnings)
 
 add_library(hbrick::bench ALIAS hbrick_bench)
+
+add_executable(kleene_closure_benchmark kleene_closure_benchmark.cpp)
+target_link_libraries(
+    kleene_closure_benchmark
+    PRIVATE
+        hbrick_bench
+        hbrick_bit
+        hbrick_graph
+        hbrick_tile
+        hbrick_project_warnings
+)

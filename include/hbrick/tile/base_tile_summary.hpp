@@ -24,7 +24,7 @@ class MazeLayout;
  * @brief Preprocessed reachability data for one base tile slot (layers A + B).
  * @ingroup hbrick_tile
  *
- * Holds Warshall closure on the induced intra-tile passable subgraph plus
+ * Holds Kleene-star closure on the induced intra-tile passable subgraph plus
  * boundary projections @c S_T, @c R_VB, and @c R_BV.
  */
 struct BaseTileSummary {
@@ -64,7 +64,7 @@ struct BaseTileSummary {
  * @brief Builds one base tile summary from a global grid graph.
  * @ingroup hbrick_tile
  *
- * Collects passable cells inside @p slot, runs Warshall on the induced subgraph,
+ * Collects passable cells inside @p slot, runs Kleene squaring closure on the induced subgraph,
  * and projects @c S_T, @c R_VB, and @c R_BV. Sets @ref BaseTileSummary::status to
  * @ref BaselineStatus::SkippedByPolicy when the closure matrix exceeds @p max_memory_bytes.
  *
@@ -72,14 +72,16 @@ struct BaseTileSummary {
  * @param layout Passability bitmap aligned with @p graph.
  * @param slot Tile slot to summarize.
  * @param max_memory_bytes Maximum bytes allowed for the local closure matrix.
- * @param closure_nanoseconds When non-null, receives adjacency-build + Warshall time only.
+ * @param closure_nanoseconds When non-null, receives adjacency-build + Kleene closure time only.
+ * @param closure_scratch Optional reusable M×M scratch for Kleene squaring across tiles.
  */
 [[nodiscard]] BaseTileSummary buildBaseTile(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSlot& slot,
     uint64_t max_memory_bytes,
-    uint64_t* closure_nanoseconds = nullptr
+    uint64_t* closure_nanoseconds = nullptr,
+    BitMatrix* closure_scratch = nullptr
 );
 
 }  // namespace hbrick

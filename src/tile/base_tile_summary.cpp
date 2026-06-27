@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
@@ -154,7 +155,8 @@ BaseTileSummary buildBaseTile(
     const MazeLayout& layout,
     const TileSlot& slot,
     const uint64_t max_memory_bytes,
-    uint64_t* closure_nanoseconds
+    uint64_t* closure_nanoseconds,
+    BitMatrix* closure_scratch
 ) {
     BaseTileSummary summary{};
     summary.slot = slot;
@@ -184,7 +186,15 @@ BaseTileSummary buildBaseTile(
         local_graph,
         max_memory_bytes
     );
-    BooleanClosure::transitiveClosureWarshallInPlace(summary.local_closure);
+    const uint32_t largest_component_size =
+        largestUndirectedComponentSize(local_graph);
+    const uint32_t squaring_count =
+        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        summary.local_closure,
+        squaring_count,
+        closure_scratch
+    );
     if (closure_nanoseconds != nullptr) {
         *closure_nanoseconds = monotonicNowNanoseconds() - closure_started_ns;
     }

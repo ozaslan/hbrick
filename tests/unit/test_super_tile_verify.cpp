@@ -3,6 +3,7 @@
 #include <limits>
 #include <vector>
 
+#include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/core/types.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"

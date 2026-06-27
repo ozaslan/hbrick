@@ -1,7 +1,12 @@
 #include <gtest/gtest.h>
+#include <limits>
+#include <random>
 
 #include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/graph/connected_components.hpp"
+#include "hbrick/graph/csr_graph_builder.hpp"
+#include "hbrick/tile/tile_closure_util.hpp"
 
 namespace {
 
@@ -79,4 +84,109 @@ TEST(BooleanClosure, WorksWithNonMultipleOf64Columns) {
 
     EXPECT_TRUE(relation.test(0U, 68U));
     EXPECT_FALSE(relation.test(68U, 0U));
+}
+
+TEST(BooleanClosure, KleeneSquaringCountMatchesCeilLog2) {
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(0U), 0U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(1U), 0U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(2U), 1U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(3U), 2U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(4U), 2U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(8U), 3U);
+    EXPECT_EQ(hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(9U), 4U);
+}
+
+TEST(BooleanClosure, KleeneSquaringMatchesWarshallOnManualGraph) {
+    hbrick::BitMatrix warshall(5U, 5U);
+    hbrick::BitMatrix kleene(5U, 5U);
+    setReflexive(warshall);
+    setReflexive(kleene);
+    warshall.set(0U, 1U);
+    warshall.set(1U, 2U);
+    warshall.set(2U, 3U);
+    warshall.set(3U, 4U);
+    kleene.set(0U, 1U);
+    kleene.set(1U, 2U);
+    kleene.set(2U, 3U);
+    kleene.set(3U, 4U);
+
+    hbrick::BooleanClosure::transitiveClosureWarshallInPlace(warshall);
+    hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        kleene,
+        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(5U)
+    );
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(warshall, kleene));
+}
+
+TEST(BooleanClosure, KleeneSquaringUsesLargestComponentForDisconnectedGraph) {
+    hbrick::BitMatrix warshall(6U, 6U);
+    hbrick::BitMatrix kleene(6U, 6U);
+    setReflexive(warshall);
+    setReflexive(kleene);
+
+    // Component A: vertices 0-1
+    warshall.set(0U, 1U);
+    kleene.set(0U, 1U);
+
+    // Component B: chain 2-3-4-5 (size 4)
+    warshall.set(2U, 3U);
+    warshall.set(3U, 4U);
+    warshall.set(4U, 5U);
+    kleene.set(2U, 3U);
+    kleene.set(3U, 4U);
+    kleene.set(4U, 5U);
+
+    hbrick::BooleanClosure::transitiveClosureWarshallInPlace(warshall);
+    hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        kleene,
+        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(4U)
+    );
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(warshall, kleene));
+    EXPECT_FALSE(warshall.test(0U, 2U));
+    EXPECT_TRUE(warshall.test(2U, 5U));
+}
+
+TEST(BooleanClosure, KleeneSquaringMatchesWarshallOnRandomGraphs) {
+    std::mt19937_64 rng{0xB1C5ULL};
+    std::uniform_real_distribution<double> coin(0.0, 1.0);
+
+    const uint32_t sizes[] = {4U, 8U, 16U, 32U, 64U, 70U};
+    const double densities[] = {0.05, 0.15, 0.35};
+
+    for (const uint32_t num_vertices : sizes) {
+        for (const double density : densities) {
+            hbrick::CsrGraphBuilder builder{num_vertices};
+            for (uint32_t from = 0U; from < num_vertices; ++from) {
+                for (uint32_t to = 0U; to < num_vertices; ++to) {
+                    if (from != to && coin(rng) < density) {
+                        builder.addEdge(from, to);
+                    }
+                }
+            }
+            const hbrick::CsrGraph graph = builder.build();
+            const hbrick::BitMatrix base = hbrick::buildTileReflexiveAdjacencyOrThrow(
+                graph,
+                std::numeric_limits<uint64_t>::max()
+            );
+            const uint32_t largest_component =
+                hbrick::largestUndirectedComponentSize(graph);
+            const uint32_t squaring_count =
+                hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
+                    largest_component
+                );
+
+            hbrick::BitMatrix warshall = base;
+            hbrick::BitMatrix kleene = base;
+            hbrick::BooleanClosure::transitiveClosureWarshallInPlace(warshall);
+            hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+                kleene,
+                squaring_count
+            );
+
+            EXPECT_TRUE(hbrick::bitMatricesEqual(warshall, kleene))
+                << "M=" << num_vertices << " density=" << density;
+        }
+    }
 }

@@ -75,9 +75,6 @@ struct RegionCellClosure {
     uint64_t max_memory_bytes
 );
 
-/** @brief Returns whether two bit matrices have identical dimensions and bits. @ingroup hbrick_tile */
-[[nodiscard]] bool bitMatricesEqual(const BitMatrix& lhs, const BitMatrix& rhs) noexcept;
-
 /**
  * @brief Returns whether @p boundary_summary matches @p region_closure on @p exterior_ports.
  * @ingroup hbrick_tile

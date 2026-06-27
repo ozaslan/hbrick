@@ -69,7 +69,7 @@ struct HBrickBuildReport {
 
     uint64_t total_nanoseconds = 0U;
     uint64_t base_tile_nanoseconds = 0U;
-    /** @brief Time spent building L0 local cell closures (adjacency + Warshall). @ingroup hbrick_tile */
+    /** @brief Time spent building L0 local cell closures (adjacency + Kleene squaring). @ingroup hbrick_tile */
     uint64_t base_tile_closure_nanoseconds = 0U;
     uint64_t brick_finalize_nanoseconds = 0U;
     uint64_t hierarchy_nanoseconds = 0U;

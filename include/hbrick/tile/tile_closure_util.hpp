@@ -1,7 +1,7 @@
 /**
  * @file tile_closure_util.hpp
  * @ingroup hbrick_tile
- * @brief Local reflexive adjacency helpers for per-tile Warshall preprocessing.
+ * @brief Local reflexive adjacency helpers for per-tile Kleene closure preprocessing.
  */
 
 #pragma once
