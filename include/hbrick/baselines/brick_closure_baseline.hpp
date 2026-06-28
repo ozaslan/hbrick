@@ -20,11 +20,12 @@ class DirectedGridGraph;
 class MazeLayout;
 
 /**
- * @brief BRICK-Closure baseline: Warshall closure on the global port graph + attachments.
+ * @brief BRICK-Closure baseline: truncated Kleene closure on the global port graph + attachments.
  * @ingroup hbrick_baselines
  *
  * Preprocessing builds a @ref BrickIndex (base tiles + global port CSR) and then
- * materializes a reflexive transitive closure over the port graph.
+ * materializes a reflexive transitive closure over the port graph via Kleene squaring
+ * (@c ceil(log2(n_max)) rounds on the largest undirected port component).
  *
  * Query first applies the same-tile local-closure shortcut; otherwise it answers
  * whether there exist ports @c p,q such that @c R_VB(source,p) and
@@ -67,10 +68,17 @@ public:
      */
     [[nodiscard]] uint64_t indexStorageBytes() const noexcept;
 
+    /**
+     * @brief Returns the precomputed port-graph closure after successful preprocessing.
+     * @ingroup hbrick_baselines
+     */
+    [[nodiscard]] const BitMatrix& portClosure() const noexcept { return port_closure_; }
+
 private:
     BaselineStatus status_ = BaselineStatus::NotRun;
     BrickIndex index_{};
     BitMatrix port_closure_{};
+    BitMatrix port_closure_scratch_{};
 };
 
 }  // namespace hbrick

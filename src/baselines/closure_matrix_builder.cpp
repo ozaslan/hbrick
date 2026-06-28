@@ -2,6 +2,9 @@
 
 #include <stdexcept>
 
+#include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/graph/connected_components.hpp"
+
 namespace hbrick {
 
 namespace {
@@ -50,6 +53,28 @@ BitMatrix ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
     }
 
     return relation;
+}
+
+void ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+    BitMatrix& reflexive_relation,
+    const CsrGraph& graph,
+    BitMatrix* scratch
+) {
+    const uint32_t largest_component_size =
+        largestUndirectedComponentSize(graph);
+    const uint32_t squaring_count =
+        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        reflexive_relation,
+        squaring_count,
+        scratch
+    );
+}
+
+void ClosureMatrixBuilder::transitiveClosureWarshallOracleInPlace(
+    BitMatrix& reflexive_relation
+) {
+    BooleanClosure::transitiveClosureWarshallInPlace(reflexive_relation);
 }
 
 }  // namespace hbrick

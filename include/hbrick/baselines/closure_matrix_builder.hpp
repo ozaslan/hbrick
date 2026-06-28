@@ -59,6 +59,31 @@ public:
         const CsrGraph& graph,
         uint64_t max_memory_bytes
     );
+
+    /**
+     * @brief Computes truncated Kleene closure in place on a reflexive relation.
+     * @ingroup hbrick_baselines
+     *
+     * Uses @c ceil(log2(n_max)) squaring rounds where @c n_max is the largest
+     * undirected component of @p graph, with early fixpoint termination.
+     *
+     * @param reflexive_relation Square @c I | A matrix updated to closure on output.
+     * @param graph Source graph used only for component-size truncation.
+     * @param scratch Optional reusable buffer; resized when dimensions change.
+     */
+    static void transitiveClosureKleeneTruncatedInPlace(
+        BitMatrix& reflexive_relation,
+        const CsrGraph& graph,
+        BitMatrix* scratch = nullptr
+    );
+
+    /**
+     * @brief Oracle: Warshall closure in place on a reflexive relation.
+     * @ingroup hbrick_baselines
+     *
+     * Regression / comparison only; production flat BRICK uses Kleene squaring.
+     */
+    static void transitiveClosureWarshallOracleInPlace(BitMatrix& reflexive_relation);
 };
 
 }  // namespace hbrick

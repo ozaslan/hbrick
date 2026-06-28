@@ -3,8 +3,12 @@
 #include <limits>
 
 #include "hbrick/baselines/brick_closure_baseline.hpp"
+#include "hbrick/baselines/brick_search_baseline.hpp"
+#include "hbrick/baselines/closure_matrix_builder.hpp"
+#include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/core/types.hpp"
 #include "hbrick/graph/bfs.hpp"
+#include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
@@ -12,6 +16,7 @@
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
+#include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/tile_size.hpp"
 
 namespace {
@@ -65,7 +70,77 @@ hbrick::DirectedGridGraph buildRandomGraph(hbrick::MazeLayout& layout) {
     );
 }
 
-void expectMatchesBfsOnAllPairs(
+void expectPortKleeneClosureMatchesWarshallOracle(
+    const hbrick::BrickIndex& index,
+    const uint64_t max_memory_bytes
+) {
+    ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);
+
+    hbrick::BitMatrix kleene = hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
+        index.portGraph(),
+        max_memory_bytes
+    );
+    hbrick::BitMatrix kleene_scratch{};
+    hbrick::ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+        kleene,
+        index.portGraph(),
+        &kleene_scratch
+    );
+
+    hbrick::BitMatrix warshall = hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
+        index.portGraph(),
+        max_memory_bytes
+    );
+    hbrick::ClosureMatrixBuilder::transitiveClosureWarshallOracleInPlace(warshall);
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(kleene, warshall));
+
+    const uint32_t n_max = hbrick::largestUndirectedComponentSize(index.portGraph());
+    const uint32_t k_trunc =
+        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(n_max);
+    const uint32_t k_full =
+        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
+            index.portGraph().numVertices()
+        );
+    if (k_trunc != k_full) {
+        hbrick::BitMatrix kleene_full =
+            hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
+                index.portGraph(),
+                max_memory_bytes
+            );
+        hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+            kleene_full,
+            k_full,
+            &kleene_scratch
+        );
+        EXPECT_TRUE(hbrick::bitMatricesEqual(kleene_full, warshall));
+    }
+}
+
+void expectPortClosureMatchesPortBfs(
+    const hbrick::BrickIndex& index,
+    const hbrick::BitMatrix& port_closure
+) {
+    ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);
+    const hbrick::CsrGraph& port_graph = index.portGraph();
+    ASSERT_EQ(port_closure.numRows(), port_graph.numVertices());
+    ASSERT_EQ(port_closure.numCols(), port_graph.numVertices());
+
+    hbrick::GraphSearchScratch scratch(port_graph.numVertices());
+    for (uint32_t source = 0U; source < port_graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < port_graph.numVertices(); ++target) {
+            const hbrick::ReachabilityAnswer bfs_answer =
+                hbrick::Bfs::reachable(port_graph, source, target, scratch);
+            const bool closure_reachable = port_closure.test(source, target);
+            EXPECT_EQ(
+                closure_reachable,
+                bfs_answer == hbrick::ReachabilityAnswer::Reachable
+            ) << "port source=" << source << " target=" << target;
+        }
+    }
+}
+
+void expectBaselinePortMatrixMatchesIndependentKleene(
     const hbrick::MazeLayout& layout,
     const hbrick::DirectedGridGraph& graph,
     const hbrick::TileSize tile_size
@@ -79,6 +154,45 @@ void expectMatchesBfsOnAllPairs(
     );
     ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
 
+    hbrick::BitMatrix independent =
+        hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
+            baseline.index().portGraph(),
+            std::numeric_limits<uint64_t>::max()
+        );
+    hbrick::BitMatrix scratch{};
+    hbrick::ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+        independent,
+        baseline.index().portGraph(),
+        &scratch
+    );
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(baseline.portClosure(), independent));
+    expectPortClosureMatchesPortBfs(baseline.index(), baseline.portClosure());
+}
+
+void expectMatchesBfsOnAllPairs(
+    const hbrick::MazeLayout& layout,
+    const hbrick::DirectedGridGraph& graph,
+    const hbrick::TileSize tile_size
+) {
+    hbrick::BrickClosureBaseline closure_baseline;
+    closure_baseline.preprocess(
+        graph,
+        layout,
+        tile_size,
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(closure_baseline.status(), hbrick::BaselineStatus::Completed);
+
+    hbrick::BrickSearchBaseline search_baseline;
+    search_baseline.preprocess(
+        graph,
+        layout,
+        tile_size,
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(search_baseline.status(), hbrick::BaselineStatus::Completed);
+
     hbrick::GraphSearchScratch scratch(graph.numVertices());
     const hbrick::CsrGraph& csr = graph.csrGraph();
 
@@ -86,14 +200,51 @@ void expectMatchesBfsOnAllPairs(
         for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
             const hbrick::ReachabilityAnswer expected =
                 hbrick::Bfs::reachable(csr, source, target, scratch);
-            const hbrick::ReachabilityAnswer actual =
-                baseline.query(source, target);
-            EXPECT_EQ(actual, expected) << "source=" << source << " target=" << target;
+            const hbrick::ReachabilityAnswer closure_answer =
+                closure_baseline.query(source, target);
+            const hbrick::ReachabilityAnswer search_answer =
+                search_baseline.query(source, target);
+            EXPECT_EQ(closure_answer, expected)
+                << "closure source=" << source << " target=" << target;
+            EXPECT_EQ(search_answer, expected)
+                << "search source=" << source << " target=" << target;
         }
     }
 }
 
 }  // namespace
+
+TEST(BrickClosureBaseline, PortClosureMatrixMatchesWarshallOracleOnRandomMaze) {
+    hbrick::MazeLayout layout(8U, 8U);
+    layout.setPassable(hbrick::GridCoord{2U, 2U}, false);
+    layout.setPassable(hbrick::GridCoord{5U, 5U}, false);
+    const hbrick::DirectedGridGraph graph = buildRandomGraph(layout);
+
+    const hbrick::BrickIndex index = hbrick::BrickIndex::build(
+        graph,
+        layout,
+        hbrick::TileSize{4U, 4U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    expectPortKleeneClosureMatchesWarshallOracle(index, std::numeric_limits<uint64_t>::max());
+}
+
+TEST(BrickClosureBaseline, PortClosureMatrixMatchesWarshallOracleOnBidirectionalMaze) {
+    hbrick::MazeLayout layout(16U, 16U);
+    layout.setPassable(hbrick::GridCoord{4U, 4U}, false);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+
+    const hbrick::BrickIndex index = hbrick::BrickIndex::build(
+        graph,
+        layout,
+        hbrick::TileSize{4U, 4U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    expectPortKleeneClosureMatchesWarshallOracle(index, std::numeric_limits<uint64_t>::max());
+}
 
 TEST(BrickClosureBaseline, MatchesBfsOnEightByEightRandomMaze) {
     hbrick::MazeLayout layout(8U, 8U);
@@ -113,6 +264,48 @@ TEST(BrickClosureBaseline, MatchesBfsOnSixteenBySixteenBidirectionalMaze) {
     );
 
     expectMatchesBfsOnAllPairs(layout, graph, hbrick::TileSize{4U, 4U});
+    expectBaselinePortMatrixMatchesIndependentKleene(
+        layout,
+        graph,
+        hbrick::TileSize{4U, 4U}
+    );
+}
+
+TEST(BrickClosureBaseline, MatchesBfsOnTwentyFourByTwentyFourBidirectionalMaze) {
+    hbrick::MazeLayout layout(24U, 24U);
+    layout.setPassable(hbrick::GridCoord{6U, 6U}, false);
+    layout.setPassable(hbrick::GridCoord{12U, 12U}, false);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+
+    expectMatchesBfsOnAllPairs(layout, graph, hbrick::TileSize{4U, 4U});
+}
+
+TEST(BrickClosureBaseline, MatchesBfsOnThirtyTwoByThirtyTwoRandomMaze) {
+    hbrick::MazeLayout layout(32U, 32U);
+    layout.setPassable(hbrick::GridCoord{8U, 8U}, false);
+    layout.setPassable(hbrick::GridCoord{17U, 17U}, false);
+    const hbrick::DirectedGridGraph graph = buildRandomGraph(layout);
+
+    expectMatchesBfsOnAllPairs(layout, graph, hbrick::TileSize{4U, 4U});
+    expectBaselinePortMatrixMatchesIndependentKleene(
+        layout,
+        graph,
+        hbrick::TileSize{4U, 4U}
+    );
+}
+
+TEST(BrickClosureBaseline, MatchesBfsWithEightByEightTiles) {
+    hbrick::MazeLayout layout(32U, 32U);
+    layout.setPassable(hbrick::GridCoord{10U, 10U}, false);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+
+    expectMatchesBfsOnAllPairs(layout, graph, hbrick::TileSize{8U, 8U});
 }
 
 TEST(BrickClosureBaseline, SameTileReentryWhenLocalClosureIsZero) {
@@ -147,6 +340,29 @@ TEST(BrickClosureBaseline, SameTileReentryWhenLocalClosureIsZero) {
         baseline.query(source, target),
         hbrick::ReachabilityAnswer::Reachable
     );
+}
+
+TEST(BrickClosureBaseline, MatchesBfsOnDisconnectedRegions) {
+    hbrick::MazeLayout layout(16U, 8U);
+    for (uint32_t y = 0U; y < 8U; ++y) {
+        for (uint32_t x = 0U; x < 8U; ++x) {
+            layout.setPassable(x, y, false);
+        }
+    }
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+
+    expectMatchesBfsOnAllPairs(layout, graph, hbrick::TileSize{4U, 4U});
+
+    const hbrick::BrickIndex index = hbrick::BrickIndex::build(
+        graph,
+        layout,
+        hbrick::TileSize{4U, 4U},
+        std::numeric_limits<uint64_t>::max()
+    );
+    expectPortKleeneClosureMatchesWarshallOracle(index, std::numeric_limits<uint64_t>::max());
 }
 
 TEST(BrickClosureBaseline, SkippedWhenPortClosureMemoryBudgetExceeded) {

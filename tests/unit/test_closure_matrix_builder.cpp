@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "hbrick/baselines/closure_matrix_builder.hpp"
+#include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 
 namespace {
@@ -87,14 +88,46 @@ TEST(ClosureMatrixBuilder, BuildThrowsWhenPolicyLimitExceeded) {
     );
 }
 
-TEST(ClosureMatrixBuilder, LargeGraphRejectedWithoutAttemptingBuild) {
-    const uint32_t large_vertex_count = 10000U;
-    const uint64_t estimate =
-        hbrick::ClosureMatrixBuilder::estimateReflexiveAdjacencyBytes(large_vertex_count);
+TEST(ClosureMatrixBuilder, KleeneTruncatedClosureMatchesWarshallOracle) {
+    const hbrick::CsrGraph graph = buildSmallGraph();
+    constexpr uint64_t kBudget = 4096U;
 
-    EXPECT_GT(estimate, 1U);
-    EXPECT_FALSE(hbrick::ClosureMatrixBuilder::canAllocateReflexiveAdjacency(
-        large_vertex_count,
-        1024U
-    ));
+    hbrick::BitMatrix kleene =
+        hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(graph, kBudget);
+    hbrick::BitMatrix scratch{};
+    hbrick::ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+        kleene,
+        graph,
+        &scratch
+    );
+
+    hbrick::BitMatrix warshall =
+        hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(graph, kBudget);
+    hbrick::ClosureMatrixBuilder::transitiveClosureWarshallOracleInPlace(warshall);
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(kleene, warshall));
+}
+
+TEST(ClosureMatrixBuilder, KleeneTruncatedClosureMatchesWarshallOnDisconnectedGraph) {
+    hbrick::CsrGraphBuilder builder{8U};
+    builder.addEdge(0U, 1U);
+    builder.addEdge(1U, 2U);
+    builder.addEdge(4U, 5U);
+    const hbrick::CsrGraph graph = builder.build();
+    constexpr uint64_t kBudget = 4096U;
+
+    hbrick::BitMatrix kleene =
+        hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(graph, kBudget);
+    hbrick::BitMatrix scratch{};
+    hbrick::ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+        kleene,
+        graph,
+        &scratch
+    );
+
+    hbrick::BitMatrix warshall =
+        hbrick::ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(graph, kBudget);
+    hbrick::ClosureMatrixBuilder::transitiveClosureWarshallOracleInPlace(warshall);
+
+    EXPECT_TRUE(hbrick::bitMatricesEqual(kleene, warshall));
 }

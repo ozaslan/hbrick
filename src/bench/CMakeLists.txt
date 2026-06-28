@@ -37,3 +37,15 @@ target_link_libraries(
         hbrick_tile
         hbrick_project_warnings
 )
+
+add_executable(port_closure_benchmark port_closure_benchmark.cpp)
+target_link_libraries(
+    port_closure_benchmark
+    PRIVATE
+        hbrick_bench
+        hbrick_baselines
+        hbrick_bit
+        hbrick_graph
+        hbrick_tile
+        hbrick_project_warnings
+)

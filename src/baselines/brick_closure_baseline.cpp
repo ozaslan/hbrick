@@ -4,7 +4,6 @@
 #include <limits>
 
 #include "hbrick/baselines/closure_matrix_builder.hpp"
-#include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
@@ -96,6 +95,7 @@ void BrickClosureBaseline::preprocess(
     status_ = BaselineStatus::NotRun;
     index_ = BrickIndex{};
     port_closure_ = BitMatrix{};
+    port_closure_scratch_ = BitMatrix{};
 
     index_ = BrickIndex::build(graph, layout, nominal_tile_size, max_memory_bytes);
     if (index_.status() != BaselineStatus::Completed) {
@@ -114,11 +114,16 @@ void BrickClosureBaseline::preprocess(
             index_.portGraph(),
             max_memory_bytes
         );
-        BooleanClosure::transitiveClosureWarshallInPlace(port_closure_);
+        ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
+            port_closure_,
+            index_.portGraph(),
+            &port_closure_scratch_
+        );
         status_ = BaselineStatus::Completed;
     } catch (const std::exception&) {
         status_ = BaselineStatus::Failed;
         port_closure_ = BitMatrix{};
+        port_closure_scratch_ = BitMatrix{};
     }
 }
 
