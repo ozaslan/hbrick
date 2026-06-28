@@ -22,15 +22,6 @@ namespace hbrick {
 
 namespace {
 
-enum class FinalizeSubstep : uint8_t {
-    PortIndex = 0,
-    SeamEdges = 1,
-    PortGraph = 2,
-};
-
-constexpr uint32_t kSeamVerticesPerStep = 131072U;
-constexpr uint32_t kPortGraphTilesPerStep = 64U;
-
 [[nodiscard]] uint64_t monotonicNowNanoseconds() noexcept {
     using clock = std::chrono::steady_clock;
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -124,23 +115,17 @@ void HBrickIndexBuilder::begin(
     index_ = HBrickIndex{};
     index_.config_ = config;
     index_.status_ = BaselineStatus::NotRun;
-    tile_index_ = BrickTileIndex{};
+    brick_index_builder_ = BrickIndexBuilder{};
     decomposition_ = TileDecomposition{};
     progress_ = HBrickBuildProgress{};
     report_ = HBrickBuildReport{};
     phase_ = HBrickBuildStage::Idle;
-    next_base_tile_index_ = 0U;
     super_level_ = 1U;
     super_node_index_ = 0U;
     total_super_regions_ = 0U;
-    finalize_substep_ = static_cast<uint8_t>(FinalizeSubstep::PortIndex);
-    seam_vertex_cursor_ = 0U;
-    port_graph_tile_cursor_ = 0U;
-    port_graph_builder_.reset();
     cancelled_ = false;
     build_started_ns_ = monotonicNowNanoseconds();
     phase_started_ns_ = build_started_ns_;
-    base_tile_started_ns_ = 0U;
     super_compose_started_ns_ = 0U;
 
     if (!config.base_tile_size.isValid() || !config.group_size.isValid()) {
@@ -157,23 +142,32 @@ void HBrickIndexBuilder::begin(
         graph.height(),
         config.base_tile_size
     );
-    tile_index_.decomposition_ = decomposition_;
-    tile_index_.summaries_.resize(decomposition_.numSlots());
-    tile_index_.global_vertex_tile_index_.assign(
-        graph.numVertices(),
-        std::numeric_limits<uint32_t>::max()
+
+    brick_index_builder_.begin(
+        graph,
+        layout,
+        config.base_tile_size,
+        config.max_memory_bytes
     );
-    tile_index_.global_vertex_local_index_.assign(
-        graph.numVertices(),
-        std::numeric_limits<uint32_t>::max()
-    );
+    if (!brick_index_builder_.running()) {
+        finishFailure(
+            brick_index_builder_.report().valid
+                ? brick_index_builder_.report().status
+                : BaselineStatus::Failed,
+            baseTileFailureDetail(
+                brick_index_builder_.report().valid
+                    ? brick_index_builder_.report().status
+                    : BaselineStatus::Failed
+            )
+        );
+        return;
+    }
 
     report_.num_base_tiles = decomposition_.numSlots();
     progress_.num_base_tiles = decomposition_.numSlots();
     progress_.stage = HBrickBuildStage::BaseTiles;
-    progress_.work_total = static_cast<uint64_t>(decomposition_.numSlots()) + 2U;
+    progress_.work_total = brick_index_builder_.progress().work_total + 2U;
     phase_ = HBrickBuildStage::BaseTiles;
-    base_tile_started_ns_ = monotonicNowNanoseconds();
 }
 
 bool HBrickIndexBuilder::step() noexcept {
@@ -186,152 +180,51 @@ bool HBrickIndexBuilder::step() noexcept {
     }
 
     switch (phase_) {
-        case HBrickBuildStage::BaseTiles: {
-            if (next_base_tile_index_ >= decomposition_.numSlots()) {
-                report_.base_tile_nanoseconds =
-                    monotonicNowNanoseconds() - base_tile_started_ns_;
+        case HBrickBuildStage::BaseTiles:
+        case HBrickBuildStage::FinalizeBrick: {
+            if (!brick_index_builder_.running()) {
+                return true;
+            }
+
+            (void)brick_index_builder_.step();
+            const BrickIndexBuildProgress& brick_progress = brick_index_builder_.progress();
+            progress_.work_completed = brick_progress.work_completed;
+            progress_.current_base_tile_index = brick_progress.current_base_tile_index;
+
+            if (!brick_index_builder_.running()) {
+                const BrickIndexBuildReport& brick_report = brick_index_builder_.report();
+                index_.brick_index_ = brick_index_builder_.takeIndex();
+                report_.base_tile_nanoseconds = brick_report.base_tile_nanoseconds;
+                report_.base_tile_closure_nanoseconds =
+                    brick_report.base_tile_closure_nanoseconds;
+                report_.brick_finalize_nanoseconds = brick_report.finalize_nanoseconds;
+                report_.num_base_completed = brick_report.num_base_completed;
+                report_.num_base_skipped = brick_report.num_base_skipped;
+                report_.num_ports = brick_report.num_ports;
+                report_.num_seams = brick_report.num_seams;
                 countBaseTileOutcomes(
-                    tile_index_,
+                    index_.brick_index_.tiles(),
                     report_.num_base_completed,
                     report_.num_base_skipped,
                     report_.num_base_with_closure,
                     report_.num_base_empty_impassable
                 );
-                if (!tile_index_.allTilesCompleted()) {
+
+                if (index_.brick_index_.status() != BaselineStatus::Completed) {
                     finishFailure(
-                        BaselineStatus::SkippedByPolicy,
-                        baseTileFailureDetail(BaselineStatus::SkippedByPolicy)
+                        index_.brick_index_.status(),
+                        baseTileFailureDetail(index_.brick_index_.status())
                     );
                     return true;
                 }
-                phase_ = HBrickBuildStage::FinalizeBrick;
+
+                phase_ = HBrickBuildStage::Hierarchy;
                 phase_started_ns_ = monotonicNowNanoseconds();
+                advanceWork();
                 return false;
             }
 
-            const TileSlot& slot = decomposition_.slotByIndex(next_base_tile_index_);
-            uint64_t tile_closure_ns = 0U;
-            BaseTileSummary summary = buildBaseTile(
-                *graph_,
-                *layout_,
-                slot,
-                config_.max_memory_bytes,
-                &tile_closure_ns,
-                &base_tile_closure_scratch_
-            );
-            report_.base_tile_closure_nanoseconds += tile_closure_ns;
-            tile_index_.summaries_[next_base_tile_index_] = std::move(summary);
-
-            const BaseTileSummary& stored =
-                tile_index_.summaries_[next_base_tile_index_];
-            if (stored.status == BaselineStatus::Completed) {
-                for (uint32_t local_index = 0U; local_index < stored.numLocalVertices();
-                     ++local_index) {
-                    const uint32_t global_vertex = stored.global_vertices[local_index];
-                    tile_index_.global_vertex_tile_index_[global_vertex] =
-                        next_base_tile_index_;
-                    tile_index_.global_vertex_local_index_[global_vertex] = local_index;
-                }
-            }
-
-            progress_.current_base_tile_index = next_base_tile_index_;
-            ++next_base_tile_index_;
-            advanceWork();
             return false;
-        }
-        case HBrickBuildStage::FinalizeBrick: {
-            BrickIndex& brick_index = index_.brick_index_;
-            switch (static_cast<FinalizeSubstep>(finalize_substep_)) {
-                case FinalizeSubstep::PortIndex: {
-                    brick_index.tile_index_ = std::move(tile_index_);
-                    tile_index_ = BrickTileIndex{};
-                    if (!brick_index.tile_index_.allTilesCompleted()) {
-                        finishFailure(
-                            BaselineStatus::SkippedByPolicy,
-                            "flat BRICK assembly skipped incomplete base tiles"
-                        );
-                        return true;
-                    }
-
-                    brick_index.port_index_ = PortIndex::build(
-                        brick_index.tile_index_,
-                        graph_->numVertices()
-                    );
-                    brick_index.seam_edges_.clear();
-                    seam_vertex_cursor_ = 0U;
-                    finalize_substep_ = static_cast<uint8_t>(FinalizeSubstep::SeamEdges);
-                    return false;
-                }
-                case FinalizeSubstep::SeamEdges: {
-                    const uint32_t vertex_end = std::min(
-                        seam_vertex_cursor_ + kSeamVerticesPerStep,
-                        graph_->numVertices()
-                    );
-                    collectSeamEdgesForVertexRange(
-                        graph_->csrGraph(),
-                        brick_index.tile_index_,
-                        brick_index.port_index_,
-                        seam_vertex_cursor_,
-                        vertex_end,
-                        brick_index.seam_edges_
-                    );
-                    seam_vertex_cursor_ = vertex_end;
-                    if (seam_vertex_cursor_ < graph_->numVertices()) {
-                        return false;
-                    }
-
-                    port_graph_tile_cursor_ = 0U;
-                    port_graph_builder_.emplace(brick_index.port_index_.numPorts());
-                    finalize_substep_ = static_cast<uint8_t>(FinalizeSubstep::PortGraph);
-                    return false;
-                }
-                case FinalizeSubstep::PortGraph: {
-                    if (!port_graph_builder_.has_value()) {
-                        finishFailure(BaselineStatus::Failed, "port graph builder missing");
-                        return true;
-                    }
-
-                    const uint32_t num_tiles = brick_index.tile_index_.decomposition().numSlots();
-                    const uint32_t tile_end = std::min(
-                        port_graph_tile_cursor_ + kPortGraphTilesPerStep,
-                        num_tiles
-                    );
-                    for (uint32_t tile_index_value = port_graph_tile_cursor_;
-                         tile_index_value < tile_end;
-                         ++tile_index_value) {
-                        addIntraTilePortEdgesForTile(
-                            tile_index_value,
-                            brick_index.tile_index_,
-                            brick_index.port_index_,
-                            *port_graph_builder_
-                        );
-                    }
-                    port_graph_tile_cursor_ = tile_end;
-                    if (port_graph_tile_cursor_ < num_tiles) {
-                        return false;
-                    }
-
-                    addSeamEdgesToPortGraph(*port_graph_builder_, brick_index.seam_edges_);
-                    brick_index.port_graph_ = port_graph_builder_->build();
-                    port_graph_builder_.reset();
-                    brick_index.status_ = BaselineStatus::Completed;
-
-                    report_.brick_finalize_nanoseconds =
-                        monotonicNowNanoseconds() - phase_started_ns_;
-                    report_.num_ports = brick_index.port_index_.numPorts();
-                    report_.num_seams =
-                        static_cast<uint32_t>(brick_index.seam_edges_.size());
-
-                    finalize_substep_ = static_cast<uint8_t>(FinalizeSubstep::PortIndex);
-                    phase_ = HBrickBuildStage::Hierarchy;
-                    phase_started_ns_ = monotonicNowNanoseconds();
-                    advanceWork();
-                    return false;
-                }
-            }
-
-            finishFailure(BaselineStatus::Failed, "flat BRICK assembly failed");
-            return true;
         }
         case HBrickBuildStage::Hierarchy: {
             report_.hierarchy_nanoseconds =
@@ -482,6 +375,7 @@ bool HBrickIndexBuilder::step() noexcept {
 
 void HBrickIndexBuilder::cancel() noexcept {
     cancelled_ = true;
+    brick_index_builder_.cancel();
 }
 
 bool HBrickIndexBuilder::running() const noexcept {
@@ -500,10 +394,7 @@ HBrickIndex HBrickIndexBuilder::takeIndex() {
     HBrickIndex result = std::move(index_);
     phase_ = HBrickBuildStage::Idle;
     progress_ = HBrickBuildProgress{};
-    finalize_substep_ = 0U;
-    seam_vertex_cursor_ = 0U;
-    port_graph_tile_cursor_ = 0U;
-    port_graph_builder_.reset();
+    brick_index_builder_ = BrickIndexBuilder{};
     graph_ = nullptr;
     layout_ = nullptr;
     return result;
@@ -519,9 +410,9 @@ void HBrickIndexBuilder::finishFailure(
     report_.status_detail = detail != nullptr ? detail : "";
     report_.total_nanoseconds = monotonicNowNanoseconds() - build_started_ns_;
     if (index_.brick_index_.status() == BaselineStatus::NotRun
-        && tile_index_.decomposition_.numSlots() > 0U) {
+        && index_.brick_index_.tiles().decomposition().numSlots() > 0U) {
         countBaseTileOutcomes(
-            tile_index_,
+            index_.brick_index_.tiles(),
             report_.num_base_completed,
             report_.num_base_skipped,
             report_.num_base_with_closure,

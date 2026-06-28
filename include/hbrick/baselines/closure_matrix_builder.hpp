@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "hbrick/bit/bit_matrix.hpp"
+#include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/graph/csr_graph.hpp"
 
 namespace hbrick {
@@ -74,7 +75,8 @@ public:
     static void transitiveClosureKleeneTruncatedInPlace(
         BitMatrix& reflexive_relation,
         const CsrGraph& graph,
-        BitMatrix* scratch = nullptr
+        BitMatrix* scratch = nullptr,
+        KleeneSquaringOptions options = {}
     );
 
     /**

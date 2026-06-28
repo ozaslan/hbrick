@@ -23,6 +23,8 @@
 #include "hbrick/baselines/scc_dag_search_baseline.hpp"
 #include "hbrick/baselines/two_hop_baseline.hpp"
 #include "hbrick/baselines/grail_baseline.hpp"
+#include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/baselines/brick_closure_baseline.hpp"
 #include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/hbrick_baseline.hpp"
@@ -244,18 +246,23 @@ struct GridBenchmarkContext {
                 config.max_memory_bytes
             );
             return baselines.brick_search.status();
-        case ReachabilityBaselineId::BrickClosure:
+        case ReachabilityBaselineId::BrickClosure: {
             if (!grid_context.has_grid || grid_context.grid_graph == nullptr
                 || grid_context.layout == nullptr) {
                 return BaselineStatus::SkippedByPolicy;
             }
+            KleeneSquaringOptions kleene_options{};
+            kleene_options.use_parallel = config.kleene_use_parallel;
+            kleene_options.num_threads = config.kleene_num_threads;
             baselines.brick_closure.preprocess(
                 *grid_context.grid_graph,
                 *grid_context.layout,
                 config.brick_tile_size,
-                config.max_memory_bytes
+                config.max_memory_bytes,
+                kleene_options
             );
             return baselines.brick_closure.status();
+        }
         case ReachabilityBaselineId::HBrick:
             if (!grid_context.has_grid || grid_context.grid_graph == nullptr
                 || grid_context.layout == nullptr) {
@@ -460,6 +467,13 @@ enum class MethodPhase : uint8_t {
     Query,
     Correctness,
 };
+
+[[nodiscard]] bool usesIncrementalBrickPreprocess(
+    const ReachabilityBaselineId method
+) noexcept {
+    return method == ReachabilityBaselineId::BrickClosure
+        || method == ReachabilityBaselineId::BrickSearch;
+}
 
 [[nodiscard]] bool usesIncrementalClosurePreprocess(
     const ReachabilityBaselineId method
@@ -705,6 +719,8 @@ struct ClosureSpeedupProjection {
     uint64_t preprocess_units = 1ULL;
     if (usesIncrementalClosurePreprocess(method) && num_vertices > 0U) {
         preprocess_units = num_vertices;
+    } else if (usesIncrementalBrickPreprocess(method) && num_vertices > 0U) {
+        preprocess_units = static_cast<uint64_t>(num_vertices) + 64ULL;
     } else if (method == ReachabilityBaselineId::SccDagSearch && num_vertices > 0U) {
         preprocess_units = static_cast<uint64_t>(num_vertices) * 3ULL + 2ULL;
     }
@@ -730,6 +746,9 @@ struct ClosureSpeedupProjection {
 
         if (method_phase == MethodPhase::Preprocess) {
         if (usesIncrementalClosurePreprocess(method) && closure_pivot_total > 0U) {
+            remaining += static_cast<uint64_t>(closure_pivot_total)
+                - static_cast<uint64_t>(closure_pivots_completed);
+        } else if (usesIncrementalBrickPreprocess(method) && closure_pivot_total > 0U) {
             remaining += static_cast<uint64_t>(closure_pivot_total)
                 - static_cast<uint64_t>(closure_pivots_completed);
         } else if (method == ReachabilityBaselineId::SccDagSearch
@@ -829,6 +848,9 @@ struct ReachabilityBenchmarkJob::Impl {
     uint64_t incremental_closure_rss_before = 0U;
     bool incremental_scc_search_running = false;
     uint64_t incremental_scc_search_started_ns = 0U;
+    bool incremental_brick_running = false;
+    uint64_t incremental_brick_started_ns = 0U;
+    uint64_t incremental_brick_rss_before = 0U;
     std::atomic<bool> skip_current_method_requested{false};
 
     [[nodiscard]] GridBenchmarkContext gridContext() const noexcept {
@@ -901,7 +923,13 @@ struct ReachabilityBenchmarkJob::Impl {
             baselines.scc_search.cancelPreprocess();
             incremental_scc_search_running = false;
         }
+        if (incremental_brick_running) {
+            baselines.brick_closure.cancelPreprocess();
+            baselines.brick_search.cancelPreprocess();
+            incremental_brick_running = false;
+        }
         incremental_scc_search_started_ns = 0U;
+        incremental_brick_started_ns = 0U;
         progress.methods_completed = static_cast<uint32_t>(method_index);
         progress.preprocess_started_ns = 0U;
         current_query_times.clear();
@@ -929,6 +957,23 @@ struct ReachabilityBenchmarkJob::Impl {
                 closure_pivot_total,
                 baselines.scc_closure.preprocessPivotTotal()
             );
+        } else if (usesIncrementalBrickPreprocess(method) && incremental_brick_running) {
+            const uint64_t work_completed =
+                method == ReachabilityBaselineId::BrickClosure
+                    ? baselines.brick_closure.preprocessWorkCompleted()
+                    : baselines.brick_search.preprocessWorkCompleted();
+            const uint64_t work_total =
+                method == ReachabilityBaselineId::BrickClosure
+                    ? baselines.brick_closure.preprocessWorkTotal()
+                    : baselines.brick_search.preprocessWorkTotal();
+            closure_pivots_completed = static_cast<uint32_t>(std::min<uint64_t>(
+                work_completed,
+                std::numeric_limits<uint32_t>::max()
+            ));
+            closure_pivot_total = static_cast<uint32_t>(std::min<uint64_t>(
+                work_total,
+                std::numeric_limits<uint32_t>::max()
+            ));
         } else if (method == ReachabilityBaselineId::SccDagSearch
             && incremental_scc_search_running) {
             closure_pivots_completed = static_cast<uint32_t>(std::min<uint64_t>(
@@ -1192,6 +1237,161 @@ struct ReachabilityBenchmarkJob::Impl {
         setStageWork(0U, config.warmup_queries);
         return IncrementalClosurePreprocessResult::CompletedWarmup;
     }
+
+    IncrementalClosurePreprocessResult stepIncrementalBrickPreprocess(
+        BaselineBenchmarkMetrics& metrics
+    ) {
+        const ReachabilityBaselineId method = methods[method_index];
+
+        if (skip_current_method_requested.exchange(false, std::memory_order_acq_rel)) {
+            if (method == ReachabilityBaselineId::BrickClosure) {
+                baselines.brick_closure.cancelPreprocess();
+            } else {
+                baselines.brick_search.cancelPreprocess();
+            }
+            incremental_brick_running = false;
+            metrics.status = BaselineStatus::SkippedByPolicy;
+            metrics.policy_skip_detail =
+                std::string("Stopped by user during ")
+                + reachabilityBaselineName(method)
+                + " preprocessing.";
+            progress.preprocess_started_ns = 0U;
+            skipRemainingWorkForCurrentMethod();
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
+        const GridBenchmarkContext grid_context = gridContext();
+        if (!grid_context.has_grid || grid_context.grid_graph == nullptr
+            || grid_context.layout == nullptr) {
+            metrics.status = BaselineStatus::SkippedByPolicy;
+            metrics.policy_skip_detail =
+                "Brick baselines require DirectedGridGraph and MazeLayout benchmark input.";
+            skipRemainingWorkForCurrentMethod();
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
+        if (!incremental_brick_running) {
+            incremental_brick_rss_before = currentProcessRssBytes();
+            incremental_brick_started_ns = BenchTimer::steadyNowNanoseconds();
+            progress.preprocess_started_ns = incremental_brick_started_ns;
+            if (method == ReachabilityBaselineId::BrickClosure) {
+                KleeneSquaringOptions kleene_options{};
+                kleene_options.use_parallel = config.kleene_use_parallel;
+                kleene_options.num_threads = config.kleene_num_threads;
+                baselines.brick_closure.beginPreprocess(
+                    *grid_context.grid_graph,
+                    *grid_context.layout,
+                    config.brick_tile_size,
+                    config.max_memory_bytes,
+                    kleene_options
+                );
+            } else {
+                baselines.brick_search.beginPreprocess(
+                    *grid_context.grid_graph,
+                    *grid_context.layout,
+                    config.brick_tile_size,
+                    config.max_memory_bytes
+                );
+            }
+            incremental_brick_running = true;
+            const uint64_t work_total =
+                method == ReachabilityBaselineId::BrickClosure
+                    ? baselines.brick_closure.preprocessWorkTotal()
+                    : baselines.brick_search.preprocessWorkTotal();
+            setStageWork(
+                0U,
+                static_cast<uint32_t>(std::min<uint64_t>(
+                    std::max<uint64_t>(work_total, 1ULL),
+                    std::numeric_limits<uint32_t>::max()
+                ))
+            );
+        }
+
+        const uint64_t work_before =
+            method == ReachabilityBaselineId::BrickClosure
+                ? baselines.brick_closure.preprocessWorkCompleted()
+                : baselines.brick_search.preprocessWorkCompleted();
+        const bool finished =
+            method == ReachabilityBaselineId::BrickClosure
+                ? baselines.brick_closure.preprocessStep()
+                : baselines.brick_search.preprocessStep();
+        const uint64_t work_after =
+            method == ReachabilityBaselineId::BrickClosure
+                ? baselines.brick_closure.preprocessWorkCompleted()
+                : baselines.brick_search.preprocessWorkCompleted();
+        advanceWork(work_after - work_before);
+        const uint64_t work_total =
+            method == ReachabilityBaselineId::BrickClosure
+                ? baselines.brick_closure.preprocessWorkTotal()
+                : baselines.brick_search.preprocessWorkTotal();
+        setStageWork(
+            static_cast<uint32_t>(std::min<uint64_t>(
+                work_after,
+                std::numeric_limits<uint32_t>::max()
+            )),
+            static_cast<uint32_t>(std::min<uint64_t>(
+                std::max<uint64_t>(work_total, 1ULL),
+                std::numeric_limits<uint32_t>::max()
+            ))
+        );
+
+        metrics.preprocess_nanoseconds =
+            BenchTimer::steadyNowNanoseconds() - incremental_brick_started_ns;
+        refreshTotalBenchmarkNanoseconds(metrics);
+
+        if (!finished) {
+            return IncrementalClosurePreprocessResult::StepIncomplete;
+        }
+
+        incremental_brick_running = false;
+        progress.preprocess_started_ns = 0U;
+        metrics.status =
+            method == ReachabilityBaselineId::BrickClosure
+                ? baselines.brick_closure.status()
+                : baselines.brick_search.status();
+        metrics.estimated_index_bytes = indexStorageBytesForBaseline(
+            method,
+            baselines,
+            graph
+        );
+        const uint64_t rss_after = currentProcessRssBytes();
+        if (incremental_brick_rss_before > 0U && rss_after >= incremental_brick_rss_before) {
+            metrics.preprocess_rss_delta_bytes = rss_after - incremental_brick_rss_before;
+        }
+        refreshTotalBenchmarkNanoseconds(metrics);
+
+        if (method == ReachabilityBaselineId::BrickClosure
+            && metrics.status == BaselineStatus::Completed) {
+            metrics.warshall_matrix_order =
+                baselines.brick_closure.index().ports().numPorts();
+            metrics.warshall_pivot_total = metrics.warshall_matrix_order;
+            metrics.warshall_pivots_completed = metrics.warshall_pivot_total;
+            metrics.kleene_parallel = baselines.brick_closure.kleeneOptions().use_parallel;
+            metrics.kleene_thread_count = baselines.brick_closure.kleeneThreadCount();
+        }
+
+        if (metrics.status == BaselineStatus::SkippedByPolicy) {
+            setMemoryCapSkipDetail(
+                metrics,
+                method,
+                indexStorageBytesForBaseline(method, baselines, graph) > 0U
+                    ? indexStorageBytesForBaseline(method, baselines, graph)
+                    : estimatedIndexBytesForMethod(method, graph, config),
+                config.max_memory_bytes
+            );
+        }
+
+        if (metrics.status != BaselineStatus::Completed) {
+            skipRemainingWorkForCurrentMethod();
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
+        method_phase = MethodPhase::Warmup;
+        query_index = 0U;
+        progress.stage = ReachabilityBenchmarkProgress::Stage::WarmingUp;
+        setStageWork(0U, config.warmup_queries);
+        return IncrementalClosurePreprocessResult::CompletedWarmup;
+    }
 };
 
 namespace {
@@ -1404,6 +1604,15 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                         break;
                     }
 
+                    if (usesIncrementalBrickPreprocess(method)) {
+                        const auto outcome = impl_->stepIncrementalBrickPreprocess(metrics);
+                        if (outcome
+                            == Impl::IncrementalClosurePreprocessResult::StepIncomplete) {
+                            break;
+                        }
+                        break;
+                    }
+
                     impl_->setStageWork(0U, 1U);
                     if (baselineBuildsPreprocessIndex(method)) {
                         const uint64_t rss_before = currentProcessRssBytes();
@@ -1482,6 +1691,10 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                             impl_->baselines.brick_closure.index().ports().numPorts();
                         metrics.warshall_pivot_total = metrics.warshall_matrix_order;
                         metrics.warshall_pivots_completed = metrics.warshall_pivot_total;
+                        metrics.kleene_parallel =
+                            impl_->baselines.brick_closure.kleeneOptions().use_parallel;
+                        metrics.kleene_thread_count =
+                            impl_->baselines.brick_closure.kleeneThreadCount();
                     }
 
                     if (metrics.status != BaselineStatus::Completed) {

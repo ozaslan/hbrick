@@ -8,6 +8,7 @@ add_library(
     port_index.cpp
     port_graph.cpp
     brick_index.cpp
+    brick_index_builder.cpp
     group_tile_slots.cpp
     external_boundary_ports.cpp
     hierarchy_tree.cpp

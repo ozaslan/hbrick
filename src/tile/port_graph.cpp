@@ -41,23 +41,6 @@ void collectSeamEdgesForVertexRange(
     }
 }
 
-std::vector<SeamEdge> collectSeamEdges(
-    const CsrGraph& graph,
-    const BrickTileIndex& tile_index,
-    const PortIndex& port_index
-) {
-    std::vector<SeamEdge> seam_edges;
-    collectSeamEdgesForVertexRange(
-        graph,
-        tile_index,
-        port_index,
-        0U,
-        graph.numVertices(),
-        seam_edges
-    );
-    return seam_edges;
-}
-
 void addIntraTilePortEdgesForTile(
     const uint32_t tile_index_value,
     const BrickTileIndex& tile_index,
@@ -101,23 +84,6 @@ void addSeamEdgesToPortGraph(
     for (const SeamEdge& seam_edge : seam_edges) {
         builder.addEdge(seam_edge.from_port_id, seam_edge.to_port_id);
     }
-}
-
-CsrGraph buildPortGraphCsr(
-    const BrickTileIndex& tile_index,
-    const PortIndex& port_index,
-    const std::span<const SeamEdge> seam_edges
-) {
-    CsrGraphBuilder builder{port_index.numPorts()};
-
-    for (uint32_t tile_index_value = 0U;
-         tile_index_value < tile_index.decomposition().numSlots();
-         ++tile_index_value) {
-        addIntraTilePortEdgesForTile(tile_index_value, tile_index, port_index, builder);
-    }
-
-    addSeamEdgesToPortGraph(builder, seam_edges);
-    return builder.build();
 }
 
 }  // namespace hbrick

@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -24,6 +25,9 @@
 #include "map_render.hpp"
 
 namespace hbrick::tools {
+
+/** @brief Number of selectable @ref hbrick::ReachabilityBaselineId values. */
+inline constexpr std::size_t kBenchmarkMethodSlotCount = 10U;
 
 /** @brief What right-clicking a cell highlights on the canvas. */
 enum class ProbeMode : uint8_t {
@@ -82,6 +86,9 @@ struct OrientationState {
     float benchmark_memory_gib = 8.0F;
     /** @brief Auto-stop SccDagClosure / FullClosure when projected total speedup vs CsrBfs is too low. */
     bool benchmark_closure_early_stop = false;
+    /** @brief Per-method inclusion toggles for the next benchmark run. */
+    std::array<bool, kBenchmarkMethodSlotCount> benchmark_method_enabled{};
+    bool benchmark_methods_initialized = false;
 
     ProbeMode probe_mode = ProbeMode::Reachability;
     bool probe_valid = false;
@@ -204,15 +211,50 @@ void cancelDensityEstimate(OrientationState& state);
 void stopDensityEstimate(OrientationState& state);
 
 /**
+ * @brief Opens the benchmark results modal without starting a job.
+ */
+void openBenchmarkPanel(OrientationState& state) noexcept;
+
+/**
+ * @brief Ensures @ref OrientationState::benchmark_method_enabled has default selections.
+ */
+void ensureBenchmarkMethodDefaults(OrientationState& state) noexcept;
+
+/**
+ * @brief Resets method checkboxes to the library default benchmark set (no H-BRICK).
+ */
+void resetBenchmarkMethodDefaults(OrientationState& state) noexcept;
+
+/** @brief Returns how many benchmark methods are currently selected. */
+[[nodiscard]] std::size_t countSelectedBenchmarkMethods(
+    const OrientationState& state
+) noexcept;
+
+/**
+ * @brief Builds @ref hbrick::ReachabilityBenchmarkConfig from panel fields and selected methods.
+ *
+ * @return @c false when no methods are selected.
+ */
+[[nodiscard]] bool prepareBenchmarkConfigFromPanel(OrientationState& state) noexcept;
+
+/**
  * @brief Starts an incremental reachability baseline benchmark.
  *
  * Uses passable maze vertices as the query universe and the panel's generated
- * directed CSR graph. No-op when @c state.generated is @c false.
+ * directed CSR graph. No-op when @c state.generated is @c false or no methods
+ * are selected. Call @ref prepareBenchmarkConfigFromPanel first.
  */
 void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout);
 
 /** @brief Aborts an active benchmark job without blocking the caller. */
 void cancelReachabilityBenchmark(OrientationState& state);
+
+/**
+ * @brief Discards the current benchmark runner, results, and follow-up density job.
+ *
+ * Keeps method selection and workload settings. Safe while idle or after a run.
+ */
+void resetBenchmarkSession(OrientationState& state) noexcept;
 
 /** @brief Skips the active benchmark method (e.g. aborts closure Warshall preprocessing). */
 void skipCurrentBenchmarkMethod(OrientationState& state);

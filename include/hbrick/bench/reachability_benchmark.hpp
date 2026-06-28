@@ -93,6 +93,19 @@ struct ReachabilityBenchmarkConfig {
     std::vector<ReachabilityBaselineId> methods;
     /** @brief Nominal base tile size for BRICK / H-BRICK grid baselines. @ingroup hbrick_bench */
     TileSize brick_tile_size{4U, 4U};
+    /**
+     * @brief When @c true, Kleene squaring during @ref ReachabilityBaselineId::BrickClosure
+     *        preprocess uses multi-threaded boolean matrix squaring.
+     * @ingroup hbrick_bench
+     */
+    bool kleene_use_parallel = false;
+    /**
+     * @brief Kleene worker count when @ref kleene_use_parallel is @c true.
+     * @ingroup hbrick_bench
+     *
+     * @c 0 selects hardware concurrency (capped).
+     */
+    uint32_t kleene_num_threads = 0U;
     /** @brief Child-slot grouping for @ref ReachabilityBaselineId::HBrick. @ingroup hbrick_bench */
     GroupSize hbrick_group_size{2U, 2U};
     /**
@@ -172,6 +185,10 @@ struct BaselineBenchmarkMetrics {
     uint32_t warshall_pivots_completed = 0U;
     /** @brief Total Floyd-Warshall pivot steps expected for this method. @ingroup hbrick_bench */
     uint32_t warshall_pivot_total = 0U;
+    /** @brief Whether Kleene squaring used parallel workers (BrickClosure). @ingroup hbrick_bench */
+    bool kleene_parallel = false;
+    /** @brief Effective Kleene worker count when @ref kleene_parallel is @c true. @ingroup hbrick_bench */
+    uint32_t kleene_thread_count = 1U;
     /**
      * @brief Human-readable explanation when @ref status is @ref BaselineStatus::SkippedByPolicy.
      * @ingroup hbrick_bench

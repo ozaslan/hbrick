@@ -4,6 +4,9 @@
 #include <limits>
 
 #include "hbrick/baselines/closure_matrix_builder.hpp"
+#include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/bit/kleene_squaring_options.hpp"
+#include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
@@ -14,11 +17,14 @@ namespace hbrick {
 
 namespace {
 
+constexpr uint32_t kAdjacencyVerticesPerStep = 256U;
+
 [[nodiscard]] ReachabilityAnswer queryWithPortClosure(
     const BrickIndex& index,
     const BitMatrix& port_closure,
     const uint32_t source,
-    const uint32_t target
+    const uint32_t target,
+    BitVector& reachable_ports_scratch
 ) noexcept {
     const BrickTileIndex& tiles = index.tiles();
     const PortIndex& ports = index.ports();
@@ -49,6 +55,8 @@ namespace {
         return ReachabilityAnswer::Unreachable;
     }
 
+    reachable_ports_scratch.clear();
+
     for (uint32_t src_tile_port = 0U; src_tile_port < source_summary.numPorts();
          ++src_tile_port) {
         if (!source_summary.vertex_to_boundary.test(source_local, src_tile_port)) {
@@ -62,22 +70,24 @@ namespace {
             continue;
         }
 
-        for (uint32_t dst_tile_port = 0U; dst_tile_port < target_summary.numPorts();
-             ++dst_tile_port) {
-            if (!target_summary.boundary_to_vertex.test(dst_tile_port, target_local)) {
-                continue;
-            }
+        reachable_ports_scratch.rowOr(port_closure.row(src_port_id));
+    }
 
-            const uint32_t dst_port_id =
-                ports.portIdForTilePort(target_tile, dst_tile_port);
-            if (dst_port_id == std::numeric_limits<uint32_t>::max()
-                || dst_port_id >= num_ports) {
-                continue;
-            }
+    for (uint32_t dst_tile_port = 0U; dst_tile_port < target_summary.numPorts();
+         ++dst_tile_port) {
+        if (!target_summary.boundary_to_vertex.test(dst_tile_port, target_local)) {
+            continue;
+        }
 
-            if (port_closure.test(src_port_id, dst_port_id)) {
-                return ReachabilityAnswer::Reachable;
-            }
+        const uint32_t dst_port_id =
+            ports.portIdForTilePort(target_tile, dst_tile_port);
+        if (dst_port_id == std::numeric_limits<uint32_t>::max()
+            || dst_port_id >= num_ports) {
+            continue;
+        }
+
+        if (reachable_ports_scratch.test(dst_port_id)) {
+            return ReachabilityAnswer::Reachable;
         }
     }
 
@@ -86,44 +96,195 @@ namespace {
 
 }  // namespace
 
-void BrickClosureBaseline::preprocess(
+void BrickClosureBaseline::resetPreprocessState() noexcept {
+    index_builder_.cancel();
+    preprocess_phase_ = PreprocessPhase::Idle;
+    preprocess_work_completed_ = 0U;
+    preprocess_work_total_ = 0U;
+    adjacency_vertex_cursor_ = 0U;
+    kleene_rounds_remaining_ = 0U;
+    kleene_rounds_total_ = 0U;
+    max_memory_bytes_ = 0U;
+    query_reachable_ports_ = BitVector{};
+}
+
+void BrickClosureBaseline::beginPreprocess(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSize nominal_tile_size,
-    const uint64_t max_memory_bytes
+    const uint64_t max_memory_bytes,
+    const KleeneSquaringOptions kleene_options
 ) {
     status_ = BaselineStatus::NotRun;
     index_ = BrickIndex{};
     port_closure_ = BitMatrix{};
     port_closure_scratch_ = BitMatrix{};
+    resetPreprocessState();
 
-    index_ = BrickIndex::build(graph, layout, nominal_tile_size, max_memory_bytes);
-    if (index_.status() != BaselineStatus::Completed) {
-        status_ = index_.status();
+    max_memory_bytes_ = max_memory_bytes;
+    kleene_options_ = kleene_options;
+    kleene_thread_count_ = resolveKleeneThreadCount(kleene_options_);
+    index_builder_.begin(graph, layout, nominal_tile_size, max_memory_bytes);
+    if (!index_builder_.running()) {
+        status_ = index_builder_.report().valid
+            ? index_builder_.report().status
+            : BaselineStatus::Failed;
         return;
     }
 
+    preprocess_phase_ = PreprocessPhase::IndexBuild;
+    preprocess_work_total_ = index_builder_.progress().work_total + 1ULL;
+}
+
+void BrickClosureBaseline::beginAdjacencyBuild() noexcept {
     const uint32_t num_ports = index_.ports().numPorts();
-    if (!ClosureMatrixBuilder::canAllocateReflexiveAdjacency(num_ports, max_memory_bytes)) {
+    if (!ClosureMatrixBuilder::canAllocateReflexiveAdjacency(num_ports, max_memory_bytes_)) {
         status_ = BaselineStatus::SkippedByPolicy;
+        preprocess_phase_ = PreprocessPhase::Done;
         return;
     }
 
-    try {
-        port_closure_ = ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
-            index_.portGraph(),
-            max_memory_bytes
-        );
-        ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
-            port_closure_,
-            index_.portGraph(),
-            &port_closure_scratch_
-        );
+    port_closure_ = BitMatrix(num_ports, num_ports);
+    port_closure_scratch_ = BitMatrix{};
+    query_reachable_ports_ = BitVector(static_cast<size_t>(num_ports));
+    adjacency_vertex_cursor_ = 0U;
+    preprocess_phase_ = PreprocessPhase::AdjacencyBuild;
+    preprocess_work_total_ += static_cast<uint64_t>(num_ports);
+}
+
+void BrickClosureBaseline::runAdjacencyBatch() noexcept {
+    const CsrGraph& port_graph = index_.portGraph();
+    const uint32_t num_ports = port_graph.numVertices();
+    const uint32_t vertex_end = std::min(
+        adjacency_vertex_cursor_ + kAdjacencyVerticesPerStep,
+        num_ports
+    );
+
+    for (uint32_t vertex = adjacency_vertex_cursor_; vertex < vertex_end; ++vertex) {
+        port_closure_.set(vertex, vertex);
+        for (const uint32_t neighbor : port_graph.outNeighbors(vertex)) {
+            port_closure_.set(vertex, neighbor);
+        }
+        ++preprocess_work_completed_;
+    }
+
+    adjacency_vertex_cursor_ = vertex_end;
+    if (adjacency_vertex_cursor_ >= num_ports) {
+        beginKleeneClosure();
+    }
+}
+
+void BrickClosureBaseline::beginKleeneClosure() noexcept {
+    const uint32_t largest_component_size =
+        largestUndirectedComponentSize(index_.portGraph());
+    kleene_rounds_total_ =
+        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    kleene_rounds_remaining_ = kleene_rounds_total_;
+    preprocess_work_total_ += static_cast<uint64_t>(kleene_rounds_total_);
+    preprocess_phase_ = PreprocessPhase::KleeneClosure;
+
+    if (kleene_rounds_remaining_ == 0U) {
         status_ = BaselineStatus::Completed;
-    } catch (const std::exception&) {
-        status_ = BaselineStatus::Failed;
-        port_closure_ = BitMatrix{};
-        port_closure_scratch_ = BitMatrix{};
+        preprocess_phase_ = PreprocessPhase::Done;
+    }
+}
+
+bool BrickClosureBaseline::runKleeneStep() noexcept {
+    if (kleene_rounds_remaining_ == 0U) {
+        status_ = BaselineStatus::Completed;
+        preprocess_phase_ = PreprocessPhase::Done;
+        return true;
+    }
+
+    const bool fixpoint = BooleanClosure::transitiveClosureKleeneSquaringStepInPlace(
+        port_closure_,
+        port_closure_scratch_,
+        kleene_options_
+    );
+    ++preprocess_work_completed_;
+    if (fixpoint) {
+        kleene_rounds_remaining_ = 0U;
+        status_ = BaselineStatus::Completed;
+        preprocess_phase_ = PreprocessPhase::Done;
+        return true;
+    }
+
+    --kleene_rounds_remaining_;
+    if (kleene_rounds_remaining_ == 0U) {
+        status_ = BaselineStatus::Completed;
+        preprocess_phase_ = PreprocessPhase::Done;
+        return true;
+    }
+
+    return false;
+}
+
+bool BrickClosureBaseline::preprocessStep() noexcept {
+    switch (preprocess_phase_) {
+        case PreprocessPhase::Idle:
+        case PreprocessPhase::Done:
+            return true;
+        case PreprocessPhase::IndexBuild: {
+            if (!index_builder_.running()) {
+                status_ = index_builder_.report().valid
+                    ? index_builder_.report().status
+                    : BaselineStatus::Failed;
+                preprocess_phase_ = PreprocessPhase::Done;
+                return true;
+            }
+
+            const bool index_finished = index_builder_.step();
+            preprocess_work_completed_ = index_builder_.progress().work_completed;
+            preprocess_work_total_ = std::max<uint64_t>(
+                preprocess_work_total_,
+                index_builder_.progress().work_total + 1ULL
+            );
+
+            if (!index_builder_.running()) {
+                index_ = index_builder_.takeIndex();
+                status_ = index_.status();
+                if (status_ != BaselineStatus::Completed) {
+                    preprocess_phase_ = PreprocessPhase::Done;
+                    return true;
+                }
+                beginAdjacencyBuild();
+                if (preprocess_phase_ == PreprocessPhase::Done) {
+                    return true;
+                }
+                return false;
+            }
+
+            return index_finished;
+        }
+        case PreprocessPhase::AdjacencyBuild:
+            runAdjacencyBatch();
+            return preprocess_phase_ == PreprocessPhase::Done;
+        case PreprocessPhase::KleeneClosure:
+            return runKleeneStep();
+    }
+
+    return true;
+}
+
+void BrickClosureBaseline::cancelPreprocess() noexcept {
+    resetPreprocessState();
+    status_ = BaselineStatus::NotRun;
+}
+
+bool BrickClosureBaseline::preprocessActive() const noexcept {
+    return preprocess_phase_ != PreprocessPhase::Idle
+        && preprocess_phase_ != PreprocessPhase::Done;
+}
+
+void BrickClosureBaseline::preprocess(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSize nominal_tile_size,
+    const uint64_t max_memory_bytes,
+    const KleeneSquaringOptions kleene_options
+) {
+    beginPreprocess(graph, layout, nominal_tile_size, max_memory_bytes, kleene_options);
+    while (!preprocessStep()) {
     }
 }
 
@@ -146,7 +307,13 @@ ReachabilityAnswer BrickClosureBaseline::query(
         return ReachabilityAnswer::Reachable;
     }
 
-    return queryWithPortClosure(index_, port_closure_, source, target);
+    return queryWithPortClosure(
+        index_,
+        port_closure_,
+        source,
+        target,
+        query_reachable_ports_
+    );
 }
 
 uint64_t BrickClosureBaseline::indexStorageBytes() const noexcept {
@@ -157,4 +324,3 @@ uint64_t BrickClosureBaseline::indexStorageBytes() const noexcept {
 }
 
 }  // namespace hbrick
-

@@ -41,6 +41,19 @@ TEST(BitVector, RowOrCombinesWordStorage) {
     EXPECT_EQ(lhs.word(1U), 1ULL << 0U);
 }
 
+TEST(BitVector, RowOrNoOpWhenDimensionsMismatch) {
+    hbrick::BitVector lhs(64U);
+    hbrick::BitVector rhs(128U);
+
+    lhs.set(0U);
+    rhs.set(100U);
+
+    lhs.rowOr(rhs);
+
+    EXPECT_TRUE(lhs.test(0U));
+    EXPECT_FALSE(lhs.test(100U));
+}
+
 TEST(BitVector, OutOfRangeAccessIsSafe) {
     hbrick::BitVector bits(4U);
 

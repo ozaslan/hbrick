@@ -20,6 +20,7 @@ namespace hbrick {
 class DirectedGridGraph;
 class MazeLayout;
 class HBrickIndexBuilder;
+class BrickIndexBuilder;
 
 /**
  * @brief Flat BRICK index owning base tiles, the global port index, and port CSR.
@@ -36,15 +37,6 @@ public:
         const MazeLayout& layout,
         TileSize nominal_tile_size,
         uint64_t max_memory_bytes
-    );
-
-    /**
-     * @brief Assembles ports and seam graph from completed base tile summaries.
-     * @ingroup hbrick_tile
-     */
-    [[nodiscard]] static BrickIndex assemble(
-        BrickTileIndex tile_index,
-        const DirectedGridGraph& graph
     );
 
     /** @brief Outcome of building this index. @ingroup hbrick_tile */
@@ -66,6 +58,7 @@ public:
 
 private:
     friend class HBrickIndexBuilder;
+    friend class BrickIndexBuilder;
 
     BaselineStatus status_ = BaselineStatus::NotRun;
     BrickTileIndex tile_index_{};

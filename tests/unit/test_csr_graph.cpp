@@ -37,15 +37,15 @@ TEST(CsrGraph, OutNeighborsReturnSortedTargets) {
     EXPECT_TRUE(graph.outNeighbors(0U).empty());
 }
 
-TEST(CsrGraph, DuplicateEdgesArePreserved) {
+TEST(CsrGraph, DuplicateEdgesAreDeduplicated) {
     hbrick::CsrGraphBuilder builder{2U};
     builder.addEdge(0U, 1U);
     builder.addEdge(0U, 1U);
 
     const hbrick::CsrGraph graph = builder.build();
 
-    EXPECT_EQ(graph.numEdges(), 2U);
-    EXPECT_EQ(neighborsAsVector(graph, 0U), (std::vector<uint32_t>{1U, 1U}));
+    EXPECT_EQ(graph.numEdges(), 1U);
+    EXPECT_EQ(neighborsAsVector(graph, 0U), (std::vector<uint32_t>{1U}));
 }
 
 TEST(CsrGraph, BuilderRejectsOutOfRangeEndpoints) {

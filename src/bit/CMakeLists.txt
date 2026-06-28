@@ -3,6 +3,7 @@ add_library(
     bit_vector.cpp
     bit_matrix.cpp
     boolean_closure.cpp
+    kleene_squaring_options.cpp
 )
 
 target_include_directories(
@@ -12,7 +13,9 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(hbrick_bit PUBLIC hbrick_core hbrick_project_options)
+find_package(Threads REQUIRED)
+
+target_link_libraries(hbrick_bit PUBLIC hbrick_core hbrick_project_options Threads::Threads)
 target_link_libraries(hbrick_bit PRIVATE hbrick_project_warnings)
 
 add_library(hbrick::bit ALIAS hbrick_bit)

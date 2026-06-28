@@ -112,7 +112,14 @@ ReachabilityAnswer queryPortBfsWithAttachments(
 
 }  // namespace
 
-void BrickSearchBaseline::preprocess(
+void BrickSearchBaseline::resetPreprocessState() noexcept {
+    index_builder_.cancel();
+    preprocess_active_ = false;
+    preprocess_work_completed_ = 0U;
+    preprocess_work_total_ = 0U;
+}
+
+void BrickSearchBaseline::beginPreprocess(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSize nominal_tile_size,
@@ -121,11 +128,64 @@ void BrickSearchBaseline::preprocess(
     status_ = BaselineStatus::NotRun;
     index_ = BrickIndex{};
     port_scratch_ = GraphSearchScratch{};
+    resetPreprocessState();
 
-    index_ = BrickIndex::build(graph, layout, nominal_tile_size, max_memory_bytes);
-    status_ = index_.status();
-    if (status_ == BaselineStatus::Completed) {
-        port_scratch_.resetForGraph(index_.ports().numPorts());
+    index_builder_.begin(graph, layout, nominal_tile_size, max_memory_bytes);
+    if (!index_builder_.running()) {
+        status_ = index_builder_.report().valid
+            ? index_builder_.report().status
+            : BaselineStatus::Failed;
+        return;
+    }
+
+    preprocess_active_ = true;
+    preprocess_work_total_ = index_builder_.progress().work_total;
+}
+
+bool BrickSearchBaseline::preprocessStep() noexcept {
+    if (!preprocess_active_) {
+        return true;
+    }
+
+    if (!index_builder_.running()) {
+        preprocess_active_ = false;
+        return true;
+    }
+
+    const bool finished = index_builder_.step();
+    preprocess_work_completed_ = index_builder_.progress().work_completed;
+    preprocess_work_total_ = index_builder_.progress().work_total;
+
+    if (!index_builder_.running()) {
+        index_ = index_builder_.takeIndex();
+        status_ = index_.status();
+        if (status_ == BaselineStatus::Completed) {
+            port_scratch_.resetForGraph(index_.ports().numPorts());
+        }
+        preprocess_active_ = false;
+        return true;
+    }
+
+    return finished;
+}
+
+void BrickSearchBaseline::cancelPreprocess() noexcept {
+    resetPreprocessState();
+    status_ = BaselineStatus::NotRun;
+}
+
+bool BrickSearchBaseline::preprocessActive() const noexcept {
+    return preprocess_active_;
+}
+
+void BrickSearchBaseline::preprocess(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSize nominal_tile_size,
+    const uint64_t max_memory_bytes
+) {
+    beginPreprocess(graph, layout, nominal_tile_size, max_memory_bytes);
+    while (!preprocessStep()) {
     }
 }
 

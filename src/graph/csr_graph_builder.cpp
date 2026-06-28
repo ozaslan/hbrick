@@ -30,6 +30,16 @@ CsrGraph CsrGraphBuilder::build() const {
         }
         return lhs.to < rhs.to;
     });
+    sorted_edges.erase(
+        std::unique(
+            sorted_edges.begin(),
+            sorted_edges.end(),
+            [](const Edge32 lhs, const Edge32 rhs) noexcept {
+                return lhs.from == rhs.from && lhs.to == rhs.to;
+            }
+        ),
+        sorted_edges.end()
+    );
 
     std::vector<uint32_t> row_ptrs(static_cast<std::size_t>(num_vertices_) + 1U, 0U);
     for (const Edge32& edge : sorted_edges) {

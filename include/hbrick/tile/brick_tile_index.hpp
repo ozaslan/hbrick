@@ -20,6 +20,7 @@ namespace hbrick {
 class DirectedGridGraph;
 class MazeLayout;
 class HBrickIndexBuilder;
+class BrickIndexBuilder;
 
 /**
  * @brief Level-0 BRICK tile index: one @ref BaseTileSummary per decomposition slot.
@@ -78,6 +79,7 @@ public:
 
 private:
     friend class HBrickIndexBuilder;
+    friend class BrickIndexBuilder;
 
     TileDecomposition decomposition_{};
     std::vector<BaseTileSummary> summaries_{};

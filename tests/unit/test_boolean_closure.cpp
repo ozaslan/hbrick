@@ -4,6 +4,7 @@
 
 #include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/tile_closure_util.hpp"
@@ -186,6 +187,56 @@ TEST(BooleanClosure, KleeneSquaringMatchesWarshallOnRandomGraphs) {
             );
 
             EXPECT_TRUE(hbrick::bitMatricesEqual(warshall, kleene))
+                << "M=" << num_vertices << " density=" << density;
+        }
+    }
+}
+
+TEST(BooleanClosure, ParallelKleeneSquaringMatchesSerial) {
+    std::mt19937_64 rng{0xC1E3EULL};
+    std::uniform_real_distribution<double> coin(0.0, 1.0);
+
+    const uint32_t sizes[] = {64U, 96U, 128U};
+    const double densities[] = {0.08, 0.20};
+
+    for (const uint32_t num_vertices : sizes) {
+        for (const double density : densities) {
+            hbrick::CsrGraphBuilder builder{num_vertices};
+            for (uint32_t from = 0U; from < num_vertices; ++from) {
+                for (uint32_t to = 0U; to < num_vertices; ++to) {
+                    if (from != to && coin(rng) < density) {
+                        builder.addEdge(from, to);
+                    }
+                }
+            }
+            const hbrick::CsrGraph graph = builder.build();
+            const hbrick::BitMatrix base = hbrick::buildTileReflexiveAdjacencyOrThrow(
+                graph,
+                std::numeric_limits<uint64_t>::max()
+            );
+            const uint32_t squaring_count =
+                hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
+                    hbrick::largestUndirectedComponentSize(graph)
+                );
+
+            hbrick::BitMatrix serial = base;
+            hbrick::BitMatrix parallel = base;
+            hbrick::KleeneSquaringOptions parallel_options{};
+            parallel_options.use_parallel = true;
+            parallel_options.num_threads = 4U;
+
+            hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+                serial,
+                squaring_count
+            );
+            hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+                parallel,
+                squaring_count,
+                nullptr,
+                parallel_options
+            );
+
+            EXPECT_TRUE(hbrick::bitMatricesEqual(serial, parallel))
                 << "M=" << num_vertices << " density=" << density;
         }
     }

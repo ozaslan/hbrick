@@ -80,7 +80,8 @@ bool closurePreprocessActive(
     }
 
     return progress.current_method == ReachabilityBaselineId::SccDagClosure
-        || progress.current_method == ReachabilityBaselineId::FullClosure;
+        || progress.current_method == ReachabilityBaselineId::FullClosure
+        || progress.current_method == ReachabilityBaselineId::BrickClosure;
 }
 
 uint64_t referenceBfsTotalNanoseconds(

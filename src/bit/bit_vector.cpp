@@ -1,6 +1,7 @@
 #include "hbrick/bit/bit_vector.hpp"
 
 #include <algorithm>
+#include <cassert>
 
 namespace hbrick {
 
@@ -51,8 +52,12 @@ void BitVector::clear() noexcept {
 }
 
 void BitVector::rowOr(const BitVector& other) noexcept {
-    const size_t shared_words = std::min(words_.size(), other.words_.size());
-    for (size_t word_index = 0; word_index < shared_words; ++word_index) {
+    assert(num_bits_ == other.num_bits_);
+    if (num_bits_ != other.num_bits_) {
+        return;
+    }
+
+    for (size_t word_index = 0; word_index < words_.size(); ++word_index) {
         words_[word_index] |= other.words_[word_index];
     }
 }

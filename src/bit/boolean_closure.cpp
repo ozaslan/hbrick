@@ -1,11 +1,15 @@
 #include "hbrick/bit/boolean_closure.hpp"
 
 #include <bit>
+#include <thread>
 #include <utility>
+#include <vector>
 
 namespace hbrick {
 
 namespace {
+
+constexpr uint32_t kMinRowsForParallelKleene = 64U;
 
 [[nodiscard]] bool rowsDiffer(
     const BitVector& lhs,
@@ -56,18 +60,73 @@ void accumulateBooleanProductRow(
 [[nodiscard]] bool booleanMultiplyInto(
     const BitMatrix& lhs,
     const BitMatrix& rhs,
-    BitMatrix& out
+    BitMatrix& out,
+    const KleeneSquaringOptions& options
 ) noexcept {
     const uint32_t num_vertices = lhs.numRows();
-    bool changed = false;
+    const uint32_t thread_count = resolveKleeneThreadCount(options);
+    if (!options.use_parallel
+        || thread_count <= 1U
+        || num_vertices < kMinRowsForParallelKleene) {
+        bool changed = false;
+        for (uint32_t row = 0U; row < num_vertices; ++row) {
+            accumulateBooleanProductRow(lhs.row(row), rhs, out.row(row), num_vertices);
+            if (rowsDiffer(out.row(row), lhs.row(row))) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
 
-    for (uint32_t row = 0U; row < num_vertices; ++row) {
-        accumulateBooleanProductRow(lhs.row(row), rhs, out.row(row), num_vertices);
-        if (rowsDiffer(out.row(row), lhs.row(row))) {
-            changed = true;
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    std::vector<uint8_t> changed_flags(thread_count, 0U);
+
+    const uint32_t rows_per_thread =
+        (num_vertices + thread_count - 1U) / thread_count;
+    for (uint32_t worker_index = 0U; worker_index < thread_count; ++worker_index) {
+        const uint32_t row_begin = worker_index * rows_per_thread;
+        if (row_begin >= num_vertices) {
+            break;
+        }
+        const uint32_t row_end = std::min(row_begin + rows_per_thread, num_vertices);
+        workers.emplace_back([&, row_begin, row_end, worker_index]() {
+            bool local_changed = false;
+            for (uint32_t row = row_begin; row < row_end; ++row) {
+                accumulateBooleanProductRow(
+                    lhs.row(row),
+                    rhs,
+                    out.row(row),
+                    num_vertices
+                );
+                if (rowsDiffer(out.row(row), lhs.row(row))) {
+                    local_changed = true;
+                }
+            }
+            if (local_changed) {
+                changed_flags[worker_index] = 1U;
+            }
+        });
+    }
+
+    for (std::thread& worker : workers) {
+        worker.join();
+    }
+
+    for (const uint8_t flag : changed_flags) {
+        if (flag != 0U) {
+            return true;
         }
     }
-    return changed;
+    return false;
+}
+
+[[nodiscard]] bool booleanMultiplyInto(
+    const BitMatrix& lhs,
+    const BitMatrix& rhs,
+    BitMatrix& out
+) noexcept {
+    return booleanMultiplyInto(lhs, rhs, out, KleeneSquaringOptions{});
 }
 
 [[nodiscard]] BitMatrix& ensureScratch(
@@ -133,7 +192,8 @@ uint32_t BooleanClosure::kleeneSquaringCountForLargestComponent(
 void BooleanClosure::transitiveClosureKleeneSquaringInPlace(
     BitMatrix& relation,
     const uint32_t squaring_count,
-    BitMatrix* scratch
+    BitMatrix* scratch,
+    const KleeneSquaringOptions options
 ) {
     const uint32_t num_vertices = relation.numRows();
     if (num_vertices != relation.numCols() || squaring_count == 0U) {
@@ -144,11 +204,29 @@ void BooleanClosure::transitiveClosureKleeneSquaringInPlace(
     BitMatrix& scratch_matrix = ensureScratch(owned_scratch, scratch, num_vertices);
 
     for (uint32_t step = 0U; step < squaring_count; ++step) {
-        if (!booleanMultiplyInto(relation, relation, scratch_matrix)) {
+        if (transitiveClosureKleeneSquaringStepInPlace(relation, scratch_matrix, options)) {
             return;
         }
-        std::swap(relation, scratch_matrix);
     }
+}
+
+bool BooleanClosure::transitiveClosureKleeneSquaringStepInPlace(
+    BitMatrix& relation,
+    BitMatrix& scratch,
+    const KleeneSquaringOptions options
+) noexcept {
+    const uint32_t num_vertices = relation.numRows();
+    if (num_vertices != relation.numCols()) {
+        return true;
+    }
+
+    BitMatrix owned_scratch{};
+    BitMatrix& scratch_matrix = ensureScratch(owned_scratch, &scratch, num_vertices);
+    if (!booleanMultiplyInto(relation, relation, scratch_matrix, options)) {
+        return true;
+    }
+    std::swap(relation, scratch_matrix);
+    return false;
 }
 
 void BooleanClosure::transitiveClosureWarshallInPlace(BitMatrix& relation) {

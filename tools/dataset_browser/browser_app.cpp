@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <initializer_list>
 #include <random>
 
 #include <imgui_internal.h>
@@ -186,6 +187,8 @@ uint64_t rollSeed() {
 /** @brief Clears generated graph/SCC/probe data but keeps the chosen parameters. */
 void resetOrientationData(OrientationState& orient) {
     clearProbe(orient);
+    resetBenchmarkSession(orient);
+    cancelDensityEstimate(orient);
     orient.generated = false;
     orient.graph = DirectedGridGraph{};
     orient.graph_epoch = 0U;
@@ -2177,35 +2180,34 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         "When disabled, closure methods run all Warshall pivots unless you skip manually."
     );
 
+    ImGui::Checkbox(
+        "Parallel Kleene closure",
+        &orient.benchmark_config.kleene_use_parallel
+    );
+    itemTooltip(
+        "When enabled, BrickClosure port-graph Kleene squaring uses multiple CPU cores\n"
+        "for each boolean matrix squaring step (row-parallel multiply).\n"
+        "Run the benchmark twice with this on/off to compare preprocess time."
+    );
+
     ImGui::TextDisabled(
         "Flat BRICK tile: %u x %u (BRICK panel -> Sync to benchmark config)",
         orient.benchmark_config.brick_tile_size.width,
         orient.benchmark_config.brick_tile_size.height
     );
 
-    if (ImGui::Button("Run benchmark")) {
-        const uint32_t warmup = orient.benchmark_config.warmup_queries;
-        const uint32_t checks = orient.benchmark_config.correctness_check_count;
-        const uint32_t timed_queries = std::max(1U, orient.benchmark_timed_query_count);
-        const bool closure_early_stop = orient.benchmark_closure_early_stop;
-        const float memory_gib = orient.benchmark_memory_gib;
-        const hbrick::TileSize brick_tile_size =
-            orient.benchmark_config.brick_tile_size;
-        orient.benchmark_config = hbrick::ReachabilityBenchmarkConfig::allMethods();
-        orient.benchmark_config.brick_tile_size = brick_tile_size;
-        orient.benchmark_config.query_count = timed_queries;
-        orient.benchmark_config.warmup_queries = warmup;
-        orient.benchmark_config.correctness_check_count = checks;
-        orient.benchmark_config.closure_enable_projected_speedup_early_stop =
-            closure_early_stop;
-        orient.benchmark_config.max_memory_bytes = static_cast<uint64_t>(
-            static_cast<double>(memory_gib) * (1024.0 * 1024.0 * 1024.0)
-        );
-        beginReachabilityBenchmark(orient, panel.layout);
+    ensureBenchmarkMethodDefaults(orient);
+    ImGui::TextDisabled(
+        "%zu methods selected — open the benchmark panel to choose and start.",
+        countSelectedBenchmarkMethods(orient)
+    );
+
+    if (ImGui::Button("Open benchmark panel")) {
+        openBenchmarkPanel(orient);
     }
     itemTooltip(
-        "Compare reachability baselines on this directed graph using\n"
-        "a shared random query workload. Results appear in the progress dialog."
+        "Open the benchmark panel to select methods and press Start.\n"
+        "Workload settings above apply to the next run."
     );
     ImGui::EndDisabled();
 
@@ -2667,6 +2669,29 @@ void drawBenchmarkResultsTable(
     });
 
     draw_metric_row(
+        "Kleene",
+        "BrickClosure port-graph Kleene squaring: serial vs multi-core row-parallel squaring.",
+        [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
+        if (metrics.method != hbrick::ReachabilityBaselineId::BrickClosure
+            || metrics.status == hbrick::BaselineStatus::NotRun) {
+            ImGui::TextUnformatted("-");
+            return;
+        }
+        char buffer[64];
+        if (metrics.kleene_parallel) {
+            std::snprintf(
+                buffer,
+                sizeof(buffer),
+                "par x%u",
+                std::max(1U, metrics.kleene_thread_count)
+            );
+        } else {
+            std::snprintf(buffer, sizeof(buffer), "serial");
+        }
+        ImGui::TextUnformatted(buffer);
+    });
+
+    draw_metric_row(
         "RSS d",
         "Process resident-set increase during preprocessing (Linux only).",
         [&](const hbrick::BaselineBenchmarkMetrics& metrics, const std::size_t) {
@@ -2988,9 +3013,120 @@ void drawBenchmarkClosureHelpPanel(
     ImGui::TextWrapped(
         "Extrapolation: (pivot elapsed × pivot total ÷ pivots done). "
         "Auto-stop triggers when this projected speedup falls below 0.5× "
-        "(only if enabled before Run). Use Skip closure method to stop manually."
+        "(only if enabled before Start). Use Skip closure method to stop manually."
     );
     popBenchmarkPanelTextWrap();
+}
+
+void setBenchmarkMethodPreset(
+    OrientationState& orient,
+    const std::initializer_list<hbrick::ReachabilityBaselineId> methods
+) noexcept {
+    orient.benchmark_method_enabled.fill(false);
+    for (const hbrick::ReachabilityBaselineId method : methods) {
+        const std::size_t index = static_cast<std::size_t>(method);
+        if (index < kBenchmarkMethodSlotCount) {
+            orient.benchmark_method_enabled[index] = true;
+        }
+    }
+}
+
+void drawBenchmarkMethodSelection(
+    OrientationState& orient,
+    const bool read_only
+) {
+    ensureBenchmarkMethodDefaults(orient);
+
+    ImGui::SeparatorText("Methods");
+    ImGui::BeginDisabled(read_only);
+    if (ImGui::Button("Default")) {
+        resetBenchmarkMethodDefaults(orient);
+    }
+    itemTooltip("CsrBfs, CsrDfs, SccDagSearch, SccDagClosure, TwoHop, Grail, "
+                "BrickSearch, BrickClosure, FullClosure (no H-BRICK).");
+    ImGui::SameLine();
+    if (ImGui::Button("Flat BRICK")) {
+        setBenchmarkMethodPreset(
+            orient,
+            {
+                hbrick::ReachabilityBaselineId::BrickSearch,
+                hbrick::ReachabilityBaselineId::BrickClosure,
+            }
+        );
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Search only")) {
+        setBenchmarkMethodPreset(
+            orient,
+            {
+                hbrick::ReachabilityBaselineId::CsrBfs,
+                hbrick::ReachabilityBaselineId::CsrDfs,
+                hbrick::ReachabilityBaselineId::SccDagSearch,
+                hbrick::ReachabilityBaselineId::BrickSearch,
+            }
+        );
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("None")) {
+        orient.benchmark_method_enabled.fill(false);
+    }
+
+    static constexpr hbrick::ReachabilityBaselineId kMethodOrder[] = {
+        hbrick::ReachabilityBaselineId::CsrBfs,
+        hbrick::ReachabilityBaselineId::CsrDfs,
+        hbrick::ReachabilityBaselineId::SccDagSearch,
+        hbrick::ReachabilityBaselineId::SccDagClosure,
+        hbrick::ReachabilityBaselineId::TwoHop,
+        hbrick::ReachabilityBaselineId::Grail,
+        hbrick::ReachabilityBaselineId::BrickSearch,
+        hbrick::ReachabilityBaselineId::BrickClosure,
+        hbrick::ReachabilityBaselineId::FullClosure,
+        hbrick::ReachabilityBaselineId::HBrick,
+    };
+
+    if (ImGui::BeginTable(
+            "benchmark_method_checks",
+            2,
+            ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        for (const hbrick::ReachabilityBaselineId method : kMethodOrder) {
+            const std::size_t index = static_cast<std::size_t>(method);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            bool enabled = orient.benchmark_method_enabled[index];
+            if (ImGui::Checkbox(
+                    hbrick::reachabilityBaselineName(method),
+                    &enabled)) {
+                orient.benchmark_method_enabled[index] = enabled;
+            }
+            ImGui::TableSetColumnIndex(1);
+            if (method == hbrick::ReachabilityBaselineId::BrickSearch
+                || method == hbrick::ReachabilityBaselineId::BrickClosure) {
+                ImGui::TextDisabled("flat L0 BRICK");
+            } else if (method == hbrick::ReachabilityBaselineId::HBrick) {
+                ImGui::TextDisabled("hierarchy (experimental)");
+            } else if (method == hbrick::ReachabilityBaselineId::SccDagClosure
+                || method == hbrick::ReachabilityBaselineId::FullClosure) {
+                ImGui::TextDisabled("Warshall closure");
+            } else if (method == hbrick::ReachabilityBaselineId::Grail
+                || method == hbrick::ReachabilityBaselineId::TwoHop) {
+                ImGui::TextDisabled("label index");
+            } else {
+                ImGui::TextDisabled("search");
+            }
+        }
+        ImGui::EndTable();
+    }
+
+    const std::size_t selected = countSelectedBenchmarkMethods(orient);
+    if (selected == 0U) {
+        ImGui::TextColored(
+            ImVec4(1.0F, 0.55F, 0.2F, 1.0F),
+            "Select at least one method to start."
+        );
+    } else {
+        ImGui::TextDisabled("%zu method(s) selected for the next run.", selected);
+    }
+    ImGui::EndDisabled();
 }
 
 void drawBenchmarkDensityReference(const OrientationState& orient) {
@@ -3088,11 +3224,13 @@ void BrowserApp::drawBenchmarkModals() {
         tickReachabilityBenchmark(orient);
         reapBenchmarkWorker(orient);
 
-        char popup_id[96];
+        char popup_id[160];
         std::snprintf(
             popup_id,
             sizeof(popup_id),
-            "Running baseline benchmark###benchmark_job_%llu",
+            "Baseline benchmark — %s/%s###benchmark_job_%llu",
+            panel.set_name.c_str(),
+            panel.map_name.c_str(),
             static_cast<unsigned long long>(panel.id)
         );
 
@@ -3129,8 +3267,34 @@ void BrowserApp::drawBenchmarkModals() {
             !running
             && !report.valid
             && progress.stage == hbrick::ReachabilityBenchmarkProgress::Stage::Cancelled;
+        const bool idle = !running && !finished;
         const double elapsed_seconds =
             orient.benchmark_runner != nullptr ? orient.benchmark_runner->elapsedSeconds() : 0.0;
+
+        if (idle) {
+            if (cancelled) {
+                ImGui::TextDisabled("Previous run was cancelled — adjust methods and press Start.");
+            }
+            ImGui::TextWrapped(
+                "Map: %s / %s",
+                panel.set_name.c_str(),
+                panel.map_name.c_str()
+            );
+            ImGui::TextWrapped(
+                "Select methods below, then press Start. Timed pairs, warmup, memory cap, "
+                "and closure auto-stop are configured in the Orientation panel."
+            );
+            ImGui::TextWrapped(
+                "Shared workload: %u timed pairs | warmup %u | checks %u | memory %.0f GiB | "
+                "Kleene %s",
+                std::max(1U, orient.benchmark_timed_query_count),
+                orient.benchmark_config.warmup_queries,
+                orient.benchmark_config.correctness_check_count,
+                static_cast<double>(orient.benchmark_memory_gib),
+                orient.benchmark_config.kleene_use_parallel ? "parallel" : "serial"
+            );
+            drawBenchmarkMethodSelection(orient, false);
+        }
 
         if (finished
             && !orient.density.valid
@@ -3147,8 +3311,13 @@ void BrowserApp::drawBenchmarkModals() {
             ImGui::SameLine();
             ImGui::Text("(%.1f s elapsed)", elapsed_seconds);
         } else if (finished) {
-            ImGui::TextWrapped("Benchmark complete (%.1f s).", elapsed_seconds);
-        } else if (cancelled) {
+            ImGui::TextWrapped(
+                "Benchmark complete (%.1f s) — %s / %s.",
+                elapsed_seconds,
+                panel.set_name.c_str(),
+                panel.map_name.c_str()
+            );
+        } else if (cancelled && !idle) {
             ImGui::TextWrapped("Benchmark cancelled (%.1f s).", elapsed_seconds);
         }
 
@@ -3200,34 +3369,76 @@ void BrowserApp::drawBenchmarkModals() {
             }
 
             drawBenchmarkDensityReference(orient);
-            drawBenchmarkResultsTable(report, progress, running, "benchmark_modal_results");
+            drawBenchmarkResultsTable(
+                report,
+                progress,
+                running,
+                ("benchmark_modal_results_" + std::to_string(panel.id)).c_str()
+            );
             drawBenchmarkPolicySkipPanel(report);
             drawBenchmarkClosureHelpPanel(report, running);
         }
 
         if (running) {
             if (hbrick::closurePreprocessActive(progress, running)) {
-                if (ImGui::Button("Skip closure method", ImVec2(180.0F, 0.0F))) {
+                const bool brick_closure =
+                    progress.current_method == hbrick::ReachabilityBaselineId::BrickClosure;
+                if (ImGui::Button(
+                        brick_closure ? "Skip BRICK method" : "Skip closure method",
+                        ImVec2(180.0F, 0.0F))) {
                     skipCurrentBenchmarkMethod(orient);
                 }
                 itemTooltip(
-                    "Stop Warshall preprocessing for the active closure baseline and "
-                    "move to the next method. Partial closure cannot answer queries."
+                    brick_closure
+                        ? "Stop flat-BRICK preprocessing and move to the next method."
+                        : "Stop Warshall preprocessing for the active closure baseline and "
+                          "move to the next method. Partial closure cannot answer queries."
                 );
                 ImGui::SameLine();
             }
             if (ImGui::Button("Cancel", ImVec2(120.0F, 0.0F))) {
                 cancelReachabilityBenchmark(orient);
             }
+        } else if (idle) {
+            const bool can_start = countSelectedBenchmarkMethods(orient) > 0U;
+            ImGui::BeginDisabled(!can_start);
+            if (ImGui::Button("Start", ImVec2(120.0F, 0.0F))) {
+                if (prepareBenchmarkConfigFromPanel(orient)) {
+                    beginReachabilityBenchmark(orient, panel.layout);
+                }
+            }
+            ImGui::EndDisabled();
+            if (!can_start) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("Select at least one method.");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(120.0F, 0.0F))) {
+                resetBenchmarkSession(orient);
+                orient.benchmark_show_modal = false;
+                ImGui::CloseCurrentPopup();
+            }
         } else if (!worker_running) {
             const bool density_running =
                 orient.benchmark_followup_density && orient.density_estimator.active();
+            if (finished) {
+                ImGui::BeginDisabled(density_running);
+                if (ImGui::Button("Start over", ImVec2(120.0F, 0.0F))) {
+                    resetBenchmarkSession(orient);
+                }
+                itemTooltip(
+                    "Discard these results and return to method selection for a new run."
+                );
+                ImGui::SameLine();
+                ImGui::EndDisabled();
+            }
             ImGui::BeginDisabled(density_running);
             if (ImGui::Button("Close", ImVec2(120.0F, 0.0F))) {
                 if (density_running) {
                     orient.density_modal_requested = true;
                 }
                 orient.benchmark_followup_density = false;
+                resetBenchmarkSession(orient);
                 orient.benchmark_show_modal = false;
                 ImGui::CloseCurrentPopup();
             }

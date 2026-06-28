@@ -58,7 +58,8 @@ BitMatrix ClosureMatrixBuilder::buildReflexiveAdjacencyOrThrow(
 void ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
     BitMatrix& reflexive_relation,
     const CsrGraph& graph,
-    BitMatrix* scratch
+    BitMatrix* scratch,
+    const KleeneSquaringOptions options
 ) {
     const uint32_t largest_component_size =
         largestUndirectedComponentSize(graph);
@@ -67,7 +68,8 @@ void ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
     BooleanClosure::transitiveClosureKleeneSquaringInPlace(
         reflexive_relation,
         squaring_count,
-        scratch
+        scratch,
+        options
     );
 }
 

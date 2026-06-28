@@ -59,7 +59,7 @@ void regenerateGraph(OrientationState& state, const MazeLayout& layout) {
     state.component_order.clear();
     state.density = {};
     cancelDensityEstimate(state);
-    cancelReachabilityBenchmark(state);
+    resetBenchmarkSession(state);
     clearProbe(state);
 }
 
@@ -106,6 +106,15 @@ void cancelReachabilityBenchmark(OrientationState& state) {
     }
 }
 
+void resetBenchmarkSession(OrientationState& state) noexcept {
+    cancelReachabilityBenchmark(state);
+    if (state.benchmark_runner != nullptr) {
+        state.benchmark_runner->reapWorker();
+    }
+    state.benchmark_runner.reset();
+    state.benchmark_followup_density = false;
+}
+
 void skipCurrentBenchmarkMethod(OrientationState& state) {
     if (state.benchmark_runner != nullptr) {
         state.benchmark_runner->requestSkipCurrentMethod();
@@ -130,6 +139,85 @@ void tickReachabilityBenchmark(OrientationState& state) noexcept {
     (void)state.benchmark_runner->step();
 }
 
+void openBenchmarkPanel(OrientationState& state) noexcept {
+    ensureBenchmarkMethodDefaults(state);
+    if (!benchmarkWorkerRunning(state)) {
+        resetBenchmarkSession(state);
+    }
+    state.benchmark_show_modal = true;
+    state.benchmark_modal_requested = true;
+}
+
+void ensureBenchmarkMethodDefaults(OrientationState& state) noexcept {
+    if (state.benchmark_methods_initialized) {
+        return;
+    }
+    resetBenchmarkMethodDefaults(state);
+}
+
+void resetBenchmarkMethodDefaults(OrientationState& state) noexcept {
+    state.benchmark_method_enabled.fill(false);
+    const hbrick::ReachabilityBenchmarkConfig defaults =
+        hbrick::ReachabilityBenchmarkConfig::allMethods();
+    for (const hbrick::ReachabilityBaselineId method : defaults.methods) {
+        const std::size_t index = static_cast<std::size_t>(method);
+        if (index < kBenchmarkMethodSlotCount) {
+            state.benchmark_method_enabled[index] = true;
+        }
+    }
+    state.benchmark_methods_initialized = true;
+}
+
+std::size_t countSelectedBenchmarkMethods(const OrientationState& state) noexcept {
+    std::size_t count = 0U;
+    for (const bool enabled : state.benchmark_method_enabled) {
+        if (enabled) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool prepareBenchmarkConfigFromPanel(OrientationState& state) noexcept {
+    ensureBenchmarkMethodDefaults(state);
+
+    const uint32_t warmup = state.benchmark_config.warmup_queries;
+    const uint32_t checks = state.benchmark_config.correctness_check_count;
+    const uint32_t timed_queries = std::max(1U, state.benchmark_timed_query_count);
+    const bool closure_early_stop = state.benchmark_closure_early_stop;
+    const float memory_gib = state.benchmark_memory_gib;
+    const hbrick::TileSize brick_tile_size = state.benchmark_config.brick_tile_size;
+    const bool kleene_use_parallel = state.benchmark_config.kleene_use_parallel;
+    const uint32_t kleene_num_threads = state.benchmark_config.kleene_num_threads;
+
+    std::vector<hbrick::ReachabilityBaselineId> methods;
+    methods.reserve(kBenchmarkMethodSlotCount);
+    for (std::size_t index = 0U; index < kBenchmarkMethodSlotCount; ++index) {
+        if (!state.benchmark_method_enabled[index]) {
+            continue;
+        }
+        methods.push_back(static_cast<hbrick::ReachabilityBaselineId>(index));
+    }
+    if (methods.empty()) {
+        return false;
+    }
+
+    state.benchmark_config = hbrick::ReachabilityBenchmarkConfig{};
+    state.benchmark_config.methods = std::move(methods);
+    state.benchmark_config.brick_tile_size = brick_tile_size;
+    state.benchmark_config.query_count = timed_queries;
+    state.benchmark_config.warmup_queries = warmup;
+    state.benchmark_config.correctness_check_count = checks;
+    state.benchmark_config.closure_enable_projected_speedup_early_stop =
+        closure_early_stop;
+    state.benchmark_config.kleene_use_parallel = kleene_use_parallel;
+    state.benchmark_config.kleene_num_threads = kleene_num_threads;
+    state.benchmark_config.max_memory_bytes = static_cast<uint64_t>(
+        static_cast<double>(memory_gib) * (1024.0 * 1024.0 * 1024.0)
+    );
+    return true;
+}
+
 void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout) {
     cancelReachabilityBenchmark(state);
     reapBenchmarkWorker(state);
@@ -138,6 +226,10 @@ void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layou
     }
 
     if (!state.generated) {
+        return;
+    }
+
+    if (state.benchmark_config.methods.empty()) {
         return;
     }
 

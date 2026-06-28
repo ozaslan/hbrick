@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "hbrick/bit/bit_matrix.hpp"
+#include "hbrick/bit/kleene_squaring_options.hpp"
 
 namespace hbrick {
 
@@ -58,8 +59,21 @@ public:
     static void transitiveClosureKleeneSquaringInPlace(
         BitMatrix& relation,
         uint32_t squaring_count,
-        BitMatrix* scratch = nullptr
+        BitMatrix* scratch = nullptr,
+        KleeneSquaringOptions options = {}
     );
+
+    /**
+     * @brief Performs one Kleene squaring round @c R <- R * R.
+     * @ingroup hbrick_bit
+     *
+     * @return @c true when the relation reached a fixpoint (no change).
+     */
+    [[nodiscard]] static bool transitiveClosureKleeneSquaringStepInPlace(
+        BitMatrix& relation,
+        BitMatrix& scratch,
+        KleeneSquaringOptions options = {}
+    ) noexcept;
 
     /**
      * @brief Computes transitive closure in place using Warshall's algorithm.
