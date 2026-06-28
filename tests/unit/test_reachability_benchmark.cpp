@@ -48,13 +48,12 @@ TEST(ReachabilityBenchmark, RunProducesMatchingResultsOnDiamondGraph) {
     ASSERT_TRUE(report.valid);
     EXPECT_EQ(report.num_vertices, 4U);
     EXPECT_EQ(report.query_pair_count, 128U);
-    ASSERT_EQ(report.methods.size(), 10U);
+    ASSERT_EQ(report.methods.size(), 9U);
 
     double reachable_ratio = -1.0;
     for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
         if (metrics.method == hbrick::ReachabilityBaselineId::BrickSearch
-            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure
-            || metrics.method == hbrick::ReachabilityBaselineId::HBrick) {
+            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure) {
             EXPECT_EQ(metrics.status, hbrick::BaselineStatus::SkippedByPolicy);
             EXPECT_FALSE(metrics.policy_skip_detail.empty());
             continue;
@@ -77,8 +76,7 @@ TEST(ReachabilityBenchmark, RunProducesMatchingResultsOnDiamondGraph) {
 
     for (const hbrick::BaselineBenchmarkMetrics& metrics : report.methods) {
         if (metrics.method == hbrick::ReachabilityBaselineId::BrickSearch
-            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure
-            || metrics.method == hbrick::ReachabilityBaselineId::HBrick) {
+            || metrics.method == hbrick::ReachabilityBaselineId::BrickClosure) {
             continue;
         }
         EXPECT_GT(metrics.total_benchmark_nanoseconds, 0U);

@@ -3,7 +3,6 @@
 #include <chrono>
 #include <limits>
 #include <numeric>
-#include <thread>
 
 #include "hbrick/bench/reachability_benchmark_runner.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
@@ -28,13 +27,12 @@ hbrick::CsrGraph buildDiamondGraph() {
 void waitForRunner(hbrick::ReachabilityBenchmarkRunner& runner) {
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(30);
-    while (runner.workerRunning()) {
+    while (runner.active()) {
         if (std::chrono::steady_clock::now() >= deadline) {
             FAIL() << "ReachabilityBenchmarkRunner timed out";
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        (void)runner.step();
     }
-    runner.reapWorker();
 }
 
 [[nodiscard]] hbrick::ReachabilityBenchmarkConfig fastDiamondConfig() {

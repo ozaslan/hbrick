@@ -44,6 +44,16 @@ public:
         GraphSearchScratch& scratch
     );
 
+    /**
+     * @brief Builds a decomposition from precomputed per-vertex component labels.
+     * @ingroup hbrick_graph
+     */
+    [[nodiscard]] static SccDecomposition fromComponentLabels(
+        uint32_t num_vertices,
+        uint32_t num_components,
+        std::vector<uint32_t> component_ids
+    );
+
     /** @brief Returns the vertex count of the decomposed graph. @return The vertex count of the decomposed graph. @ingroup hbrick_graph */
     [[nodiscard]] uint32_t numVertices() const noexcept { return num_vertices_; }
     /** @brief Returns the number of strongly connected components found. @return The number of strongly connected components found. @ingroup hbrick_graph */

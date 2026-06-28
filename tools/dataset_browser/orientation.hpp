@@ -220,7 +220,14 @@ void skipCurrentBenchmarkMethod(OrientationState& state);
 /** @brief Joins a finished benchmark worker thread; safe to call each frame. */
 void reapBenchmarkWorker(OrientationState& state);
 
-/** @brief Returns @c true while a benchmark worker thread is still running. */
+/**
+ * @brief Advances an active benchmark job on the main thread (frame-budgeted).
+ *
+ * Safe to call every frame while a benchmark modal is open.
+ */
+void tickReachabilityBenchmark(OrientationState& state) noexcept;
+
+/** @brief Returns @c true while a benchmark job is still running. */
 [[nodiscard]] bool benchmarkWorkerRunning(const OrientationState& state) noexcept;
 
 /**

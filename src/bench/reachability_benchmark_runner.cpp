@@ -1,17 +1,12 @@
 #include "hbrick/bench/reachability_benchmark_runner.hpp"
 
-#include <atomic>
 #include <chrono>
-#include <thread>
 #include <utility>
 
 namespace hbrick {
 
 struct ReachabilityBenchmarkRunner::Impl {
     ReachabilityBenchmarkJob job;
-    std::atomic<bool> stop_requested{false};
-    std::atomic<bool> worker_running{false};
-    std::unique_ptr<std::thread> worker;
     std::chrono::steady_clock::time_point started_at{};
     std::chrono::steady_clock::time_point ended_at{};
     bool timer_frozen = false;
@@ -22,14 +17,6 @@ struct ReachabilityBenchmarkRunner::Impl {
             timer_frozen = true;
         }
     }
-
-    void detachWorkerIfJoinable() noexcept {
-        if (worker != nullptr && worker->joinable()) {
-            worker->detach();
-        }
-        worker.reset();
-        worker_running.store(false, std::memory_order_release);
-    }
 };
 
 ReachabilityBenchmarkRunner::ReachabilityBenchmarkRunner()
@@ -37,7 +24,6 @@ ReachabilityBenchmarkRunner::ReachabilityBenchmarkRunner()
 
 ReachabilityBenchmarkRunner::~ReachabilityBenchmarkRunner() {
     cancel();
-    reapWorker();
 }
 
 ReachabilityBenchmarkRunner::ReachabilityBenchmarkRunner(
@@ -54,9 +40,7 @@ void ReachabilityBenchmarkRunner::begin(
     ReachabilityBenchmarkConfig config
 ) {
     cancel();
-    reapWorker();
 
-    impl_->stop_requested.store(false, std::memory_order_release);
     impl_->timer_frozen = false;
     impl_->started_at = {};
     impl_->ended_at = {};
@@ -67,21 +51,6 @@ void ReachabilityBenchmarkRunner::begin(
     }
 
     impl_->started_at = std::chrono::steady_clock::now();
-    impl_->worker_running.store(true, std::memory_order_release);
-
-    ReachabilityBenchmarkJob* job = &impl_->job;
-    Impl* runner_impl = impl_.get();
-    impl_->worker = std::make_unique<std::thread>([job, runner_impl]() {
-        while (!runner_impl->stop_requested.load(std::memory_order_acquire)) {
-            if (!job->active()) {
-                break;
-            }
-            if (job->step()) {
-                break;
-            }
-        }
-        runner_impl->worker_running.store(false, std::memory_order_release);
-    });
 }
 
 void ReachabilityBenchmarkRunner::begin(
@@ -91,9 +60,7 @@ void ReachabilityBenchmarkRunner::begin(
     ReachabilityBenchmarkConfig config
 ) {
     cancel();
-    reapWorker();
 
-    impl_->stop_requested.store(false, std::memory_order_release);
     impl_->timer_frozen = false;
     impl_->started_at = {};
     impl_->ended_at = {};
@@ -104,21 +71,21 @@ void ReachabilityBenchmarkRunner::begin(
     }
 
     impl_->started_at = std::chrono::steady_clock::now();
-    impl_->worker_running.store(true, std::memory_order_release);
+}
 
-    ReachabilityBenchmarkJob* job = &impl_->job;
-    Impl* runner_impl = impl_.get();
-    impl_->worker = std::make_unique<std::thread>([job, runner_impl]() {
-        while (!runner_impl->stop_requested.load(std::memory_order_acquire)) {
-            if (!job->active()) {
-                break;
-            }
-            if (job->step()) {
-                break;
-            }
+bool ReachabilityBenchmarkRunner::step() noexcept {
+    if (impl_ == nullptr || !impl_->job.active()) {
+        if (impl_ != nullptr) {
+            impl_->freezeTimerIfNeeded();
         }
-        runner_impl->worker_running.store(false, std::memory_order_release);
-    });
+        return true;
+    }
+
+    const bool finished = impl_->job.step();
+    if (finished) {
+        impl_->freezeTimerIfNeeded();
+    }
+    return finished;
 }
 
 void ReachabilityBenchmarkRunner::cancel() noexcept {
@@ -126,10 +93,8 @@ void ReachabilityBenchmarkRunner::cancel() noexcept {
         return;
     }
 
-    impl_->stop_requested.store(true, std::memory_order_release);
     impl_->job.cancel();
     impl_->freezeTimerIfNeeded();
-    impl_->detachWorkerIfJoinable();
 }
 
 void ReachabilityBenchmarkRunner::requestSkipCurrentMethod() noexcept {
@@ -139,24 +104,11 @@ void ReachabilityBenchmarkRunner::requestSkipCurrentMethod() noexcept {
 }
 
 void ReachabilityBenchmarkRunner::reapWorker() noexcept {
-    if (impl_ == nullptr || impl_->worker == nullptr) {
-        return;
-    }
-
-    if (impl_->worker_running.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    impl_->freezeTimerIfNeeded();
-    if (impl_->worker->joinable()) {
-        impl_->worker->join();
-    }
-    impl_->worker.reset();
+    // Kept for API compatibility; benchmarks run on the caller thread now.
 }
 
 bool ReachabilityBenchmarkRunner::workerRunning() const noexcept {
-    return impl_ != nullptr
-        && impl_->worker_running.load(std::memory_order_acquire);
+    return active();
 }
 
 bool ReachabilityBenchmarkRunner::active() const noexcept {

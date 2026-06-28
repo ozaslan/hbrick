@@ -623,7 +623,12 @@ void invalidateBrickIndex(BrickPanelState& brick) noexcept {
 }
 
 void syncBrickIndexWithGraph(BrickPanelState& brick, const uint64_t graph_epoch) noexcept {
-    if (brick.index_valid && brick.graph_epoch_built != graph_epoch) {
+    if (brick.graph_epoch_built == graph_epoch) {
+        return;
+    }
+    if (brick.index_valid
+        || brick.build_in_progress
+        || brick.index_status != BaselineStatus::NotRun) {
         invalidateBrickIndex(brick);
     }
 }
@@ -809,7 +814,7 @@ void drawBrickPanel(MapPanel& panel) {
     brick.base_tile_width = static_cast<uint32_t>(std::max(2, tile_w));
     brick.base_tile_height = static_cast<uint32_t>(std::max(2, tile_h));
 
-    ImGui::SeparatorText("H-BRICK parameters (benchmark sync)");
+    ImGui::SeparatorText("H-BRICK parameters (index build)");
 
     int group_w = static_cast<int>(brick.group_w);
     int group_h = static_cast<int>(brick.group_h);
@@ -869,9 +874,6 @@ void drawBrickPanel(MapPanel& panel) {
     if (ImGui::Button("Sync to benchmark config")) {
         orient.benchmark_config.brick_tile_size =
             TileSize{brick.base_tile_width, brick.base_tile_height};
-        orient.benchmark_config.hbrick_group_size =
-            GroupSize{brick.group_w, brick.group_h};
-        orient.benchmark_config.hbrick_max_depth = brick.max_depth;
         orient.benchmark_config.max_memory_bytes = memoryBytesFromGib(brick.memory_gib);
     }
 

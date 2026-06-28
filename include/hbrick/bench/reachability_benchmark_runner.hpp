@@ -1,7 +1,7 @@
 /**
  * @file reachability_benchmark_runner.hpp
  * @ingroup hbrick_bench
- * @brief Background-thread wrapper for @ref ReachabilityBenchmarkJob.
+ * @brief Incremental driver for @ref ReachabilityBenchmarkJob.
  */
 
 #pragma once
@@ -18,8 +18,11 @@
 namespace hbrick {
 
 /**
- * @brief Runs @ref ReachabilityBenchmarkJob on a worker thread with cancel/skip controls.
+ * @brief Runs @ref ReachabilityBenchmarkJob incrementally via @ref step.
  * @ingroup hbrick_bench
+ *
+ * Callers (e.g. dataset-browser UI) advance the job on the main thread with a
+ * per-frame time budget so live results stay consistent with other incremental jobs.
  */
 class ReachabilityBenchmarkRunner {
 public:
@@ -44,10 +47,17 @@ public:
         ReachabilityBenchmarkConfig config
     );
 
+    /**
+     * @brief Advances the benchmark by one or more incremental work units.
+     * @return @c true when the job has finished or was cancelled.
+     */
+    [[nodiscard]] bool step() noexcept;
+
     void cancel() noexcept;
     void requestSkipCurrentMethod() noexcept;
     void reapWorker() noexcept;
 
+    /** @brief Alias for @ref active (legacy name from the threaded driver). */
     [[nodiscard]] bool workerRunning() const noexcept;
     [[nodiscard]] bool active() const noexcept;
     [[nodiscard]] double elapsedSeconds() const noexcept;

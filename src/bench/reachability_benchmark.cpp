@@ -54,7 +54,6 @@ namespace {
         ReachabilityBaselineId::Grail,
         ReachabilityBaselineId::BrickSearch,
         ReachabilityBaselineId::BrickClosure,
-        ReachabilityBaselineId::HBrick,
         ReachabilityBaselineId::FullClosure,
     };
 }
@@ -706,6 +705,8 @@ struct ClosureSpeedupProjection {
     uint64_t preprocess_units = 1ULL;
     if (usesIncrementalClosurePreprocess(method) && num_vertices > 0U) {
         preprocess_units = num_vertices;
+    } else if (method == ReachabilityBaselineId::SccDagSearch && num_vertices > 0U) {
+        preprocess_units = static_cast<uint64_t>(num_vertices) * 3ULL + 2ULL;
     }
 
     return preprocess_units
@@ -727,8 +728,12 @@ struct ClosureSpeedupProjection {
     const uint32_t checks = std::min(config.correctness_check_count, pair_count);
     uint64_t remaining = 0ULL;
 
-    if (method_phase == MethodPhase::Preprocess) {
+        if (method_phase == MethodPhase::Preprocess) {
         if (usesIncrementalClosurePreprocess(method) && closure_pivot_total > 0U) {
+            remaining += static_cast<uint64_t>(closure_pivot_total)
+                - static_cast<uint64_t>(closure_pivots_completed);
+        } else if (method == ReachabilityBaselineId::SccDagSearch
+            && closure_pivot_total > 0U) {
             remaining += static_cast<uint64_t>(closure_pivot_total)
                 - static_cast<uint64_t>(closure_pivots_completed);
         } else {
@@ -822,6 +827,8 @@ struct ReachabilityBenchmarkJob::Impl {
     uint64_t incremental_closure_setup_nanoseconds = 0U;
     uint64_t incremental_closure_pivot_start_ns = 0U;
     uint64_t incremental_closure_rss_before = 0U;
+    bool incremental_scc_search_running = false;
+    uint64_t incremental_scc_search_started_ns = 0U;
     std::atomic<bool> skip_current_method_requested{false};
 
     [[nodiscard]] GridBenchmarkContext gridContext() const noexcept {
@@ -890,6 +897,11 @@ struct ReachabilityBenchmarkJob::Impl {
         incremental_closure_setup_nanoseconds = 0U;
         incremental_closure_pivot_start_ns = 0U;
         incremental_closure_rss_before = 0U;
+        if (incremental_scc_search_running) {
+            baselines.scc_search.cancelPreprocess();
+            incremental_scc_search_running = false;
+        }
+        incremental_scc_search_started_ns = 0U;
         progress.methods_completed = static_cast<uint32_t>(method_index);
         progress.preprocess_started_ns = 0U;
         current_query_times.clear();
@@ -917,6 +929,16 @@ struct ReachabilityBenchmarkJob::Impl {
                 closure_pivot_total,
                 baselines.scc_closure.preprocessPivotTotal()
             );
+        } else if (method == ReachabilityBaselineId::SccDagSearch
+            && incremental_scc_search_running) {
+            closure_pivots_completed = static_cast<uint32_t>(std::min<uint64_t>(
+                baselines.scc_search.preprocessWorkCompleted(),
+                std::numeric_limits<uint32_t>::max()
+            ));
+            closure_pivot_total = static_cast<uint32_t>(std::min<uint64_t>(
+                baselines.scc_search.preprocessWorkTotal(),
+                std::numeric_limits<uint32_t>::max()
+            ));
         }
         advanceWork(remainingWorkUnitsForMethod(
             method,
@@ -1073,6 +1095,90 @@ struct ReachabilityBenchmarkJob::Impl {
         }
         progress.preprocess_started_ns = 0U;
         incremental_closure_running = false;
+        refreshTotalBenchmarkNanoseconds(metrics);
+
+        if (metrics.status != BaselineStatus::Completed) {
+            skipRemainingWorkForCurrentMethod();
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
+        method_phase = MethodPhase::Warmup;
+        query_index = 0U;
+        progress.stage = ReachabilityBenchmarkProgress::Stage::WarmingUp;
+        setStageWork(0U, config.warmup_queries);
+        return IncrementalClosurePreprocessResult::CompletedWarmup;
+    }
+
+    IncrementalClosurePreprocessResult stepIncrementalSccSearchPreprocess(
+        BaselineBenchmarkMetrics& metrics
+    ) {
+        constexpr ReachabilityBaselineId method = ReachabilityBaselineId::SccDagSearch;
+
+        if (skip_current_method_requested.exchange(false, std::memory_order_acq_rel)) {
+            baselines.scc_search.cancelPreprocess();
+            incremental_scc_search_running = false;
+            metrics.status = BaselineStatus::SkippedByPolicy;
+            metrics.policy_skip_detail =
+                "Stopped by user during SccDagSearch preprocessing.";
+            progress.preprocess_started_ns = 0U;
+            skipRemainingWorkForCurrentMethod();
+            return IncrementalClosurePreprocessResult::Skipped;
+        }
+
+        if (!incremental_scc_search_running) {
+            incremental_scc_search_started_ns = BenchTimer::steadyNowNanoseconds();
+            progress.preprocess_started_ns = incremental_scc_search_started_ns;
+            baselines.scc_search.beginPreprocess(graph, preprocess_scratch);
+            incremental_scc_search_running = true;
+            const uint64_t work_total = baselines.scc_search.preprocessWorkTotal();
+            setStageWork(
+                0U,
+                static_cast<uint32_t>(std::min<uint64_t>(
+                    work_total,
+                    std::numeric_limits<uint32_t>::max()
+                ))
+            );
+        }
+
+        const uint64_t work_before = baselines.scc_search.preprocessWorkCompleted();
+        const uint32_t vertex_batch = std::max(
+            4096U,
+            graph.numVertices() / 64U
+        );
+        const bool finished = baselines.scc_search.preprocessStep(
+            preprocess_scratch,
+            vertex_batch
+        );
+        const uint64_t work_after = baselines.scc_search.preprocessWorkCompleted();
+        advanceWork(work_after - work_before);
+        const uint64_t work_total = baselines.scc_search.preprocessWorkTotal();
+        setStageWork(
+            static_cast<uint32_t>(std::min<uint64_t>(
+                work_after,
+                std::numeric_limits<uint32_t>::max()
+            )),
+            static_cast<uint32_t>(std::min<uint64_t>(
+                work_total,
+                std::numeric_limits<uint32_t>::max()
+            ))
+        );
+
+        metrics.preprocess_nanoseconds =
+            BenchTimer::steadyNowNanoseconds() - incremental_scc_search_started_ns;
+        refreshTotalBenchmarkNanoseconds(metrics);
+
+        if (!finished) {
+            return IncrementalClosurePreprocessResult::StepIncomplete;
+        }
+
+        incremental_scc_search_running = false;
+        progress.preprocess_started_ns = 0U;
+        metrics.status = baselines.scc_search.status();
+        metrics.estimated_index_bytes = indexStorageBytesForBaseline(
+            method,
+            baselines,
+            graph
+        );
         refreshTotalBenchmarkNanoseconds(metrics);
 
         if (metrics.status != BaselineStatus::Completed) {
@@ -1284,6 +1390,15 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                             method
                         );
                         if (outcome == Impl::IncrementalClosurePreprocessResult::StepIncomplete) {
+                            break;
+                        }
+                        break;
+                    }
+
+                    if (method == ReachabilityBaselineId::SccDagSearch) {
+                        const auto outcome = impl_->stepIncrementalSccSearchPreprocess(metrics);
+                        if (outcome
+                            == Impl::IncrementalClosurePreprocessResult::StepIncomplete) {
                             break;
                         }
                         break;
@@ -1516,7 +1631,6 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                         metrics.query_stats
                     );
                     impl_->refreshTotalBenchmarkNanoseconds(metrics);
-                    applySpeedups(impl_->report);
                     impl_->progress.queries_completed =
                         impl_->config.warmup_queries
                         + static_cast<uint32_t>(impl_->query_index);

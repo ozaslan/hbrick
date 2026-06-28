@@ -2177,13 +2177,22 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         "When disabled, closure methods run all Warshall pivots unless you skip manually."
     );
 
+    ImGui::TextDisabled(
+        "Flat BRICK tile: %u x %u (BRICK panel -> Sync to benchmark config)",
+        orient.benchmark_config.brick_tile_size.width,
+        orient.benchmark_config.brick_tile_size.height
+    );
+
     if (ImGui::Button("Run benchmark")) {
         const uint32_t warmup = orient.benchmark_config.warmup_queries;
         const uint32_t checks = orient.benchmark_config.correctness_check_count;
         const uint32_t timed_queries = std::max(1U, orient.benchmark_timed_query_count);
         const bool closure_early_stop = orient.benchmark_closure_early_stop;
         const float memory_gib = orient.benchmark_memory_gib;
+        const hbrick::TileSize brick_tile_size =
+            orient.benchmark_config.brick_tile_size;
         orient.benchmark_config = hbrick::ReachabilityBenchmarkConfig::allMethods();
+        orient.benchmark_config.brick_tile_size = brick_tile_size;
         orient.benchmark_config.query_count = timed_queries;
         orient.benchmark_config.warmup_queries = warmup;
         orient.benchmark_config.correctness_check_count = checks;
@@ -2449,7 +2458,8 @@ void drawBenchmarkMethodStatusCell(
     }
 
     if (metrics.status != hbrick::BaselineStatus::NotRun) {
-        ImGui::TextUnformatted(std::string(hbrick::toString(metrics.status)).c_str());
+        const std::string_view status_label = hbrick::toString(metrics.status);
+        ImGui::TextUnformatted(status_label.data());
         return;
     }
 
@@ -3075,6 +3085,7 @@ void BrowserApp::drawBenchmarkModals() {
             continue;
         }
 
+        tickReachabilityBenchmark(orient);
         reapBenchmarkWorker(orient);
 
         char popup_id[96];

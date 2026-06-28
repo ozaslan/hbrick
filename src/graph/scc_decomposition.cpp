@@ -139,6 +139,14 @@ SccDecomposition SccDecomposition::compute(
     return SccDecomposition{num_vertices, num_components, std::move(component_ids)};
 }
 
+SccDecomposition SccDecomposition::fromComponentLabels(
+    const uint32_t num_vertices,
+    const uint32_t num_components,
+    std::vector<uint32_t> component_ids
+) {
+    return SccDecomposition{num_vertices, num_components, std::move(component_ids)};
+}
+
 uint32_t SccDecomposition::componentOf(const uint32_t vertex) const noexcept {
     if (vertex >= num_vertices_) {
         return 0U;

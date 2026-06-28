@@ -13,6 +13,8 @@ namespace hbrick::tools {
 
 namespace {
 
+constexpr uint32_t kBenchmarkUiQueriesPerStep = 16U;
+
 void hsvToRgb(const float h, const float s, const float v, uint8_t out[3]) {
     const float c = v * s;
     const float hp = h * 6.0F;
@@ -117,7 +119,15 @@ void reapBenchmarkWorker(OrientationState& state) {
 }
 
 bool benchmarkWorkerRunning(const OrientationState& state) noexcept {
-    return state.benchmark_runner != nullptr && state.benchmark_runner->workerRunning();
+    return state.benchmark_runner != nullptr && state.benchmark_runner->active();
+}
+
+void tickReachabilityBenchmark(OrientationState& state) noexcept {
+    if (state.benchmark_runner == nullptr || !state.benchmark_runner->active()) {
+        return;
+    }
+
+    (void)state.benchmark_runner->step();
 }
 
 void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layout) {
@@ -146,8 +156,7 @@ void beginReachabilityBenchmark(OrientationState& state, const MazeLayout& layou
     state.benchmark_config.max_memory_bytes = static_cast<uint64_t>(
         static_cast<double>(state.benchmark_memory_gib) * (1024.0 * 1024.0 * 1024.0)
     );
-    state.benchmark_config.queries_per_step =
-        hbrick::chooseBenchmarkQueriesPerStep(state.benchmark_config.query_count);
+    state.benchmark_config.queries_per_step = kBenchmarkUiQueriesPerStep;
 
     state.benchmark_runner->begin(
         state.graph,
@@ -418,6 +427,9 @@ void clearProbe(OrientationState& state) {
 
 void destroyOrientationTextures(OrientationState& state) {
     cancelReachabilityBenchmark(state);
+    if (state.benchmark_runner != nullptr) {
+        state.benchmark_runner->reapWorker();
+    }
     state.benchmark_runner.reset();
     destroyTexture(state.probe_overlay);
 }
