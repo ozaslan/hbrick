@@ -80,6 +80,7 @@ private:
     bool preprocess_active_ = false;
     uint64_t preprocess_work_completed_ = 0U;
     uint64_t preprocess_work_total_ = 0U;
+    uint32_t num_vertices_ = 0U;
 };
 
 }  // namespace hbrick

@@ -14,6 +14,7 @@
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
+#include "hbrick/tile/port_graph.hpp"
 #include "hbrick/tile/tile_decomposition.hpp"
 #include "hbrick/tile/tile_size.hpp"
 
@@ -123,6 +124,7 @@ private:
     uint32_t seam_vertex_cursor_ = 0U;
     uint32_t port_graph_tile_cursor_ = 0U;
     std::optional<CsrGraphBuilder> port_graph_builder_{};
+    SeamEdgeDeduper seam_deduper_{};
 
     uint64_t base_tile_started_ns_ = 0U;
     uint64_t finalize_started_ns_ = 0U;

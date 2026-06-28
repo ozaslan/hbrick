@@ -106,6 +106,7 @@ void BrickClosureBaseline::resetPreprocessState() noexcept {
     kleene_rounds_total_ = 0U;
     max_memory_bytes_ = 0U;
     query_reachable_ports_ = BitVector{};
+    num_vertices_ = 0U;
 }
 
 void BrickClosureBaseline::beginPreprocess(
@@ -120,6 +121,8 @@ void BrickClosureBaseline::beginPreprocess(
     port_closure_ = BitMatrix{};
     port_closure_scratch_ = BitMatrix{};
     resetPreprocessState();
+
+    num_vertices_ = graph.numVertices();
 
     max_memory_bytes_ = max_memory_bytes;
     kleene_options_ = kleene_options;
@@ -296,10 +299,7 @@ ReachabilityAnswer BrickClosureBaseline::query(
         return ReachabilityAnswer::Unreachable;
     }
 
-    if (source >= index_.tiles().decomposition().mapWidth()
-            * index_.tiles().decomposition().mapHeight()
-        || target >= index_.tiles().decomposition().mapWidth()
-            * index_.tiles().decomposition().mapHeight()) {
+    if (source >= num_vertices_ || target >= num_vertices_) {
         return ReachabilityAnswer::Unreachable;
     }
 
@@ -320,7 +320,7 @@ uint64_t BrickClosureBaseline::indexStorageBytes() const noexcept {
     if (status_ != BaselineStatus::Completed) {
         return 0U;
     }
-    return port_closure_.memoryBytes();
+    return index_.estimateStorageBytes() + port_closure_.memoryBytes();
 }
 
 }  // namespace hbrick

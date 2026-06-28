@@ -14,6 +14,7 @@
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
+#include "hbrick/tile/port_graph.hpp"
 #include "hbrick/tile/port_index.hpp"
 #include "hbrick/tile/tile_size.hpp"
 
@@ -31,30 +32,30 @@ hbrick::DirectedGridGraph buildGraph(hbrick::MazeLayout& layout) {
     );
 }
 
-uint32_t countManualSeamEdges(
+uint32_t countUniqueManualSeamEdges(
     const hbrick::CsrGraph& graph,
     const hbrick::BrickTileIndex& tile_index,
     const hbrick::PortIndex& port_index
 ) {
-    uint32_t count = 0U;
+    std::set<std::pair<uint32_t, uint32_t>> unique;
     for (uint32_t global_from = 0U; global_from < graph.numVertices(); ++global_from) {
-        if (port_index.portIdForGlobalVertex(global_from) ==
-            std::numeric_limits<uint32_t>::max()) {
+        const uint32_t from_port_id = port_index.portIdForGlobalVertex(global_from);
+        if (from_port_id == std::numeric_limits<uint32_t>::max()) {
             continue;
         }
         const uint32_t from_tile = tile_index.tileIndexForGlobalVertex(global_from);
         for (const uint32_t global_to : graph.outNeighbors(global_from)) {
-            if (port_index.portIdForGlobalVertex(global_to) ==
-                std::numeric_limits<uint32_t>::max()) {
+            const uint32_t to_port_id = port_index.portIdForGlobalVertex(global_to);
+            if (to_port_id == std::numeric_limits<uint32_t>::max()) {
                 continue;
             }
             const uint32_t to_tile = tile_index.tileIndexForGlobalVertex(global_to);
             if (from_tile != to_tile) {
-                ++count;
+                unique.insert({from_port_id, to_port_id});
             }
         }
     }
-    return count;
+    return static_cast<uint32_t>(unique.size());
 }
 
 void expectPortGraphMatchesGlobalBfsOnPortPairs(
@@ -96,6 +97,18 @@ void expectPortGraphMatchesGlobalBfsOnPortPairs(
 
 }  // namespace
 
+TEST(PortGraph, SeamEdgeDeduperRejectsDuplicatePortPairs) {
+    hbrick::SeamEdgeDeduper deduper;
+    EXPECT_TRUE(deduper.tryInsert(3U, 7U));
+    EXPECT_FALSE(deduper.tryInsert(3U, 7U));
+    EXPECT_TRUE(deduper.tryInsert(3U, 8U));
+    EXPECT_TRUE(deduper.tryInsert(4U, 7U));
+
+    deduper.clear();
+    EXPECT_TRUE(deduper.tryInsert(1U, 2U));
+    EXPECT_FALSE(deduper.tryInsert(1U, 2U));
+}
+
 TEST(PortGraph, SeamEdgeCountMatchesManualScan) {
     hbrick::MazeLayout layout(8U, 8U);
     layout.setPassable(hbrick::GridCoord{3U, 3U}, false);
@@ -111,7 +124,7 @@ TEST(PortGraph, SeamEdgeCountMatchesManualScan) {
     ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);
     EXPECT_EQ(
         index.seamEdges().size(),
-        countManualSeamEdges(graph.csrGraph(), index.tiles(), index.ports())
+        countUniqueManualSeamEdges(graph.csrGraph(), index.tiles(), index.ports())
     );
 }
 

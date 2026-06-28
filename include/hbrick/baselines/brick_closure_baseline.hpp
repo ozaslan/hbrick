@@ -144,6 +144,7 @@ private:
     uint64_t max_memory_bytes_ = 0U;
     KleeneSquaringOptions kleene_options_{};
     uint32_t kleene_thread_count_ = 1U;
+    uint32_t num_vertices_ = 0U;
     mutable BitVector query_reachable_ports_{};
 };
 

@@ -189,6 +189,7 @@ bool BrickIndexBuilder::step() noexcept {
                         graph_->numVertices()
                     );
                     index_.seam_edges_.clear();
+                    seam_deduper_.clear();
                     seam_vertex_cursor_ = 0U;
                     finalize_substep_ = static_cast<uint8_t>(FinalizeSubstep::SeamEdges);
                     advanceWork();
@@ -205,7 +206,8 @@ bool BrickIndexBuilder::step() noexcept {
                         index_.port_index_,
                         seam_vertex_cursor_,
                         vertex_end,
-                        index_.seam_edges_
+                        index_.seam_edges_,
+                        &seam_deduper_
                     );
                     seam_vertex_cursor_ = vertex_end;
                     if (seam_vertex_cursor_ < graph_->numVertices()) {
@@ -291,6 +293,7 @@ BrickIndex BrickIndexBuilder::takeIndex() {
     seam_vertex_cursor_ = 0U;
     port_graph_tile_cursor_ = 0U;
     port_graph_builder_.reset();
+    seam_deduper_.clear();
     graph_ = nullptr;
     layout_ = nullptr;
     return result;

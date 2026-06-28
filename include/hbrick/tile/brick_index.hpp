@@ -56,6 +56,12 @@ public:
         return seam_edges_;
     }
 
+    /**
+     * @brief Estimates heap storage for tile summaries, ports, port CSR, and seam edges.
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
+
 private:
     friend class HBrickIndexBuilder;
     friend class BrickIndexBuilder;

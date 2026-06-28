@@ -2,7 +2,9 @@
 
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
+#include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/brick_index_builder.hpp"
+#include "hbrick/tile/seam_edge.hpp"
 #include "hbrick/tile/tile_decomposition.hpp"
 
 namespace hbrick {
@@ -39,6 +41,25 @@ BrickIndex BrickIndex::build(
     }
 
     return builder.takeIndex();
+}
+
+uint64_t BrickIndex::estimateStorageBytes() const noexcept {
+    if (status_ != BaselineStatus::Completed) {
+        return 0U;
+    }
+
+    uint64_t bytes = 0U;
+    for (const BaseTileSummary& summary : tile_index_.summaries()) {
+        bytes += summary.local_closure.memoryBytes();
+        bytes += summary.boundary_summary.memoryBytes();
+        bytes += summary.vertex_to_boundary.memoryBytes();
+        bytes += summary.boundary_to_vertex.memoryBytes();
+    }
+
+    bytes += port_index_.estimateStorageBytes();
+    bytes += port_graph_.estimateStorageBytes();
+    bytes += static_cast<uint64_t>(seam_edges_.size()) * sizeof(SeamEdge);
+    return bytes;
 }
 
 }  // namespace hbrick

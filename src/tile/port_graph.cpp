@@ -15,7 +15,8 @@ void collectSeamEdgesForVertexRange(
     const PortIndex& port_index,
     const uint32_t vertex_begin,
     const uint32_t vertex_end,
-    std::vector<SeamEdge>& out
+    std::vector<SeamEdge>& out,
+    SeamEdgeDeduper* deduper
 ) {
     const uint32_t end = std::min(vertex_end, graph.numVertices());
     for (uint32_t global_from = vertex_begin; global_from < end; ++global_from) {
@@ -33,6 +34,10 @@ void collectSeamEdgesForVertexRange(
 
             const uint32_t to_tile_index = tile_index.tileIndexForGlobalVertex(global_to);
             if (from_tile_index == to_tile_index) {
+                continue;
+            }
+
+            if (deduper != nullptr && !deduper->tryInsert(from_port_id, to_port_id)) {
                 continue;
             }
 

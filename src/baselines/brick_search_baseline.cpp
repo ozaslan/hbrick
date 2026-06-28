@@ -130,6 +130,8 @@ void BrickSearchBaseline::beginPreprocess(
     port_scratch_ = GraphSearchScratch{};
     resetPreprocessState();
 
+    num_vertices_ = graph.numVertices();
+
     index_builder_.begin(graph, layout, nominal_tile_size, max_memory_bytes);
     if (!index_builder_.running()) {
         status_ = index_builder_.report().valid
@@ -197,10 +199,7 @@ ReachabilityAnswer BrickSearchBaseline::query(
         return ReachabilityAnswer::Unreachable;
     }
 
-    if (source >= index_.tiles().decomposition().mapWidth()
-            * index_.tiles().decomposition().mapHeight()
-        || target >= index_.tiles().decomposition().mapWidth()
-            * index_.tiles().decomposition().mapHeight()) {
+    if (source >= num_vertices_ || target >= num_vertices_) {
         return ReachabilityAnswer::Unreachable;
     }
 

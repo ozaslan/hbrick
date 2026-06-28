@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 #include "hbrick/graph/csr_graph.hpp"
@@ -20,8 +21,39 @@ class BrickTileIndex;
 class PortIndex;
 
 /**
+ * @brief Tracks unique directed port-port seam keys during incremental collection.
+ * @ingroup hbrick_tile
+ */
+class SeamEdgeDeduper {
+public:
+    /** @brief Clears all previously seen seam keys. @ingroup hbrick_tile */
+    void clear() noexcept { keys_.clear(); }
+
+    /**
+     * @brief Inserts @c (from_port_id, to_port_id) if not seen yet.
+     * @ingroup hbrick_tile
+     * @return @c true when the key is new.
+     */
+    [[nodiscard]] bool tryInsert(
+        uint32_t from_port_id,
+        uint32_t to_port_id
+    ) noexcept {
+        const uint64_t key =
+            (static_cast<uint64_t>(from_port_id) << 32U)
+            | static_cast<uint64_t>(to_port_id);
+        return keys_.insert(key).second;
+    }
+
+private:
+    std::unordered_set<uint64_t> keys_;
+};
+
+/**
  * @brief Appends seam edges discovered from one half-open global-vertex range.
  * @ingroup hbrick_tile
+ *
+ * When @p deduper is non-null, each unique @c (from_port_id, to_port_id) pair is
+ * appended at most once across all incremental calls sharing the same deduper.
  */
 void collectSeamEdgesForVertexRange(
     const CsrGraph& graph,
@@ -29,7 +61,8 @@ void collectSeamEdgesForVertexRange(
     const PortIndex& port_index,
     uint32_t vertex_begin,
     uint32_t vertex_end,
-    std::vector<SeamEdge>& out
+    std::vector<SeamEdge>& out,
+    SeamEdgeDeduper* deduper = nullptr
 );
 
 /**
