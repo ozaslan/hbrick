@@ -96,7 +96,6 @@ void expectPortKleeneClosureMatchesWarshallOracle(
 
     EXPECT_TRUE(hbrick::bitMatricesEqual(kleene, warshall));
 
-    const uint32_t n_max = hbrick::largestUndirectedComponentSize(index.portGraph());
     hbrick::GraphSearchScratch scc_scratch{index.portGraph().numVertices()};
     const uint32_t k_trunc =
         hbrick::kleeneSquaringCountForCsrGraph(index.portGraph(), scc_scratch);

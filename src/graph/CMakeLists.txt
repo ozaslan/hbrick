@@ -14,6 +14,7 @@ add_library(
     reachability_density.cpp
     connected_components.cpp
     kleene_squaring_bounds.cpp
+    scc_compressed_closure.cpp
 )
 
 target_include_directories(

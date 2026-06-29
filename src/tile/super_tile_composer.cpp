@@ -6,7 +6,7 @@
 
 #include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
-#include "hbrick/graph/kleene_squaring_bounds.hpp"
+#include "hbrick/graph/scc_compressed_closure.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/tile_boundary_order.hpp"
 #include "hbrick/tile/tile_closure_util.hpp"
@@ -239,13 +239,9 @@ BitMatrix computeInterfaceClosure(
     BitMatrix* scratch
 ) {
     GraphSearchScratch scc_scratch{composed_adjacency.numRows()};
-    const uint32_t squaring_count = kleeneSquaringCountForReflexiveAdjacency(
+    (void)transitiveClosureKleeneSccCompressedInPlace(
         composed_adjacency,
-        scc_scratch
-    );
-    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
-        composed_adjacency,
-        squaring_count,
+        scc_scratch,
         scratch
     );
     return composed_adjacency;

@@ -8,6 +8,7 @@
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/graph/kleene_squaring_bounds.hpp"
+#include "hbrick/graph/scc_compressed_closure.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/port_index.hpp"
@@ -104,6 +105,7 @@ void BrickClosureBaseline::resetPreprocessState() noexcept {
     adjacency_vertex_cursor_ = 0U;
     kleene_rounds_remaining_ = 0U;
     kleene_rounds_total_ = 0U;
+    kleene_scc_compression_tried_ = false;
     query_reachable_ports_ = BitVector{};
     num_vertices_ = 0U;
     memory_ledger_.reset(std::numeric_limits<uint64_t>::max());
@@ -205,6 +207,23 @@ bool BrickClosureBaseline::runKleeneStep() noexcept {
         status_ = BaselineStatus::Completed;
         preprocess_phase_ = PreprocessPhase::Done;
         return true;
+    }
+
+    if (!kleene_scc_compression_tried_) {
+        kleene_scc_compression_tried_ = true;
+        GraphSearchScratch scc_scratch{index_.portGraph().numVertices()};
+        if (transitiveClosureKleeneSccCompressedInPlace(
+                port_closure_,
+                index_.portGraph(),
+                scc_scratch,
+                &port_closure_scratch_,
+                kleene_options_)) {
+            preprocess_work_completed_ += static_cast<uint64_t>(kleene_rounds_remaining_);
+            kleene_rounds_remaining_ = 0U;
+            status_ = BaselineStatus::Completed;
+            preprocess_phase_ = PreprocessPhase::Done;
+            return true;
+        }
     }
 
     const bool fixpoint = BooleanClosure::transitiveClosureKleeneSquaringStepInPlace(

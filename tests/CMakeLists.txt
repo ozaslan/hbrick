@@ -351,6 +351,7 @@ add_executable(test_bit_matrix unit/test_bit_matrix.cpp)
 add_executable(test_boolean_closure unit/test_boolean_closure.cpp)
 add_executable(test_connected_components unit/test_connected_components.cpp)
 add_executable(test_kleene_squaring_bounds unit/test_kleene_squaring_bounds.cpp)
+add_executable(test_scc_compressed_closure unit/test_scc_compressed_closure.cpp)
 
 target_link_libraries(
     test_bit_vector
@@ -395,11 +396,21 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
+target_link_libraries(
+    test_scc_compressed_closure
+    PRIVATE
+        hbrick_graph
+        hbrick_tile
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
 hbrick_register_gtests(test_bit_vector)
 hbrick_register_gtests(test_bit_matrix)
 hbrick_register_gtests(test_boolean_closure)
 hbrick_register_gtests(test_connected_components)
 hbrick_register_gtests(test_kleene_squaring_bounds)
+hbrick_register_gtests(test_scc_compressed_closure)
 
 add_executable(test_closure_matrix_builder unit/test_closure_matrix_builder.cpp)
 

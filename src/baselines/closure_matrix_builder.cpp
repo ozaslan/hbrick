@@ -5,7 +5,7 @@
 #include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
-#include "hbrick/graph/kleene_squaring_bounds.hpp"
+#include "hbrick/graph/scc_compressed_closure.hpp"
 
 namespace hbrick {
 
@@ -64,10 +64,10 @@ void ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
     const KleeneSquaringOptions options
 ) {
     GraphSearchScratch scc_scratch{graph.numVertices()};
-    const uint32_t squaring_count = kleeneSquaringCountForCsrGraph(graph, scc_scratch);
-    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+    (void)transitiveClosureKleeneSccCompressedInPlace(
         reflexive_relation,
-        squaring_count,
+        graph,
+        scc_scratch,
         scratch,
         options
     );

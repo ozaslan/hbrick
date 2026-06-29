@@ -65,9 +65,9 @@ public:
      * @brief Computes truncated Kleene closure in place on a reflexive relation.
      * @ingroup hbrick_baselines
      *
-     * Uses @c min(ceil(log2(n_max)), ceil(log2(C + S_max))) squaring rounds where
-     * @c n_max is the largest undirected component, @c C is the directed SCC count,
-     * and @c S_max is the largest directed SCC size, with early fixpoint termination.
+     * Uses SCC-compressed truncated Kleene squaring when @c C < @c V, otherwise
+     * direct vertex-level squaring. The round budget uses @c min(ceil(log2(n_max)),
+     * ceil(log2(C + S_max))) on the graph actually squared.
      *
      * @param reflexive_relation Square @c I | A matrix updated to closure on output.
      * @param graph Source graph used only for component-size truncation.

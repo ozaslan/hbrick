@@ -28,9 +28,8 @@ class MazeLayout;
  *
  * Preprocessing builds a @ref BrickIndex (base tiles + global port CSR) and then
  * materializes a reflexive transitive closure over the port graph via truncated
- * Kleene squaring. The round budget is @c min(ceil(log2(n_max)),
- * ceil(log2(C + S_max))) where @c n_max is the largest undirected component,
- * @c C is the directed SCC count, and @c S_max is the largest SCC size.
+ * Kleene squaring. When @c C < @c V, closure is computed on the SCC-compressed
+ * @c C x @c C component graph and expanded back to ports.
  *
  * Query first applies the same-tile local-closure shortcut; otherwise it answers
  * whether there exist ports @c p,q such that @c R_VB(source,p) and
@@ -144,6 +143,7 @@ private:
     uint32_t adjacency_vertex_cursor_ = 0U;
     uint32_t kleene_rounds_remaining_ = 0U;
     uint32_t kleene_rounds_total_ = 0U;
+    bool kleene_scc_compression_tried_ = false;
     KleeneSquaringOptions kleene_options_{};
     uint32_t kleene_thread_count_ = 1U;
     uint32_t num_vertices_ = 0U;
