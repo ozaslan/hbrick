@@ -18,8 +18,10 @@
 
 namespace hbrick {
 
+class BenchmarkCampaignLogger;
+
 /** @brief Schema version for campaign CSV/JSON artifacts. @ingroup hbrick_bench */
-constexpr const char* kBenchmarkCampaignSchemaVersion = "1";
+constexpr const char* kBenchmarkCampaignSchemaVersion = "2";
 
 /**
  * @brief Standard paths under a campaign root directory.
@@ -74,6 +76,38 @@ struct BenchmarkCampaignMapContext {
     std::string generator_type;
     std::string recipe_path;
     std::string gallery_image_path;
+};
+
+/**
+ * @brief Graph and grid statistics recorded in the campaign manifest.
+ * @ingroup hbrick_bench
+ */
+struct BenchmarkCampaignMapCharacterization {
+    uint32_t grid_width = 0U;
+    uint32_t grid_height = 0U;
+    uint32_t passable_cells = 0U;
+    uint32_t num_vertices = 0U;
+    uint64_t num_edges = 0U;
+    uint32_t undirected_component_count = 0U;
+    uint32_t largest_undirected_component = 0U;
+    uint32_t num_strongly_connected_components = 0U;
+    uint32_t largest_strongly_connected_component = 0U;
+    uint32_t condensation_vertices = 0U;
+    uint32_t condensation_edges = 0U;
+    std::string orientation_mode;
+    uint64_t carve_seed = 0U;
+    uint64_t opening_seed = 0U;
+    uint32_t extra_openings = 0U;
+    float p_one_way = 0.0F;
+    float p_bidirectional = 0.0F;
+    float gradient_angle_degrees = 0.0F;
+    float p_against_gradient = 0.0F;
+    uint64_t orientation_seed = 0U;
+    uint64_t gallery_image_hash = 0U;
+    std::string movingai_set;
+    std::string movingai_map;
+    std::string datasets_root;
+    std::string passability_policy;
 };
 
 /**
@@ -133,13 +167,22 @@ struct BenchmarkCampaignResultRow {
     std::string& error_message
 );
 
-/** @brief Appends one manifest row for @p map. @ingroup hbrick_bench */
+/** @brief Appends one manifest row for @p map (legacy fields only). @ingroup hbrick_bench */
 [[nodiscard]] bool appendBenchmarkCampaignManifestCsv(
     const std::filesystem::path& manifest_csv,
     const BenchmarkCampaignMetadata& metadata,
     const BenchmarkCampaignMapContext& map,
     uint32_t num_vertices,
     uint64_t num_edges,
+    std::string& error_message
+);
+
+/** @brief Appends a fully characterized manifest row. @ingroup hbrick_bench */
+[[nodiscard]] bool appendBenchmarkCampaignManifestRowFull(
+    const std::filesystem::path& manifest_csv,
+    const BenchmarkCampaignMetadata& metadata,
+    const BenchmarkCampaignMapContext& map,
+    const BenchmarkCampaignMapCharacterization& characterization,
     std::string& error_message
 );
 
@@ -162,8 +205,11 @@ struct BenchmarkCampaignResultRow {
 [[nodiscard]] const char* baselineStatusLabel(BaselineStatus status) noexcept;
 
 /**
- * @brief Runs @ref ReachabilityBenchmarkJob on a grid graph and appends campaign outputs.
+ * @brief Runs @ref ReachabilityBenchmarkJob and appends campaign outputs.
  * @ingroup hbrick_bench
+ *
+ * When @p append_manifest is @c false the manifest is left unchanged (maps
+ * pre-generated via @ref generateProceduralCampaignMaps).
  */
 [[nodiscard]] bool runBenchmarkCampaignGridJob(
     const BenchmarkCampaignPaths& paths,
@@ -172,7 +218,9 @@ struct BenchmarkCampaignResultRow {
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     ReachabilityBenchmarkConfig config,
-    std::string& error_message
+    std::string& error_message,
+    bool append_manifest = true,
+    BenchmarkCampaignLogger* logger = nullptr
 );
 
 }  // namespace hbrick

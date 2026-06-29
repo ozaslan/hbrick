@@ -1,6 +1,6 @@
 # Benchmark Campaign — TODO
 
-CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: sections 0–1 implemented** (see `docs/benchmark_campaign.md`).
+CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: sections 0–1, 2 (partial), 3–6 (partial) implemented** (see `docs/benchmark_campaign.md`, `docs/benchmark_campaign_seeding.md`).
 
 **Goal:** reproducible maps, precise preprocess/query/memory numbers, hard memory caps, disk artifacts (data + gallery), and fair comparison across methods on the same query workload.
 
@@ -9,11 +9,11 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 ## 0. Reuse before building new code
 
 - [x] Extend `ReachabilityBenchmarkJob` / `ReachabilityBenchmarkConfig` and `reachability_benchmark_format` for CLI output rather than duplicating benchmark logic from the dataset browser.
-- [ ] Reuse `tools::Recipe` (JSON) for orientation parameters: `RandomAsymmetric`, `AcyclicEastSouth`, `BidirectionalAll`, `GradientFlow`, seeds, and gradient fields.
-- [ ] Reuse `tests/support/maze_generator` (`generatePerfectMaze`, `generateMazeWithExtraPassages`) for procedural grids with controlled connectedness (extra openings = more cycles).
-- [ ] Reuse `tests/support/movingai_map_catalog` and recipe-based integration tests as a second dataset source alongside generated mazes.
+- [x] Reuse `tools::Recipe` (JSON) for orientation parameters: `RandomAsymmetric`, `AcyclicEastSouth`, `BidirectionalAll`, `GradientFlow`, seeds, and gradient fields.
+- [x] Reuse `tests/support/maze_generator` (`generatePerfectMaze`, `generateMazeWithExtraPassages`) for procedural grids with controlled connectedness (extra openings = more cycles).
+- [x] Reuse `tests/support/movingai_map_catalog` and recipe-based integration tests as a second dataset source alongside generated mazes.
 - [x] Reuse `reachability_oracle` / BFS checks for post-run correctness on sampled pairs (already wired in `ReachabilityBenchmarkConfig::correctness_check_count`).
-- [ ] Reuse `tools/dataset_browser/map_render` pixel paths (or extract to `hbrick_viz`) for gallery PNG/SVG export without linking the full GUI.
+- [x] Reuse `tools/dataset_browser/map_render` pixel paths (or extract to `hbrick_viz`) for gallery PNG/SVG export without linking the full GUI. *(Headless passability PPM in `benchmark_campaign_gallery`; orientation overlay still future.)*
 - [x] Reuse `currentProcessRssBytes()` (`process_memory.cpp`) to sample peak RSS during preprocess, not only ledger-estimated index bytes.
 - [ ] Reuse existing micro-benchmarks (`kleene_closure_benchmark`, `port_closure_benchmark`) as optional preprocess-only tracks, separate from end-to-end query campaigns.
 
@@ -32,20 +32,20 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 
 ## 2. Reproducibility and tests (do early)
 
-- [ ] Document the seeding contract: which RNG seeds control maze carving, extra openings, orientation, and query pairs, and in what order they are consumed.
-- [ ] Add tests: fixed generator + recipe parameters → identical `MazeLayout`, identical CSR `(V, E)`, identical orientation edge set, identical gallery image hash.
-- [ ] Add tests for `tools::Recipe` round-trip (save/load JSON) so CLI and GUI produce the same directed graph from the same recipe file.
+- [x] Document the seeding contract: which RNG seeds control maze carving, extra openings, orientation, and query pairs, and in what order they are consumed. (`docs/benchmark_campaign_seeding.md`)
+- [x] Add tests: fixed generator + recipe parameters → identical `MazeLayout`, identical CSR `(V, E)`, identical orientation edge set, identical gallery image hash.
+- [ ] Add tests for `tools::Recipe` round-trip (save/load JSON) so CLI and GUI produce the same directed graph from the same recipe file. *(Covered in `test_recipe_reachability`; campaign-specific round-trip optional.)*
 - [ ] Add smoke test for the CLI campaign driver on one tiny map (one BRICK config, one H-BRICK config, one CSR baseline) with golden summary rows.
-- [ ] Pin environment notes in docs: monotonic timers, whether hyperthreading/turbo affects comparability, and recommended `taskset` / thread limits for published numbers.
+- [x] Pin environment notes in docs: monotonic timers, whether hyperthreading/turbo affects comparability, and recommended `taskset` / thread limits for published numbers.
 
 ---
 
 ## 3. Dataset generation and manifest
 
-- [ ] Add a CLI that generates maze datasets from parameter grids: logical size, `extra_openings` (connectedness), orientation mode, and asymmetric probabilities.
-- [ ] Support MovingAI maps from disk as inputs (passability policy + recipe), not only procedural mazes.
-- [ ] Emit `manifest.csv` (or `.md`) per campaign: map id, generator type, all parameters, seeds, paths to layout/CSR/recipe/gallery image, and characterization stats (see §4).
-- [ ] Support batch generation independent of benchmarking so maps can be reviewed in the gallery before spending hours on closure builds.
+- [x] Add a CLI that generates maze datasets from parameter grids: logical size, `extra_openings` (connectedness), orientation mode, and asymmetric probabilities. (`generate` command)
+- [x] Support MovingAI maps from disk as inputs (passability policy + recipe), not only procedural mazes. (`import-movingai` command)
+- [x] Emit `manifest.csv` (or `.md`) per campaign: map id, generator type, all parameters, seeds, paths to layout/CSR/recipe/gallery image, and characterization stats (see §4). *(Schema v2 manifest columns.)*
+- [x] Support batch generation independent of benchmarking so maps can be reviewed in the gallery before spending hours on closure builds.
 
 ---
 
@@ -53,29 +53,29 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 
 Precompute once per map and copy into every benchmark row:
 
-- [ ] Passable cell count, grid width/height, directed vertex count `V`, directed edge count `E`.
-- [ ] Undirected connected component count and largest undirected component size (on passable cells).
-- [ ] Directed SCC count `C`, largest SCC size `S_max`, condensation DAG vertex/edge counts.
+- [x] Passable cell count, grid width/height, directed vertex count `V`, directed edge count `E`.
+- [x] Undirected connected component count and largest undirected component size (on passable cells).
+- [x] Directed SCC count `C`, largest SCC size `S_max`, condensation DAG vertex/edge counts.
 - [ ] Optional: `ReachabilityDensityEstimator` sample (global reachability fraction) for large maps where exact density is expensive.
-- [ ] Recipe/orientation fields: mode, `p_one_way`, `p_bidirectional`, gradient angle, `p_against_gradient`.
+- [x] Recipe/orientation fields: mode, `p_one_way`, `p_bidirectional`, gradient angle, `p_against_gradient`.
 - [ ] For BRICK runs: record nominal tile size, partial-edge-tile flag, port count `P`, and largest undirected port component `n_max`.
 
 ---
 
 ## 5. Maze gallery (reoriented images)
 
-- [ ] Export gallery images to disk (PNG and/or SVG) using the same visual language as the dataset browser (terrain, passability, orientation overlay where applicable).
-- [ ] Link `gallery_image_path` in the manifest; use deterministic filenames derived from map id + recipe seed.
-- [ ] Add a test that gallery bytes are stable for fixed inputs (or hash-stable within a documented renderer version).
+- [x] Export gallery images to disk (PNG and/or SVG) using the same visual language as the dataset browser (terrain, passability, orientation overlay where applicable). *(Passability PPM only for now.)*
+- [x] Link `gallery_image_path` in the manifest; use deterministic filenames derived from map id + recipe seed.
+- [x] Add a test that gallery bytes are stable for fixed inputs (or hash-stable within a documented renderer version).
 
 ---
 
 ## 6. CLI benchmark runner (no GUI)
 
-- [ ] Build `hbrick_benchmark_campaign` (or similar) CLI: load manifest → run methods → append results.
-- [ ] Support `--resume` / skip-completed rows so multi-day sweeps can continue after interruption.
-- [ ] Support `--methods`, `--maps`, and `--configs` filters for partial reruns.
-- [ ] Log progress to stderr and per-campaign `logs/` with enough context to debug a single failing row.
+- [x] Build `hbrick_benchmark_campaign` (or similar) CLI: load manifest → run methods → append results.
+- [x] Support `--resume` / skip-completed rows so multi-day sweeps can continue after interruption.
+- [x] Support `--methods`, `--maps`, and `--configs` filters for partial reruns. (`--map`, `--method`, `--methods`, `--preset`; `--configs` still future.)
+- [x] Log progress to stderr and per-campaign `logs/` with enough context to debug a single failing row.
 
 ### 6a. Flat BRICK sweeps
 
@@ -85,11 +85,11 @@ Precompute once per map and copy into every benchmark row:
 ### 6b. H-BRICK sweeps
 
 - [ ] Sweep base tile size, `group_size`, `max_depth`, and memory cap.
-- [ ] H-BRICK is **not** in `ReachabilityBenchmarkConfig::defaultMethodList()` today — include it explicitly in the campaign method list.
+- [x] H-BRICK is **not** in `ReachabilityBenchmarkConfig::defaultMethodList()` today — include it explicitly in the campaign method list. (`--preset all` / `brick` / `smoke`)
 
 ### 6c. CSR / graph baselines (same maps, same query pairs)
 
-- [ ] CsrBfs, CsrDfs, Grail, TwoHop, SccDagSearch, SccDagClosure, FullClosure on every map.
+- [x] CsrBfs, CsrDfs, Grail, TwoHop, SccDagSearch, SccDagClosure, FullClosure on every map. (`--preset csr` or `all`)
 - [ ] Use **CsrBfs** as the reference for speedup columns (consistent with existing `ReachabilityBenchmarkJob`).
 
 ---

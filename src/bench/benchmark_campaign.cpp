@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "hbrick/baselines/baseline_status.hpp"
+#include "hbrick/bench/benchmark_campaign_log.hpp"
 #include "hbrick/bench/process_memory.hpp"
 #include "hbrick/bench/reachability_benchmark_format.hpp"
 
@@ -121,7 +122,53 @@ namespace {
 
 [[nodiscard]] std::string campaignManifestCsvHeader() {
     return "campaign_schema_version,campaign_id,map_id,generator_type,recipe_path,"
-           "gallery_image_path,num_vertices,num_edges\n";
+           "gallery_image_path,grid_width,grid_height,passable_cells,num_vertices,"
+           "num_edges,undirected_component_count,largest_undirected_component,"
+           "num_sccs,largest_scc,condensation_vertices,condensation_edges,"
+           "orientation_mode,carve_seed,opening_seed,extra_openings,p_one_way,"
+           "p_bidirectional,gradient_angle_degrees,p_against_gradient,"
+           "orientation_seed,gallery_image_hash,movingai_set,movingai_map,"
+           "datasets_root,passability_policy\n";
+}
+
+[[nodiscard]] std::string formatManifestCsvRow(
+    const BenchmarkCampaignMetadata& metadata,
+    const BenchmarkCampaignMapContext& map,
+    const BenchmarkCampaignMapCharacterization& characterization
+) {
+    std::ostringstream stream;
+    stream << kBenchmarkCampaignSchemaVersion << ','
+           << csvEscape(metadata.campaign_id) << ','
+           << csvEscape(map.map_id) << ','
+           << csvEscape(map.generator_type) << ','
+           << csvEscape(map.recipe_path) << ','
+           << csvEscape(map.gallery_image_path) << ','
+           << characterization.grid_width << ','
+           << characterization.grid_height << ','
+           << characterization.passable_cells << ','
+           << characterization.num_vertices << ','
+           << characterization.num_edges << ','
+           << characterization.undirected_component_count << ','
+           << characterization.largest_undirected_component << ','
+           << characterization.num_strongly_connected_components << ','
+           << characterization.largest_strongly_connected_component << ','
+           << characterization.condensation_vertices << ','
+           << characterization.condensation_edges << ','
+           << csvEscape(characterization.orientation_mode) << ','
+           << characterization.carve_seed << ','
+           << characterization.opening_seed << ','
+           << characterization.extra_openings << ','
+           << characterization.p_one_way << ','
+           << characterization.p_bidirectional << ','
+           << characterization.gradient_angle_degrees << ','
+           << characterization.p_against_gradient << ','
+           << characterization.orientation_seed << ','
+           << characterization.gallery_image_hash << ','
+           << csvEscape(characterization.movingai_set) << ','
+           << csvEscape(characterization.movingai_map) << ','
+           << csvEscape(characterization.datasets_root) << ','
+           << csvEscape(characterization.passability_policy) << '\n';
+    return stream.str();
 }
 
 [[nodiscard]] std::string formatResultCsvRow(const BenchmarkCampaignResultRow& row) {
@@ -353,6 +400,25 @@ bool appendBenchmarkCampaignManifestCsv(
     const uint64_t num_edges,
     std::string& error_message
 ) {
+    BenchmarkCampaignMapCharacterization characterization{};
+    characterization.num_vertices = num_vertices;
+    characterization.num_edges = num_edges;
+    return appendBenchmarkCampaignManifestRowFull(
+        manifest_csv,
+        metadata,
+        map,
+        characterization,
+        error_message
+    );
+}
+
+bool appendBenchmarkCampaignManifestRowFull(
+    const std::filesystem::path& manifest_csv,
+    const BenchmarkCampaignMetadata& metadata,
+    const BenchmarkCampaignMapContext& map,
+    const BenchmarkCampaignMapCharacterization& characterization,
+    std::string& error_message
+) {
     const bool needs_header = !fileExists(manifest_csv);
     std::ofstream output(manifest_csv, std::ios::out | std::ios::app);
     if (!output.is_open()) {
@@ -362,14 +428,7 @@ bool appendBenchmarkCampaignManifestCsv(
     if (needs_header) {
         output << campaignManifestCsvHeader();
     }
-    output << kBenchmarkCampaignSchemaVersion << ','
-           << csvEscape(metadata.campaign_id) << ','
-           << csvEscape(map.map_id) << ','
-           << csvEscape(map.generator_type) << ','
-           << csvEscape(map.recipe_path) << ','
-           << csvEscape(map.gallery_image_path) << ','
-           << num_vertices << ','
-           << num_edges << '\n';
+    output << formatManifestCsvRow(metadata, map, characterization);
     if (!output.good()) {
         error_message = "Failed to append manifest.csv row";
         return false;
@@ -475,8 +534,18 @@ bool runBenchmarkCampaignGridJob(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     ReachabilityBenchmarkConfig config,
-    std::string& error_message
+    std::string& error_message,
+    const bool append_manifest,
+    BenchmarkCampaignLogger* logger
 ) {
+    if (logger != nullptr) {
+        logger->infof(
+            "Starting benchmark for map %s (%u vertices, %llu edges)",
+            map.map_id.c_str(),
+            graph.numVertices(),
+            static_cast<unsigned long long>(graph.numEdges())
+        );
+    }
     std::vector<uint32_t> query_universe(graph.numVertices());
     for (uint32_t vertex = 0U; vertex < graph.numVertices(); ++vertex) {
         query_universe[vertex] = vertex;
@@ -490,17 +559,22 @@ bool runBenchmarkCampaignGridJob(
 
     if (!report.valid) {
         error_message = "ReachabilityBenchmarkJob returned an invalid report";
+        if (logger != nullptr) {
+            logger->error(error_message.c_str());
+        }
         return false;
     }
 
-    if (!appendBenchmarkCampaignManifestCsv(
-            paths.manifest_csv,
-            metadata,
-            map,
-            report.num_vertices,
-            report.num_edges,
-            error_message)) {
-        return false;
+    if (append_manifest) {
+        if (!appendBenchmarkCampaignManifestCsv(
+                paths.manifest_csv,
+                metadata,
+                map,
+                report.num_vertices,
+                report.num_edges,
+                error_message)) {
+            return false;
+        }
     }
 
     const BenchmarkCampaignQueryWorkload workload =
@@ -512,8 +586,25 @@ bool runBenchmarkCampaignGridJob(
     const std::vector<BenchmarkCampaignResultRow> rows =
         benchmarkCampaignRowsFromReport(map, metadata, workload, report, peak_rss);
     if (!appendBenchmarkCampaignResultsCsv(paths.results_csv, rows, error_message)) {
+        if (logger != nullptr) {
+            logger->error(error_message.c_str());
+        }
         return false;
     }
+
+    if (logger != nullptr) {
+        for (const BenchmarkCampaignResultRow& row : rows) {
+            logger->infof(
+                "  %s: %s (preprocess %llu ns, QPS %.1f)",
+                reachabilityBaselineName(row.metrics.method),
+                baselineStatusLabel(row.metrics.status),
+                static_cast<unsigned long long>(row.metrics.preprocess_nanoseconds),
+                row.metrics.query_stats.queries_per_second
+            );
+        }
+        logger->infof("Finished map %s", map.map_id.c_str());
+    }
+
     return writeBenchmarkCampaignSummaryMd(
         paths.summary_md,
         metadata,

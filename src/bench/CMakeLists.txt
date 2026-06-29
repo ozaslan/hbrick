@@ -8,6 +8,14 @@ add_library(
     reachability_benchmark_util.cpp
     reachability_benchmark_runner.cpp
     benchmark_campaign.cpp
+    benchmark_campaign_dataset.cpp
+    benchmark_campaign_gallery.cpp
+    benchmark_campaign_run.cpp
+    benchmark_campaign_config.cpp
+    benchmark_campaign_log.cpp
+    ${CMAKE_SOURCE_DIR}/tests/support/maze_generator.cpp
+    ${CMAKE_SOURCE_DIR}/tests/support/movingai_map_catalog.cpp
+    ${CMAKE_SOURCE_DIR}/tools/dataset_browser/recipe.cpp
 )
 
 target_include_directories(
@@ -15,6 +23,9 @@ target_include_directories(
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests/support
+        ${CMAKE_SOURCE_DIR}/tools/dataset_browser
 )
 
 target_compile_definitions(
@@ -32,6 +43,7 @@ target_link_libraries(
         hbrick_baselines
         hbrick_graph
         hbrick_grid
+        hbrick_io
         hbrick_project_options
 )
 target_link_libraries(hbrick_bench PRIVATE hbrick_project_warnings)

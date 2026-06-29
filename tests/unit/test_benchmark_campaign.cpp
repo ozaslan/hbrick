@@ -4,6 +4,10 @@
 #include <sstream>
 
 #include "hbrick/bench/benchmark_campaign.hpp"
+#include "hbrick/bench/benchmark_campaign_dataset.hpp"
+#include "hbrick/bench/benchmark_campaign_gallery.hpp"
+#include "hbrick/bench/benchmark_campaign_config.hpp"
+#include "hbrick/bench/benchmark_campaign_run.hpp"
 #include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
@@ -109,6 +113,144 @@ TEST(BenchmarkCampaign, SmokeGridJobWritesResults) {
     const std::string workload = readFile(paths.workload_json);
     EXPECT_NE(workload.find("\"pair_seed\":"), std::string::npos);
     EXPECT_NE(workload.find("\"pair_list_hash\":"), std::string::npos);
+
+    std::filesystem::remove_all(root);
+}
+
+TEST(BenchmarkCampaign, ProceduralMazeGenerationIsDeterministic) {
+    hbrick::ProceduralMazeSpec spec{};
+    spec.logical_width = 4U;
+    spec.logical_height = 4U;
+    spec.carve_seed = 11U;
+    spec.opening_seed = 22U;
+    spec.extra_openings = 2U;
+    spec.orientation_seed = 0x515EEDULL;
+    spec.asymmetric_params.p_one_way = 0.20L;
+    spec.asymmetric_params.p_bidirectional = 0.10L;
+
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "hbrick_campaign_proc_test";
+    std::filesystem::remove_all(root);
+
+    const hbrick::BenchmarkCampaignPaths paths =
+        hbrick::benchmarkCampaignPathsFromRoot(root);
+    hbrick::BenchmarkCampaignMetadata metadata =
+        hbrick::captureBenchmarkCampaignMetadata("proc_test");
+    std::string error;
+    ASSERT_TRUE(hbrick::initializeBenchmarkCampaignDirectory(paths, metadata, error))
+        << error;
+
+    hbrick::GeneratedCampaignMap first{};
+    hbrick::GeneratedCampaignMap second{};
+    ASSERT_TRUE(hbrick::generateProceduralCampaignMap(
+        spec, 0U, paths, metadata.campaign_id, first, error
+    )) << error;
+    ASSERT_TRUE(hbrick::generateProceduralCampaignMap(
+        spec, 0U, paths, metadata.campaign_id, second, error
+    )) << error;
+
+    EXPECT_EQ(first.map_id, second.map_id);
+    EXPECT_EQ(first.layout.width(), second.layout.width());
+    EXPECT_EQ(first.layout.height(), second.layout.height());
+    EXPECT_EQ(first.layout.passableCount(), second.layout.passableCount());
+    EXPECT_EQ(first.graph.numVertices(), second.graph.numVertices());
+    EXPECT_EQ(first.graph.numEdges(), second.graph.numEdges());
+    EXPECT_EQ(
+        first.characterization.gallery_image_hash,
+        second.characterization.gallery_image_hash
+    );
+    EXPECT_NE(first.characterization.gallery_image_hash, 0U);
+
+    for (uint32_t y = 0U; y < first.layout.height(); ++y) {
+        for (uint32_t x = 0U; x < first.layout.width(); ++x) {
+            EXPECT_EQ(
+                first.layout.isPassable(x, y),
+                second.layout.isPassable(x, y)
+            );
+        }
+    }
+
+    std::filesystem::remove_all(root);
+}
+
+TEST(BenchmarkCampaign, GalleryPpmHashIsStable) {
+    hbrick::MazeLayout layout{5U, 5U, true};
+    layout.setPassable(2U, 2U, false);
+
+    const std::filesystem::path image =
+        std::filesystem::temp_directory_path() / "hbrick_campaign_gallery.ppm";
+    std::string error;
+    ASSERT_TRUE(hbrick::writePassabilityPpm(layout, image, error)) << error;
+
+    const uint64_t first = hbrick::hashFileContentsFnv1a(image);
+    const uint64_t second = hbrick::hashFileContentsFnv1a(image);
+    EXPECT_EQ(first, second);
+    EXPECT_NE(first, 0U);
+
+    std::filesystem::remove(image);
+}
+
+TEST(BenchmarkCampaign, ParseReachabilityBaselineNames) {
+    std::vector<hbrick::ReachabilityBaselineId> methods;
+    std::string error;
+    ASSERT_TRUE(hbrick::parseReachabilityBaselineCsv(
+        "CsrBfs,BrickSearch,HBrick",
+        methods,
+        error
+    )) << error;
+    ASSERT_EQ(methods.size(), 3U);
+    EXPECT_EQ(methods[0], hbrick::ReachabilityBaselineId::CsrBfs);
+    EXPECT_EQ(methods[1], hbrick::ReachabilityBaselineId::BrickSearch);
+    EXPECT_EQ(methods[2], hbrick::ReachabilityBaselineId::HBrick);
+
+    hbrick::ReachabilityBaselineId method = hbrick::ReachabilityBaselineId::CsrBfs;
+    EXPECT_TRUE(hbrick::reachabilityBaselineFromName("brickclosure", method));
+    EXPECT_EQ(method, hbrick::ReachabilityBaselineId::BrickClosure);
+}
+
+TEST(BenchmarkCampaign, GenerateAndRunFromManifest) {
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "hbrick_campaign_generate_run";
+    std::filesystem::remove_all(root);
+
+    const hbrick::BenchmarkCampaignPaths paths =
+        hbrick::benchmarkCampaignPathsFromRoot(root);
+    hbrick::BenchmarkCampaignMetadata metadata =
+        hbrick::captureBenchmarkCampaignMetadata("generate_run");
+    std::string error;
+    ASSERT_TRUE(hbrick::initializeBenchmarkCampaignDirectory(paths, metadata, error))
+        << error;
+
+    hbrick::ProceduralMazeSpec spec{};
+    spec.logical_width = 3U;
+    spec.logical_height = 3U;
+    spec.carve_seed = 7U;
+    spec.opening_seed = 8U;
+    spec.extra_openings = 1U;
+    spec.orientation_seed = 0xBEEFULL;
+
+    ASSERT_TRUE(hbrick::generateProceduralCampaignMaps(
+        paths, metadata, spec, 1U, error
+    )) << error;
+
+    const std::string manifest = readFile(paths.manifest_csv);
+    EXPECT_NE(manifest.find("procedural_maze"), std::string::npos);
+    EXPECT_NE(manifest.find("gallery_image_hash"), std::string::npos);
+
+    hbrick::ReachabilityBenchmarkConfig config{};
+    config.query_count = 8U;
+    config.warmup_queries = 2U;
+    config.correctness_check_count = 4U;
+    config.pair_seed = 0x1234ULL;
+    config.methods = {hbrick::ReachabilityBaselineId::CsrBfs};
+
+    hbrick::BenchmarkCampaignRunOptions options{};
+    ASSERT_TRUE(hbrick::runBenchmarkCampaignFromManifest(
+        paths, metadata, config, options, error
+    )) << error;
+
+    const std::string results = readFile(paths.results_csv);
+    EXPECT_NE(results.find("CsrBfs"), std::string::npos);
 
     std::filesystem::remove_all(root);
 }

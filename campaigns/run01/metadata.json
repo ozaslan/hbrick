@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "campaign_id": "run01",
+  "started_at_utc": "2026-06-29T22:14:20Z",
+  "git_commit": "685f55ebdea4e0240f3186b8803abfcb96e6e4e7",
+  "build_type": "Release",
+  "compiler_id": "GNU",
+  "compiler_version": "13.3.0",
+  "cpu_model": "Intel(R) Core(TM) i7-8650U CPU @ 1.90GHz",
+  "hardware_concurrency": 8
+}
