@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 
 #include "hbrick/bench/reachability_benchmark.hpp"
 
@@ -44,6 +45,14 @@ namespace hbrick {
 [[nodiscard]] double liveQuerySpeedupVsBfs(
     const ReachabilityBenchmarkReport& report,
     const BaselineBenchmarkMetrics& metrics
+) noexcept;
+
+/**
+ * @brief FNV-1a hash over timed query pairs for cross-run workload verification.
+ * @ingroup hbrick_bench
+ */
+[[nodiscard]] uint64_t hashReachabilityQueryPairs(
+    std::span<const ReachabilityQueryPair> pairs
 ) noexcept;
 
 }  // namespace hbrick

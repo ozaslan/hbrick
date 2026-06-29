@@ -245,6 +245,8 @@ struct ReachabilityBenchmarkReport {
     uint64_t num_edges = 0U;
     uint32_t query_pair_count = 0U;
     uint64_t pair_seed = 0U;
+    /** @brief FNV-1a hash of the generated timed query pair list. @ingroup hbrick_bench */
+    uint64_t pair_list_hash = 0U;
     double reference_bfs_mean_query_nanoseconds = 0.0;
     uint64_t reference_bfs_total_benchmark_nanoseconds = 0U;
     std::vector<BaselineBenchmarkMetrics> methods;

@@ -1575,6 +1575,7 @@ bool ReachabilityBenchmarkJob::step() noexcept {
             );
             impl_->report.query_pair_count =
                 static_cast<uint32_t>(impl_->pairs.size());
+            impl_->report.pair_list_hash = hashReachabilityQueryPairs(impl_->pairs);
             impl_->progress.work_total = computeWorkTotal(
                 impl_->methods,
                 impl_->report.query_pair_count,

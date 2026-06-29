@@ -1,6 +1,6 @@
 # Benchmark Campaign — TODO
 
-CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: not started.**
+CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: sections 0–1 implemented** (see `docs/benchmark_campaign.md`).
 
 **Goal:** reproducible maps, precise preprocess/query/memory numbers, hard memory caps, disk artifacts (data + gallery), and fair comparison across methods on the same query workload.
 
@@ -8,25 +8,25 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 
 ## 0. Reuse before building new code
 
-- [ ] Extend `ReachabilityBenchmarkJob` / `ReachabilityBenchmarkConfig` and `reachability_benchmark_format` for CLI output rather than duplicating benchmark logic from the dataset browser.
+- [x] Extend `ReachabilityBenchmarkJob` / `ReachabilityBenchmarkConfig` and `reachability_benchmark_format` for CLI output rather than duplicating benchmark logic from the dataset browser.
 - [ ] Reuse `tools::Recipe` (JSON) for orientation parameters: `RandomAsymmetric`, `AcyclicEastSouth`, `BidirectionalAll`, `GradientFlow`, seeds, and gradient fields.
 - [ ] Reuse `tests/support/maze_generator` (`generatePerfectMaze`, `generateMazeWithExtraPassages`) for procedural grids with controlled connectedness (extra openings = more cycles).
 - [ ] Reuse `tests/support/movingai_map_catalog` and recipe-based integration tests as a second dataset source alongside generated mazes.
-- [ ] Reuse `reachability_oracle` / BFS checks for post-run correctness on sampled pairs (already wired in `ReachabilityBenchmarkConfig::correctness_check_count`).
+- [x] Reuse `reachability_oracle` / BFS checks for post-run correctness on sampled pairs (already wired in `ReachabilityBenchmarkConfig::correctness_check_count`).
 - [ ] Reuse `tools/dataset_browser/map_render` pixel paths (or extract to `hbrick_viz`) for gallery PNG/SVG export without linking the full GUI.
-- [ ] Reuse `currentProcessRssBytes()` (`process_memory.cpp`) to sample peak RSS during preprocess, not only ledger-estimated index bytes.
+- [x] Reuse `currentProcessRssBytes()` (`process_memory.cpp`) to sample peak RSS during preprocess, not only ledger-estimated index bytes.
 - [ ] Reuse existing micro-benchmarks (`kleene_closure_benchmark`, `port_closure_benchmark`) as optional preprocess-only tracks, separate from end-to-end query campaigns.
 
 ---
 
 ## 1. Campaign layout and output schema
 
-- [ ] Define a standard output directory per campaign: `manifest.csv`, `results.csv`, `summary.md`, `gallery/`, `recipes/`, `logs/`.
-- [ ] Version the result schema (`campaign_schema_version`) so old CSV rows remain parseable after adding columns.
-- [ ] Record campaign metadata in every run: git commit hash, build type, compiler, CPU model, thread counts, and timestamp.
-- [ ] Write one row per (map, method, parameter tuple); include `BaselineStatus` (`Completed`, `SkippedByPolicy`, `Failed`) so failures are not silently dropped.
-- [ ] Generate both `csv` (analysis) and `md` (human summary) from one internal `BaselineBenchmarkMetrics` struct.
-- [ ] Store query workload separately from map generation: `pair_seed`, `query_count`, `warmup_queries`, and hash of the pair list for cross-run comparison.
+- [x] Define a standard output directory per campaign: `manifest.csv`, `results.csv`, `summary.md`, `gallery/`, `recipes/`, `logs/`.
+- [x] Version the result schema (`campaign_schema_version`) so old CSV rows remain parseable after adding columns.
+- [x] Record campaign metadata in every run: git commit hash, build type, compiler, CPU model, thread counts, and timestamp.
+- [x] Write one row per (map, method, parameter tuple); include `BaselineStatus` (`Completed`, `SkippedByPolicy`, `Failed`) so failures are not silently dropped.
+- [x] Generate both `csv` (analysis) and `md` (human summary) from one internal `BaselineBenchmarkMetrics` struct.
+- [x] Store query workload separately from map generation: `pair_seed`, `query_count`, `warmup_queries`, and hash of the pair list for cross-run comparison.
 
 ---
 

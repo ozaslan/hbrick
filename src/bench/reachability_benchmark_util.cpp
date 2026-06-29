@@ -2,6 +2,36 @@
 
 namespace hbrick {
 
+namespace {
+
+constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+constexpr uint64_t kFnvPrime = 1099511628211ULL;
+
+[[nodiscard]] uint64_t fnv1aUpdate(const uint64_t hash, const uint8_t byte) noexcept {
+    return (hash ^ static_cast<uint64_t>(byte)) * kFnvPrime;
+}
+
+[[nodiscard]] uint64_t fnv1aUpdateUint32(uint64_t hash, const uint32_t value) noexcept {
+    for (int shift = 0; shift < 32; shift += 8) {
+        hash = fnv1aUpdate(hash, static_cast<uint8_t>((value >> shift) & 0xFFU));
+    }
+    return hash;
+}
+
+}  // namespace
+
+uint64_t hashReachabilityQueryPairs(
+    const std::span<const ReachabilityQueryPair> pairs
+) noexcept {
+    uint64_t hash = kFnvOffsetBasis;
+    hash = fnv1aUpdateUint32(hash, static_cast<uint32_t>(pairs.size()));
+    for (const ReachabilityQueryPair& pair : pairs) {
+        hash = fnv1aUpdateUint32(hash, pair.source);
+        hash = fnv1aUpdateUint32(hash, pair.target);
+    }
+    return hash;
+}
+
 bool baselineBuildsPreprocessIndex(const ReachabilityBaselineId method) noexcept {
     switch (method) {
         case ReachabilityBaselineId::CsrBfs:
