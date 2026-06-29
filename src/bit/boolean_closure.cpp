@@ -28,7 +28,7 @@ void accumulateBooleanProductRow(
     const BitVector& lhs_row,
     const BitMatrix& rhs,
     BitVector& out_row,
-    const uint32_t num_vertices
+    const uint32_t inner_dim
 ) {
     out_row.clear();
 
@@ -37,8 +37,8 @@ void accumulateBooleanProductRow(
         return;
     }
 
-    const size_t full_words = static_cast<size_t>(num_vertices) / 64U;
-    const uint32_t tail_bits = num_vertices % 64U;
+    const size_t full_words = static_cast<size_t>(inner_dim) / 64U;
+    const uint32_t tail_bits = inner_dim % 64U;
     const uint64_t tail_mask =
         tail_bits == 0U ? ~0ULL : ((1ULL << tail_bits) - 1ULL);
 
@@ -63,14 +63,15 @@ void accumulateBooleanProductRow(
     BitMatrix& out,
     const KleeneSquaringOptions& options
 ) noexcept {
-    const uint32_t num_vertices = lhs.numRows();
+    const uint32_t num_rows = lhs.numRows();
+    const uint32_t inner_dim = lhs.numCols();
     const uint32_t thread_count = resolveKleeneThreadCount(options);
     if (!options.use_parallel
         || thread_count <= 1U
-        || num_vertices < kMinRowsForParallelKleene) {
+        || num_rows < kMinRowsForParallelKleene) {
         bool changed = false;
-        for (uint32_t row = 0U; row < num_vertices; ++row) {
-            accumulateBooleanProductRow(lhs.row(row), rhs, out.row(row), num_vertices);
+        for (uint32_t row = 0U; row < num_rows; ++row) {
+            accumulateBooleanProductRow(lhs.row(row), rhs, out.row(row), inner_dim);
             if (rowsDiffer(out.row(row), lhs.row(row))) {
                 changed = true;
             }
@@ -83,13 +84,13 @@ void accumulateBooleanProductRow(
     std::vector<uint8_t> changed_flags(thread_count, 0U);
 
     const uint32_t rows_per_thread =
-        (num_vertices + thread_count - 1U) / thread_count;
+        (num_rows + thread_count - 1U) / thread_count;
     for (uint32_t worker_index = 0U; worker_index < thread_count; ++worker_index) {
         const uint32_t row_begin = worker_index * rows_per_thread;
-        if (row_begin >= num_vertices) {
+        if (row_begin >= num_rows) {
             break;
         }
-        const uint32_t row_end = std::min(row_begin + rows_per_thread, num_vertices);
+        const uint32_t row_end = std::min(row_begin + rows_per_thread, num_rows);
         workers.emplace_back([&, row_begin, row_end, worker_index]() {
             bool local_changed = false;
             for (uint32_t row = row_begin; row < row_end; ++row) {
@@ -97,7 +98,7 @@ void accumulateBooleanProductRow(
                     lhs.row(row),
                     rhs,
                     out.row(row),
-                    num_vertices
+                    inner_dim
                 );
                 if (rowsDiffer(out.row(row), lhs.row(row))) {
                     local_changed = true;

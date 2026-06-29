@@ -4,6 +4,7 @@ add_library(
     csr_graph_builder.cpp
     directed_grid_graph.cpp
     directed_grid_graph_builder.cpp
+    random_asymmetric_params.cpp
     graph_search_scratch.cpp
     bfs.cpp
     dfs.cpp

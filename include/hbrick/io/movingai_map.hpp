@@ -115,6 +115,7 @@ public:
      * @param dimensions Grid width and height from the header.
      * @param type_name Value of the header @c type field (usually "octile").
      * @param cells Row-major cell characters; size must equal @c dimensions.numCells().
+     * @throws std::invalid_argument when @p cells length does not match @p dimensions.
      */
     MovingAiMap(GridDimensions dimensions, std::string type_name, std::vector<char> cells);
 

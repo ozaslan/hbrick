@@ -1,5 +1,6 @@
 #include "hbrick/io/movingai_map.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 namespace hbrick {
@@ -76,13 +77,24 @@ MovingAiMap::MovingAiMap(
 )
     : dimensions_(dimensions),
       type_name_(std::move(type_name)),
-      cells_(std::move(cells)) {}
+      cells_(std::move(cells)) {
+    uint32_t expected_cells = 0U;
+    if (!dimensions_.tryNumCells(expected_cells)
+        || cells_.size() != static_cast<std::size_t>(expected_cells)) {
+        throw std::invalid_argument(
+            "MovingAiMap: cells size must equal dimensions.numCells()"
+        );
+    }
+}
 
 char MovingAiMap::cellAt(const GridCoord coord) const noexcept {
     if (!dimensions_.contains(coord)) {
         return '@';
     }
-    return cells_[static_cast<std::size_t>(coord.linearIndex(dimensions_.width))];
+    const std::size_t index =
+        static_cast<std::size_t>(coord.y) * dimensions_.width
+        + static_cast<std::size_t>(coord.x);
+    return cells_[index];
 }
 
 MovingAiTerrain MovingAiMap::terrainAt(const GridCoord coord) const noexcept {

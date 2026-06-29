@@ -35,6 +35,7 @@ public:
      * @param width Number of columns.
      * @param height Number of rows.
      * @param initially_passable When @c true, every cell starts passable.
+     * @throws std::invalid_argument when @c width * height overflows @c uint32_t.
      */
     MazeLayout(uint32_t width, uint32_t height, bool initially_passable = true);
 

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <limits>
 
 #include <string>
 #include <utility>
@@ -64,6 +65,21 @@ TEST(MazeLayout, TryNeighborRespectsBounds) {
     EXPECT_FALSE(grid.tryNeighbor(hbrick::GridCoord{1U, 0U}, hbrick::Direction::East, neighbor));
     EXPECT_TRUE(grid.tryNeighbor(hbrick::GridCoord{0U, 0U}, hbrick::Direction::South, neighbor));
     EXPECT_EQ(neighbor, hbrick::GridCoord(0U, 1U));
+}
+
+TEST(MazeLayout, TryNeighborRejectsBlockedCells) {
+    hbrick::MazeLayout grid(2U, 2U);
+    grid.setPassable(hbrick::GridCoord{1U, 0U}, false);
+    hbrick::GridCoord neighbor{};
+
+    EXPECT_FALSE(grid.tryNeighbor(hbrick::GridCoord{0U, 0U}, hbrick::Direction::East, neighbor));
+}
+
+TEST(MazeLayout, RejectsOverflowingDimensions) {
+    EXPECT_THROW(
+        hbrick::MazeLayout(std::numeric_limits<uint32_t>::max(), 2U),
+        std::invalid_argument
+    );
 }
 
 TEST(MazeLayout, EastSouthPairEnumerationIsRowMajor) {
@@ -135,6 +151,12 @@ TEST(MazeLayout, ZeroSizeGridHasNoVertices) {
 TEST(GridDimensions, CoordFromLinearIndexMatchesRowMajor) {
     EXPECT_EQ(hbrick::coordFromLinearIndex(5U, 7U), hbrick::GridCoord(2U, 1U));
     EXPECT_EQ(hbrick::coordFromLinearIndex(0U, 3U), hbrick::GridCoord(0U, 0U));
+}
+
+TEST(GridDimensions, TryNumCellsRejectsOverflow) {
+    const hbrick::GridDimensions huge{65536U, 65536U};
+    uint32_t cells = 0U;
+    EXPECT_FALSE(huge.tryNumCells(cells));
 }
 
 TEST(Direction, DeltasMatchCardinalDirections) {

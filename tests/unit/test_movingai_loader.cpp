@@ -79,6 +79,20 @@ TEST(MovingAiLoader, RejectsTruncatedGrid) {
     EXPECT_FALSE(result.ok());
 }
 
+TEST(MovingAiLoader, RejectsOverflowingCellCount) {
+    const hbrick::MovingAiLoadResult result = hbrick::parseMovingAiMap(
+        "type octile\n"
+        "width 65536\n"
+        "height 65536\n"
+        "map\n"
+        "..\n"
+        "..\n"
+    );
+
+    EXPECT_FALSE(result.ok());
+    EXPECT_NE(result.error.find("overflow"), std::string::npos);
+}
+
 TEST(MovingAiLoader, ReportsMissingFile) {
     const hbrick::MovingAiLoadResult result =
         hbrick::loadMovingAiMap("/nonexistent/path/arena.map");
@@ -142,6 +156,17 @@ TEST(MovingAiMap, CellAtOutOfBoundsReturnsOutOfBounds) {
 
     EXPECT_EQ(result.map.cellAt({4U, 0U}), '@');
     EXPECT_EQ(result.map.terrainAt({0U, 3U}), hbrick::MovingAiTerrain::OutOfBounds);
+}
+
+TEST(MovingAiMap, RejectsMismatchedCellBuffer) {
+    EXPECT_THROW(
+        hbrick::MovingAiMap(
+            hbrick::GridDimensions{2U, 2U},
+            "octile",
+            std::vector<char>{'.', '.'}
+        ),
+        std::invalid_argument
+    );
 }
 
 // Round-trips real benchmark files when the local dataset archive is present.

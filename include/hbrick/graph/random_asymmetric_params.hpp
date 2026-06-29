@@ -78,4 +78,16 @@ enum class GridEdgeConversionMode : uint8_t {
     GradientFlow
 };
 
+/**
+ * @brief Clamps invalid probability inputs to finite values in @c [0, 1].
+ * @ingroup hbrick_graph
+ *
+ * Non-finite values become @c 0. For random-asymmetric modes,
+ * @ref RandomAsymmetricParams::p_bidirectional and
+ * @ref RandomAsymmetricParams::p_one_way are scaled down when their sum exceeds @c 1.
+ */
+[[nodiscard]] RandomAsymmetricParams sanitizeRandomAsymmetricParams(
+    RandomAsymmetricParams params
+) noexcept;
+
 }  // namespace hbrick

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 namespace hbrick {
 
@@ -38,14 +39,35 @@ struct GridCoord {
         : x(x_value), y(y_value) {}
 
     /**
+     * @brief Maps this coordinate to a row-major linear cell index when representable.
+     * @ingroup hbrick_core
+     *
+     * @param width Grid width in cells.
+     * @param out Receives @c y * width + x on success.
+     * @return @c false when the index does not fit in @c uint32_t.
+     */
+    [[nodiscard]] constexpr bool tryLinearIndex(uint32_t width, uint32_t& out) const noexcept {
+        const uint64_t index = static_cast<uint64_t>(y) * static_cast<uint64_t>(width)
+            + static_cast<uint64_t>(x);
+        if (index > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+            return false;
+        }
+        out = static_cast<uint32_t>(index);
+        return true;
+    }
+
+    /**
      * @brief Maps this coordinate to a row-major linear cell index.
      * @ingroup hbrick_core
      *
      * @param width Grid width in cells; must be non-zero for meaningful results.
+     * @pre @ref tryLinearIndex succeeds for @p width.
      * @return @c y * width + x.
      */
     [[nodiscard]] constexpr uint32_t linearIndex(uint32_t width) const noexcept {
-        return y * width + x;
+        const uint64_t index = static_cast<uint64_t>(y) * static_cast<uint64_t>(width)
+            + static_cast<uint64_t>(x);
+        return static_cast<uint32_t>(index);
     }
 
     /** @brief Equality comparison on both axes. @ingroup hbrick_core */

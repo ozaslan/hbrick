@@ -95,8 +95,15 @@ MovingAiLoadResult parseMovingAiMap(const std::string_view text) {
         return result;
     }
 
+    const GridDimensions dimensions{width, height};
+    uint32_t num_cells = 0U;
+    if (!dimensions.tryNumCells(num_cells)) {
+        result.error = "width * height overflows uint32_t cell count";
+        return result;
+    }
+
     std::vector<char> cells;
-    cells.reserve(static_cast<std::size_t>(width) * height);
+    cells.reserve(static_cast<std::size_t>(num_cells));
 
     for (uint32_t row = 0; row < height; ++row) {
         if (!nextLine(text, offset, line)) {
@@ -116,7 +123,7 @@ MovingAiLoadResult parseMovingAiMap(const std::string_view text) {
     }
 
     result.map = MovingAiMap(
-        GridDimensions{width, height},
+        dimensions,
         std::move(type_name),
         std::move(cells)
     );

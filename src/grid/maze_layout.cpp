@@ -1,5 +1,7 @@
 #include "hbrick/grid/maze_layout.hpp"
 
+#include <stdexcept>
+
 namespace hbrick {
 
 MazeLayout::MazeLayout(
@@ -7,8 +9,13 @@ MazeLayout::MazeLayout(
     const uint32_t height,
     const bool initially_passable
 )
-    : dimensions_(width, height),
-      passable_(dimensions_.numCells(), initially_passable ? uint8_t{1} : uint8_t{0}) {}
+    : dimensions_(width, height) {
+    uint32_t num_cells = 0U;
+    if (!dimensions_.tryNumCells(num_cells)) {
+        throw std::invalid_argument("MazeLayout: width * height overflows uint32_t");
+    }
+    passable_.assign(num_cells, initially_passable ? uint8_t{1} : uint8_t{0});
+}
 
 bool MazeLayout::isPassable(const GridCoord coord) const noexcept {
     if (!contains(coord)) {
@@ -43,7 +50,11 @@ VertexId MazeLayout::vertexId(const GridCoord coord) const noexcept {
     if (!contains(coord)) {
         return VertexId::invalid();
     }
-    return VertexId{coord.linearIndex(dimensions_.width)};
+    uint32_t linear_index = 0U;
+    if (!coord.tryLinearIndex(dimensions_.width, linear_index)) {
+        return VertexId::invalid();
+    }
+    return VertexId{linear_index};
 }
 
 GridCoord MazeLayout::coordFromVertex(const VertexId vertex) const noexcept {
@@ -72,7 +83,7 @@ bool MazeLayout::tryNeighbor(
         static_cast<uint32_t>(next_y),
     };
 
-    if (!contains(candidate)) {
+    if (!contains(candidate) || !isPassable(candidate)) {
         return false;
     }
 
@@ -91,7 +102,8 @@ uint32_t MazeLayout::passableCount() const noexcept {
 }
 
 std::size_t MazeLayout::cellIndex(const GridCoord coord) const noexcept {
-    return static_cast<std::size_t>(coord.linearIndex(dimensions_.width));
+    return static_cast<std::size_t>(coord.y) * dimensions_.width
+        + static_cast<std::size_t>(coord.x);
 }
 
 }  // namespace hbrick

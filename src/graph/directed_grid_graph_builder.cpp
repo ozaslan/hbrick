@@ -154,9 +154,11 @@ DirectedGridGraph DirectedGridGraphBuilder::build(
             buildAcyclicEastSouth(grid, builder);
             break;
         case GridEdgeConversionMode::RandomAsymmetric:
+            params = sanitizeRandomAsymmetricParams(params);
             buildRandomAsymmetric(grid, builder, params);
             break;
         case GridEdgeConversionMode::GradientFlow:
+            params = sanitizeRandomAsymmetricParams(params);
             buildGradientFlow(grid, builder, params);
             break;
     }

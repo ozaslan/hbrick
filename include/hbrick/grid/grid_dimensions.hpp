@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 #include "hbrick/core/grid_coord.hpp"
 
@@ -39,13 +40,33 @@ struct GridDimensions {
         : width(width_value), height(height_value) {}
 
     /**
+     * @brief Returns the total number of cells in the grid when representable.
+     * @ingroup hbrick_grid
+     *
+     * @param out Receives @c width * height on success.
+     * @return @c false when the product does not fit in @c uint32_t.
+     */
+    [[nodiscard]] constexpr bool tryNumCells(uint32_t& out) const noexcept {
+        const uint64_t product =
+            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        if (product > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+            return false;
+        }
+        out = static_cast<uint32_t>(product);
+        return true;
+    }
+
+    /**
      * @brief Returns the total number of cells in the grid.
      * @ingroup hbrick_grid
      *
+     * @pre @ref tryNumCells succeeds for these dimensions.
      * @return @c width * height.
      */
     [[nodiscard]] constexpr uint32_t numCells() const noexcept {
-        return width * height;
+        const uint64_t product =
+            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        return static_cast<uint32_t>(product);
     }
 
     /**

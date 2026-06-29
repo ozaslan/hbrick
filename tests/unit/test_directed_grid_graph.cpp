@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -233,6 +234,23 @@ TEST(DirectedGridGraph, GradientFlowIsDeterministicPerSeed) {
             grid, hbrick::GridEdgeConversionMode::GradientFlow, other
         ).edges();
     EXPECT_NE(buildEdges(), different);
+}
+
+TEST(DirectedGridGraph, SanitizesInvalidRandomAsymmetricProbabilities) {
+    const hbrick::MazeLayout grid(4U, 3U);
+
+    hbrick::RandomAsymmetricParams params;
+    params.seed = 7ULL;
+    params.p_bidirectional = std::numeric_limits<long double>::quiet_NaN();
+    params.p_one_way = 2.5L;
+
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        grid,
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        params
+    );
+
+    EXPECT_GT(graph.numEdges(), 0U);
 }
 
 TEST(DirectedGridGraph, ImpassableCellsRemoveIncidentPairs) {

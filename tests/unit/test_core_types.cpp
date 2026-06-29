@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "hbrick/core/grid_coord.hpp"
 #include "hbrick/core/reachability_query.hpp"
@@ -43,6 +44,12 @@ TEST(CoreTypes, GridCoordLinearIndexIsRowMajor) {
 
     const hbrick::GridCoord east_of_origin{4U, 1U};
     EXPECT_EQ(east_of_origin.linearIndex(5U), 9U);
+}
+
+TEST(CoreTypes, GridCoordTryLinearIndexRejectsOverflow) {
+    const hbrick::GridCoord coord{1U, 1U};
+    uint32_t index = 0U;
+    EXPECT_FALSE(coord.tryLinearIndex(std::numeric_limits<uint32_t>::max(), index));
 }
 
 TEST(CoreTypes, ReachabilityQueryUsesVertexIdBoundary) {

@@ -20,6 +20,21 @@ void setReflexive(hbrick::BitMatrix& matrix) {
 
 }  // namespace
 
+TEST(BooleanClosure, BooleanMultiplyHandlesRectangularInnerDimension) {
+    hbrick::BitMatrix lhs(2U, 4U);
+    hbrick::BitMatrix rhs(4U, 3U);
+    lhs.set(0U, 2U);
+    rhs.set(2U, 1U);
+
+    const hbrick::BitMatrix product = hbrick::booleanMultiply(lhs, rhs);
+
+    ASSERT_EQ(product.numRows(), 2U);
+    ASSERT_EQ(product.numCols(), 3U);
+    EXPECT_TRUE(product.test(0U, 1U));
+    EXPECT_FALSE(product.test(0U, 0U));
+    EXPECT_FALSE(product.test(1U, 1U));
+}
+
 TEST(BooleanClosure, ComputesManualThreeVertexClosure) {
     hbrick::BitMatrix relation(3U, 3U);
     setReflexive(relation);
