@@ -19,8 +19,7 @@ namespace hbrick {
  * @ingroup hbrick_graph
  *
  * Vertices are numbered @c 0 .. numVertices()-1. Duplicate edges may be
- * stored if added multiple times; callers requiring uniqueness should deduplicate
- * before or after building.
+ * added; @ref build deduplicates them during compaction.
  */
 class CsrGraphBuilder {
 public:
@@ -62,10 +61,18 @@ public:
      * @brief Sorts and compacts pending edges into a @ref hbrick::CsrGraph.
      * @ingroup hbrick_graph
      *
+     * Duplicate edges are removed during compaction.
+     *
      * @return Immutable CSR graph containing all edges added since construction
      *         or the last @ref clear.
      */
     [[nodiscard]] CsrGraph build() const;
+
+    /**
+     * @brief Upper bound on @ref CsrGraph::estimateStorageBytes for the next @ref build.
+     * @ingroup hbrick_graph
+     */
+    [[nodiscard]] uint64_t estimateBuiltStorageBytes() const noexcept;
 
 private:
     /** @brief Validates that @p vertex is within the configured vertex range. @ingroup hbrick_graph */

@@ -22,6 +22,11 @@ void CsrGraphBuilder::clear() noexcept {
     edges_.clear();
 }
 
+uint64_t CsrGraphBuilder::estimateBuiltStorageBytes() const noexcept {
+    return static_cast<uint64_t>(num_vertices_ + 1U) * sizeof(uint32_t)
+        + static_cast<uint64_t>(edges_.size()) * sizeof(uint32_t);
+}
+
 CsrGraph CsrGraphBuilder::build() const {
     std::vector<Edge32> sorted_edges = edges_;
     std::sort(sorted_edges.begin(), sorted_edges.end(), [](const Edge32 lhs, const Edge32 rhs) {

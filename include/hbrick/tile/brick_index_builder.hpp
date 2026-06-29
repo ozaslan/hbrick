@@ -119,6 +119,7 @@ private:
     void finishFailure(BaselineStatus status) noexcept;
     void finishSuccess() noexcept;
     void advanceWork() noexcept;
+    void releaseFinalizeStorage() noexcept;
 
     const DirectedGridGraph* graph_ = nullptr;
     const MazeLayout* layout_ = nullptr;

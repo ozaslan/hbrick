@@ -18,6 +18,16 @@ TEST(PreprocessMemoryLedger, TryChargeTracksExactBytes) {
     EXPECT_EQ(ledger.chargedBytes(), 100U);
 }
 
+TEST(PreprocessMemoryLedger, ReleaseChargeRollsBackFailedStep) {
+    hbrick::PreprocessMemoryLedger ledger(100U);
+    EXPECT_TRUE(ledger.tryCharge(40U));
+    EXPECT_TRUE(ledger.tryCharge(50U));
+    ledger.releaseCharge(50U);
+    EXPECT_EQ(ledger.chargedBytes(), 40U);
+    EXPECT_TRUE(ledger.tryCharge(60U));
+    EXPECT_EQ(ledger.chargedBytes(), 100U);
+}
+
 TEST(PreprocessMemoryLedger, GlobalCapSkipsSecondTile) {
     hbrick::MazeLayout layout(8U, 8U, true);
     const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(

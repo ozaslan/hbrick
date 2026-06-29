@@ -63,8 +63,11 @@ public:
     [[nodiscard]] uint64_t storageBytes() const noexcept { return storage_bytes_; }
 
     /**
-     * @brief Sums actual heap bytes of stored tile/port structures (post-build audit).
+     * @brief Sums actual heap bytes of structures retained in this index (audit).
      * @ingroup hbrick_tile
+     *
+     * Works for any @ref status(), including @c SkippedByPolicy builds that retain
+     * only base tiles after finalize rollback.
      */
     [[nodiscard]] uint64_t measureStorageBytes() const noexcept;
 

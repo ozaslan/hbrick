@@ -57,6 +57,21 @@ public:
         return true;
     }
 
+    /**
+     * @brief Removes a prior charge when a preprocess step is rolled back.
+     * @ingroup hbrick_tile
+     */
+    void releaseCharge(uint64_t bytes) noexcept {
+        if (bytes == 0U) {
+            return;
+        }
+        if (bytes >= charged_bytes_) {
+            charged_bytes_ = 0U;
+            return;
+        }
+        charged_bytes_ -= bytes;
+    }
+
 private:
     uint64_t cap_bytes_ = std::numeric_limits<uint64_t>::max();
     uint64_t charged_bytes_ = 0U;

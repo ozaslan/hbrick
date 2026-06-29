@@ -82,6 +82,15 @@ public:
     /** @brief Estimates heap storage for port records and lookup tables. @ingroup hbrick_tile */
     [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
 
+    /**
+     * @brief Exact byte size @ref build would allocate before constructing a @ref PortIndex.
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] static uint64_t estimateBuildStorageBytes(
+        const BrickTileIndex& tile_index,
+        uint32_t num_global_vertices
+    ) noexcept;
+
 private:
     std::vector<PortRecord> ports_{};
     std::vector<uint32_t> global_vertex_to_port_id_{};

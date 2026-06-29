@@ -17,15 +17,17 @@ BrickTileIndex BrickTileIndex::build(
     BrickTileIndex index;
     index.decomposition_ = decomposition;
     PreprocessMemoryLedger ledger(max_memory_bytes);
-    index.summaries_.resize(decomposition.numSlots());
-    if (!ledger.tryCharge(
-            static_cast<uint64_t>(decomposition.numSlots()) * sizeof(BaseTileSummary)
-        )) {
+    const uint64_t summaries_bytes =
+        static_cast<uint64_t>(decomposition.numSlots()) * sizeof(BaseTileSummary);
+    if (!ledger.tryCharge(summaries_bytes)) {
         return index;
     }
-    if (!ledger.tryCharge(
-            static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U
-        )) {
+    index.summaries_.resize(decomposition.numSlots());
+
+    const uint64_t lookup_bytes =
+        static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U;
+    if (!ledger.tryCharge(lookup_bytes)) {
+        ledger.releaseCharge(summaries_bytes);
         return index;
     }
 

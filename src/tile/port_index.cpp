@@ -94,4 +94,25 @@ uint64_t PortIndex::estimateStorageBytes() const noexcept {
         + static_cast<uint64_t>(tile_port_lookup_.size()) * sizeof(uint32_t);
 }
 
+uint64_t PortIndex::estimateBuildStorageBytes(
+    const BrickTileIndex& tile_index,
+    const uint32_t num_global_vertices
+) noexcept {
+    uint32_t num_ports = 0U;
+    uint32_t max_ports_per_tile = 0U;
+    const uint32_t num_tiles = tile_index.decomposition().numSlots();
+    for (const BaseTileSummary& summary : tile_index.summaries()) {
+        if (summary.status != BaselineStatus::Completed) {
+            continue;
+        }
+        max_ports_per_tile = std::max(max_ports_per_tile, summary.numPorts());
+        num_ports += summary.numPorts();
+    }
+
+    return static_cast<uint64_t>(num_ports) * sizeof(PortRecord)
+        + static_cast<uint64_t>(num_global_vertices) * sizeof(uint32_t)
+        + static_cast<uint64_t>(num_tiles) * static_cast<uint64_t>(max_ports_per_tile)
+            * sizeof(uint32_t);
+}
+
 }  // namespace hbrick

@@ -55,11 +55,12 @@ BrickIndex BrickIndex::build(
     }
 
     if (builder.report().status != BaselineStatus::Completed) {
+        const uint64_t charged_bytes = builder.chargedStorageBytes();
         BrickIndex failed_index = builder.takeIndex();
         if (failed_index.status_ == BaselineStatus::NotRun) {
             failed_index.status_ = builder.report().status;
         }
-        failed_index.storage_bytes_ = builder.chargedStorageBytes();
+        failed_index.storage_bytes_ = charged_bytes;
         return failed_index;
     }
 
@@ -67,10 +68,6 @@ BrickIndex BrickIndex::build(
 }
 
 uint64_t BrickIndex::measureStorageBytes() const noexcept {
-    if (status_ != BaselineStatus::Completed) {
-        return 0U;
-    }
-
     uint64_t bytes = 0U;
     for (const BaseTileSummary& summary : tile_index_.summaries()) {
         bytes += baseTileSummaryHeapBytes(summary);

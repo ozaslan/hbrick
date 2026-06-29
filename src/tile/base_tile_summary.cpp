@@ -185,13 +185,24 @@ BaseTileSummary buildBaseTile(
     BaseTileSummary summary{};
     summary.slot = slot;
     summary.status = BaselineStatus::NotRun;
+    const uint64_t charged_before = ledger.chargedBytes();
+
+    auto failPolicy = [&]() -> BaseTileSummary {
+        ledger.releaseCharge(ledger.chargedBytes() - charged_before);
+        BaseTileSummary skipped{};
+        skipped.slot = slot;
+        skipped.status = BaselineStatus::SkippedByPolicy;
+        if (closure_nanoseconds != nullptr) {
+            *closure_nanoseconds = 0U;
+        }
+        return skipped;
+    };
 
     collectLocalVertices(layout, slot, summary.local_coords, summary.global_vertices);
     if (!ledger.tryCharge(
             vectorHeapBytes(summary.local_coords) + vectorHeapBytes(summary.global_vertices)
         )) {
-        summary.status = BaselineStatus::SkippedByPolicy;
-        return summary;
+        return failPolicy();
     }
 
     const uint32_t num_local = summary.numLocalVertices();
@@ -204,11 +215,7 @@ BaseTileSummary buildBaseTile(
     }
 
     if (!ledger.tryCharge(exactBitMatrixStorageBytes(num_local, num_local))) {
-        if (closure_nanoseconds != nullptr) {
-            *closure_nanoseconds = 0U;
-        }
-        summary.status = BaselineStatus::SkippedByPolicy;
-        return summary;
+        return failPolicy();
     }
 
     const uint64_t closure_started_ns = monotonicNowNanoseconds();
@@ -232,8 +239,7 @@ BaseTileSummary buildBaseTile(
 
     collectPorts(layout, slot, summary.local_coords, summary.ports);
     if (!ledger.tryCharge(vectorHeapBytes(summary.ports))) {
-        summary.status = BaselineStatus::SkippedByPolicy;
-        return summary;
+        return failPolicy();
     }
 
     const uint32_t num_ports = summary.numPorts();
@@ -242,8 +248,7 @@ BaseTileSummary buildBaseTile(
         + exactBitMatrixStorageBytes(num_local, num_ports)
         + exactBitMatrixStorageBytes(num_ports, num_local);
     if (!ledger.tryCharge(boundary_matrix_bytes)) {
-        summary.status = BaselineStatus::SkippedByPolicy;
-        return summary;
+        return failPolicy();
     }
 
     projectBoundaryMatrices(summary);

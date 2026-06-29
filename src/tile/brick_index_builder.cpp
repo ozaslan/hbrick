@@ -100,17 +100,18 @@ void BrickIndexBuilder::begin(
         nominal_tile_size
     );
     tile_index_.decomposition_ = decomposition_;
-    tile_index_.summaries_.resize(decomposition_.numSlots());
-    if (!ledger_->tryCharge(
-            static_cast<uint64_t>(decomposition_.numSlots()) * sizeof(BaseTileSummary)
-        )) {
+    const uint64_t summaries_bytes =
+        static_cast<uint64_t>(decomposition_.numSlots()) * sizeof(BaseTileSummary);
+    if (!ledger_->tryCharge(summaries_bytes)) {
         finishFailure(BaselineStatus::SkippedByPolicy);
         return;
     }
+    tile_index_.summaries_.resize(decomposition_.numSlots());
 
-    if (!ledger_->tryCharge(
-            static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U
-        )) {
+    const uint64_t lookup_bytes =
+        static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U;
+    if (!ledger_->tryCharge(lookup_bytes)) {
+        ledger_->releaseCharge(summaries_bytes);
         finishFailure(BaselineStatus::SkippedByPolicy);
         return;
     }
@@ -205,14 +206,18 @@ bool BrickIndexBuilder::step() noexcept {
                         return true;
                     }
 
+                    const uint64_t port_index_bytes = PortIndex::estimateBuildStorageBytes(
+                        index_.tile_index_,
+                        graph_->numVertices()
+                    );
+                    if (!ledger_->tryCharge(port_index_bytes)) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
                     index_.port_index_ = PortIndex::build(
                         index_.tile_index_,
                         graph_->numVertices()
                     );
-                    if (!ledger_->tryCharge(index_.port_index_.estimateStorageBytes())) {
-                        finishFailure(BaselineStatus::SkippedByPolicy);
-                        return true;
-                    }
 
                     index_.seam_edges_.clear();
                     seam_deduper_.clear();
@@ -279,11 +284,13 @@ bool BrickIndexBuilder::step() noexcept {
                     }
 
                     addSeamEdgesToPortGraph(*port_graph_builder_, index_.seam_edges_);
-                    index_.port_graph_ = port_graph_builder_->build();
-                    if (!ledger_->tryCharge(index_.port_graph_.estimateStorageBytes())) {
+                    const uint64_t port_graph_bytes =
+                        port_graph_builder_->estimateBuiltStorageBytes();
+                    if (!ledger_->tryCharge(port_graph_bytes)) {
                         finishFailure(BaselineStatus::SkippedByPolicy);
                         return true;
                     }
+                    index_.port_graph_ = port_graph_builder_->build();
                     port_graph_builder_.reset();
                     index_.status_ = BaselineStatus::Completed;
                     finishSuccess();
@@ -338,7 +345,36 @@ uint64_t BrickIndexBuilder::chargedStorageBytes() const noexcept {
     return ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
 }
 
+void BrickIndexBuilder::releaseFinalizeStorage() noexcept {
+    if (ledger_ == nullptr) {
+        return;
+    }
+
+    const uint64_t port_index_bytes = index_.port_index_.estimateStorageBytes();
+    if (port_index_bytes > 0U) {
+        ledger_->releaseCharge(port_index_bytes);
+        index_.port_index_ = PortIndex{};
+    }
+
+    const uint64_t seam_bytes =
+        static_cast<uint64_t>(index_.seam_edges_.size()) * sizeof(SeamEdge);
+    if (seam_bytes > 0U) {
+        ledger_->releaseCharge(seam_bytes);
+        index_.seam_edges_.clear();
+    }
+
+    const uint64_t port_graph_bytes = index_.port_graph_.estimateStorageBytes();
+    if (port_graph_bytes > 0U) {
+        ledger_->releaseCharge(port_graph_bytes);
+        index_.port_graph_ = CsrGraph{};
+    }
+
+    port_graph_builder_.reset();
+    seam_deduper_.clear();
+}
+
 void BrickIndexBuilder::finishFailure(const BaselineStatus status) noexcept {
+    releaseFinalizeStorage();
     index_.status_ = status;
     index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     report_.valid = true;
