@@ -14,6 +14,7 @@
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 #include "hbrick/tile/port_graph.hpp"
 #include "hbrick/tile/tile_decomposition.hpp"
 #include "hbrick/tile/tile_size.hpp"
@@ -69,7 +70,8 @@ public:
         const DirectedGridGraph& graph,
         const MazeLayout& layout,
         TileSize nominal_tile_size,
-        uint64_t max_memory_bytes
+        uint64_t max_memory_bytes,
+        PreprocessMemoryLedger* shared_ledger = nullptr
     );
 
     /**
@@ -96,6 +98,16 @@ public:
      * @ingroup hbrick_tile
      */
     [[nodiscard]] BrickIndex takeIndex();
+
+    /** @brief Bytes charged on the active preprocess ledger. @ingroup hbrick_tile */
+    [[nodiscard]] uint64_t chargedStorageBytes() const noexcept;
+
+    /** @brief Active preprocess ledger for this build (never null after @ref begin). @ingroup hbrick_tile */
+    [[nodiscard]] PreprocessMemoryLedger& memoryLedger() noexcept { return *ledger_; }
+
+    [[nodiscard]] const PreprocessMemoryLedger& memoryLedger() const noexcept {
+        return *ledger_;
+    }
 
 private:
     enum class FinalizeSubstep : uint8_t {
@@ -125,6 +137,8 @@ private:
     uint32_t port_graph_tile_cursor_ = 0U;
     std::optional<CsrGraphBuilder> port_graph_builder_{};
     SeamEdgeDeduper seam_deduper_{};
+    PreprocessMemoryLedger owned_ledger_{};
+    PreprocessMemoryLedger* ledger_ = nullptr;
 
     uint64_t base_tile_started_ns_ = 0U;
     uint64_t finalize_started_ns_ = 0U;

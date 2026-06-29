@@ -1,5 +1,7 @@
 #include "hbrick/bit/bit_matrix.hpp"
 
+#include <cassert>
+
 namespace hbrick {
 
 BitMatrix::BitMatrix(const uint32_t num_rows, const uint32_t num_cols)
@@ -27,10 +29,12 @@ void BitMatrix::reset(const uint32_t row, const uint32_t col) noexcept {
 }
 
 BitVector& BitMatrix::row(const uint32_t row_index) noexcept {
+    assert(row_index < num_rows_);
     return rows_[row_index];
 }
 
 const BitVector& BitMatrix::row(const uint32_t row_index) const noexcept {
+    assert(row_index < num_rows_);
     return rows_[row_index];
 }
 

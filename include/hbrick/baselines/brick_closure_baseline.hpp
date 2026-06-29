@@ -14,6 +14,7 @@
 #include "hbrick/core/types.hpp"
 #include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/brick_index_builder.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 #include "hbrick/tile/tile_size.hpp"
 
 namespace hbrick {
@@ -145,6 +146,7 @@ private:
     KleeneSquaringOptions kleene_options_{};
     uint32_t kleene_thread_count_ = 1U;
     uint32_t num_vertices_ = 0U;
+    PreprocessMemoryLedger memory_ledger_{};
     mutable BitVector query_reachable_ports_{};
 };
 

@@ -12,6 +12,7 @@
 
 #include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/core/types.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 #include "hbrick/tile/tile_port_record.hpp"
 #include "hbrick/tile/tile_slot.hpp"
 
@@ -66,14 +67,27 @@ struct BaseTileSummary {
  *
  * Collects passable cells inside @p slot, runs Kleene squaring closure on the induced subgraph,
  * and projects @c S_T, @c R_VB, and @c R_BV. Sets @ref BaseTileSummary::status to
- * @ref BaselineStatus::SkippedByPolicy when the closure matrix exceeds @p max_memory_bytes.
+ * @ref BaselineStatus::SkippedByPolicy when @p ledger would exceed its global cap.
  *
  * @param graph Global directed grid graph.
  * @param layout Passability bitmap aligned with @p graph.
  * @param slot Tile slot to summarize.
- * @param max_memory_bytes Maximum bytes allowed for the local closure matrix.
+ * @param ledger Global preprocess byte ledger updated with exact allocation sizes.
  * @param closure_nanoseconds When non-null, receives adjacency-build + Kleene closure time only.
  * @param closure_scratch Optional reusable M×M scratch for Kleene squaring across tiles.
+ */
+[[nodiscard]] BaseTileSummary buildBaseTile(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSlot& slot,
+    PreprocessMemoryLedger& ledger,
+    uint64_t* closure_nanoseconds = nullptr,
+    BitMatrix* closure_scratch = nullptr
+);
+
+/**
+ * @brief Convenience wrapper that creates a local ledger with @p max_memory_bytes cap.
+ * @ingroup hbrick_tile
  */
 [[nodiscard]] BaseTileSummary buildBaseTile(
     const DirectedGridGraph& graph,

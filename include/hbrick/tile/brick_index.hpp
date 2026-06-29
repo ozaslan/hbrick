@@ -57,10 +57,16 @@ public:
     }
 
     /**
-     * @brief Estimates heap storage for tile summaries, ports, port CSR, and seam edges.
+     * @brief Bytes charged on the preprocess ledger when this index was built.
      * @ingroup hbrick_tile
      */
-    [[nodiscard]] uint64_t estimateStorageBytes() const noexcept;
+    [[nodiscard]] uint64_t storageBytes() const noexcept { return storage_bytes_; }
+
+    /**
+     * @brief Sums actual heap bytes of stored tile/port structures (post-build audit).
+     * @ingroup hbrick_tile
+     */
+    [[nodiscard]] uint64_t measureStorageBytes() const noexcept;
 
 private:
     friend class HBrickIndexBuilder;
@@ -71,6 +77,7 @@ private:
     PortIndex port_index_{};
     CsrGraph port_graph_{};
     std::vector<SeamEdge> seam_edges_{};
+    uint64_t storage_bytes_ = 0U;
 };
 
 }  // namespace hbrick

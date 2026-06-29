@@ -6,17 +6,19 @@
 #include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/port_index.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 
 namespace hbrick {
 
-void collectSeamEdgesForVertexRange(
+[[nodiscard]] bool collectSeamEdgesForVertexRange(
     const CsrGraph& graph,
     const BrickTileIndex& tile_index,
     const PortIndex& port_index,
     const uint32_t vertex_begin,
     const uint32_t vertex_end,
     std::vector<SeamEdge>& out,
-    SeamEdgeDeduper* deduper
+    SeamEdgeDeduper* deduper,
+    PreprocessMemoryLedger* ledger
 ) {
     const uint32_t end = std::min(vertex_end, graph.numVertices());
     for (uint32_t global_from = vertex_begin; global_from < end; ++global_from) {
@@ -41,9 +43,15 @@ void collectSeamEdgesForVertexRange(
                 continue;
             }
 
+            if (ledger != nullptr && !ledger->tryCharge(sizeof(SeamEdge))) {
+                return false;
+            }
+
             out.push_back(SeamEdge{from_port_id, to_port_id});
         }
     }
+
+    return true;
 }
 
 void addIntraTilePortEdgesForTile(

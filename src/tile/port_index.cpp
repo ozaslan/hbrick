@@ -1,6 +1,7 @@
 #include "hbrick/tile/port_index.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <limits>
 
 #include "hbrick/tile/brick_tile_index.hpp"
@@ -62,6 +63,7 @@ PortIndex PortIndex::build(
 }
 
 const PortRecord& PortIndex::port(const uint32_t port_id) const noexcept {
+    assert(port_id < ports_.size());
     return ports_[port_id];
 }
 

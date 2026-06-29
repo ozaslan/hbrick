@@ -19,6 +19,7 @@ namespace hbrick {
 
 class BrickTileIndex;
 class PortIndex;
+class PreprocessMemoryLedger;
 
 /**
  * @brief Tracks unique directed port-port seam keys during incremental collection.
@@ -54,15 +55,19 @@ private:
  *
  * When @p deduper is non-null, each unique @c (from_port_id, to_port_id) pair is
  * appended at most once across all incremental calls sharing the same deduper.
+ *
+ * When @p ledger is non-null, returns @c false if charging a new seam would exceed
+ * the ledger cap (no seam is appended in that case).
  */
-void collectSeamEdgesForVertexRange(
+[[nodiscard]] bool collectSeamEdgesForVertexRange(
     const CsrGraph& graph,
     const BrickTileIndex& tile_index,
     const PortIndex& port_index,
     uint32_t vertex_begin,
     uint32_t vertex_end,
     std::vector<SeamEdge>& out,
-    SeamEdgeDeduper* deduper = nullptr
+    SeamEdgeDeduper* deduper = nullptr,
+    PreprocessMemoryLedger* ledger = nullptr
 );
 
 /**

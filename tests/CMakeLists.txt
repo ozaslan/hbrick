@@ -217,6 +217,19 @@ target_link_libraries(
 
 hbrick_register_gtests(test_base_tile_summary)
 
+add_executable(test_preprocess_memory_ledger unit/test_preprocess_memory_ledger.cpp)
+
+target_link_libraries(
+    test_preprocess_memory_ledger
+    PRIVATE
+        hbrick_tile
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_gtests(test_preprocess_memory_ledger)
+
 add_executable(test_port_graph unit/test_port_graph.cpp)
 
 target_link_libraries(

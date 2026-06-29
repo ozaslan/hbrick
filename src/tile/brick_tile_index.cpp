@@ -4,7 +4,7 @@
 
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
-#include "hbrick/tile/base_tile_summary.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 
 namespace hbrick {
 
@@ -16,7 +16,19 @@ BrickTileIndex BrickTileIndex::build(
 ) {
     BrickTileIndex index;
     index.decomposition_ = decomposition;
+    PreprocessMemoryLedger ledger(max_memory_bytes);
     index.summaries_.resize(decomposition.numSlots());
+    if (!ledger.tryCharge(
+            static_cast<uint64_t>(decomposition.numSlots()) * sizeof(BaseTileSummary)
+        )) {
+        return index;
+    }
+    if (!ledger.tryCharge(
+            static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U
+        )) {
+        return index;
+    }
+
     index.global_vertex_tile_index_.assign(graph.numVertices(), std::numeric_limits<uint32_t>::max());
     index.global_vertex_local_index_.assign(graph.numVertices(), std::numeric_limits<uint32_t>::max());
 
@@ -24,7 +36,7 @@ BrickTileIndex BrickTileIndex::build(
         for (uint32_t tile_i = 0U; tile_i < decomposition.numSlotsI(); ++tile_i) {
             const uint32_t slot_index = tile_j * decomposition.numSlotsI() + tile_i;
             const TileSlot& slot = decomposition.slot(tile_i, tile_j);
-            BaseTileSummary summary = buildBaseTile(graph, layout, slot, max_memory_bytes);
+            BaseTileSummary summary = buildBaseTile(graph, layout, slot, ledger);
             index.summaries_[slot_index] = std::move(summary);
 
             const BaseTileSummary& stored = index.summaries_[slot_index];

@@ -5,27 +5,28 @@
 #include <stdexcept>
 #include <vector>
 
+#include "hbrick/bit/bit_vector.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
 
 namespace hbrick {
-
-namespace {
-
-constexpr uint64_t kBitsPerWord = 64U;
-
-[[nodiscard]] uint64_t wordsPerRow(const uint32_t num_vertices) noexcept {
-    return (static_cast<uint64_t>(num_vertices) + (kBitsPerWord - 1U)) / kBitsPerWord;
-}
-
-}  // namespace
 
 bool isUnlimitedMemoryBudget(const uint64_t max_memory_bytes) noexcept {
     return max_memory_bytes >= kHBrickUnlimitedMemoryBytes;
 }
 
 uint64_t estimateTileReflexiveAdjacencyBytes(const uint32_t num_vertices) noexcept {
-    const uint64_t rows = num_vertices;
-    return rows * wordsPerRow(num_vertices) * sizeof(uint64_t);
+    return exactBitMatrixStorageBytes(num_vertices, num_vertices);
+}
+
+uint64_t exactBitMatrixStorageBytes(
+    const uint32_t num_rows,
+    const uint32_t num_cols
+) noexcept {
+    if (num_rows == 0U || num_cols == 0U) {
+        return 0U;
+    }
+    const uint64_t words_per_row = BitVector::wordCount(static_cast<size_t>(num_cols));
+    return static_cast<uint64_t>(num_rows) * words_per_row * sizeof(uint64_t);
 }
 
 bool canAllocateTileReflexiveAdjacency(

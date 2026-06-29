@@ -1,17 +1,15 @@
 #include "hbrick/baselines/brick_closure_baseline.hpp"
 
-#include <exception>
 #include <limits>
 
-#include "hbrick/baselines/closure_matrix_builder.hpp"
 #include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
-#include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/port_index.hpp"
+#include "hbrick/tile/tile_closure_util.hpp"
 
 namespace hbrick {
 
@@ -107,6 +105,7 @@ void BrickClosureBaseline::resetPreprocessState() noexcept {
     max_memory_bytes_ = 0U;
     query_reachable_ports_ = BitVector{};
     num_vertices_ = 0U;
+    memory_ledger_.reset(std::numeric_limits<uint64_t>::max());
 }
 
 void BrickClosureBaseline::beginPreprocess(
@@ -127,7 +126,14 @@ void BrickClosureBaseline::beginPreprocess(
     max_memory_bytes_ = max_memory_bytes;
     kleene_options_ = kleene_options;
     kleene_thread_count_ = resolveKleeneThreadCount(kleene_options_);
-    index_builder_.begin(graph, layout, nominal_tile_size, max_memory_bytes);
+    memory_ledger_.reset(max_memory_bytes_);
+    index_builder_.begin(
+        graph,
+        layout,
+        nominal_tile_size,
+        max_memory_bytes,
+        &memory_ledger_
+    );
     if (!index_builder_.running()) {
         status_ = index_builder_.report().valid
             ? index_builder_.report().status
@@ -141,14 +147,17 @@ void BrickClosureBaseline::beginPreprocess(
 
 void BrickClosureBaseline::beginAdjacencyBuild() noexcept {
     const uint32_t num_ports = index_.ports().numPorts();
-    if (!ClosureMatrixBuilder::canAllocateReflexiveAdjacency(num_ports, max_memory_bytes_)) {
+    const uint64_t port_matrix_bytes = exactBitMatrixStorageBytes(num_ports, num_ports);
+    const uint64_t query_vector_bytes =
+        BitVector::wordCount(static_cast<size_t>(num_ports)) * sizeof(uint64_t);
+    if (!memory_ledger_.tryCharge(port_matrix_bytes * 2U + query_vector_bytes)) {
         status_ = BaselineStatus::SkippedByPolicy;
         preprocess_phase_ = PreprocessPhase::Done;
         return;
     }
 
     port_closure_ = BitMatrix(num_ports, num_ports);
-    port_closure_scratch_ = BitMatrix{};
+    port_closure_scratch_ = BitMatrix(num_ports, num_ports);
     query_reachable_ports_ = BitVector(static_cast<size_t>(num_ports));
     adjacency_vertex_cursor_ = 0U;
     preprocess_phase_ = PreprocessPhase::AdjacencyBuild;
@@ -317,10 +326,7 @@ ReachabilityAnswer BrickClosureBaseline::query(
 }
 
 uint64_t BrickClosureBaseline::indexStorageBytes() const noexcept {
-    if (status_ != BaselineStatus::Completed) {
-        return 0U;
-    }
-    return index_.estimateStorageBytes() + port_closure_.memoryBytes();
+    return memory_ledger_.chargedBytes();
 }
 
 }  // namespace hbrick

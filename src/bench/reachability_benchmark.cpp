@@ -317,7 +317,7 @@ struct GridBenchmarkContext {
         case ReachabilityBaselineId::Grail:
             return baselines.grail.labelStorageBytes();
         case ReachabilityBaselineId::BrickSearch:
-            return 0U;
+            return baselines.brick_search.indexStorageBytes();
         case ReachabilityBaselineId::BrickClosure:
             return baselines.brick_closure.indexStorageBytes();
         case ReachabilityBaselineId::HBrick:

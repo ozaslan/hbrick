@@ -115,6 +115,11 @@ CsrGraph buildInducedSubgraph(
     return builder.build();
 }
 
+template<typename T>
+[[nodiscard]] uint64_t vectorHeapBytes(const std::vector<T>& values) noexcept {
+    return static_cast<uint64_t>(values.capacity()) * static_cast<uint64_t>(sizeof(T));
+}
+
 void projectBoundaryMatrices(BaseTileSummary& summary) {
     const uint32_t num_local = summary.numLocalVertices();
     const uint32_t num_ports = summary.numPorts();
@@ -158,11 +163,37 @@ BaseTileSummary buildBaseTile(
     uint64_t* closure_nanoseconds,
     BitMatrix* closure_scratch
 ) {
+    PreprocessMemoryLedger ledger(max_memory_bytes);
+    return buildBaseTile(
+        graph,
+        layout,
+        slot,
+        ledger,
+        closure_nanoseconds,
+        closure_scratch
+    );
+}
+
+BaseTileSummary buildBaseTile(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSlot& slot,
+    PreprocessMemoryLedger& ledger,
+    uint64_t* closure_nanoseconds,
+    BitMatrix* closure_scratch
+) {
     BaseTileSummary summary{};
     summary.slot = slot;
     summary.status = BaselineStatus::NotRun;
 
     collectLocalVertices(layout, slot, summary.local_coords, summary.global_vertices);
+    if (!ledger.tryCharge(
+            vectorHeapBytes(summary.local_coords) + vectorHeapBytes(summary.global_vertices)
+        )) {
+        summary.status = BaselineStatus::SkippedByPolicy;
+        return summary;
+    }
+
     const uint32_t num_local = summary.numLocalVertices();
     if (num_local == 0U) {
         if (closure_nanoseconds != nullptr) {
@@ -172,7 +203,7 @@ BaseTileSummary buildBaseTile(
         return summary;
     }
 
-    if (!canAllocateTileReflexiveAdjacency(num_local, max_memory_bytes)) {
+    if (!ledger.tryCharge(exactBitMatrixStorageBytes(num_local, num_local))) {
         if (closure_nanoseconds != nullptr) {
             *closure_nanoseconds = 0U;
         }
@@ -184,7 +215,7 @@ BaseTileSummary buildBaseTile(
     const CsrGraph local_graph = buildInducedSubgraph(graph, layout, slot, summary.global_vertices);
     summary.local_closure = buildTileReflexiveAdjacencyOrThrow(
         local_graph,
-        max_memory_bytes
+        std::numeric_limits<uint64_t>::max()
     );
     const uint32_t largest_component_size =
         largestUndirectedComponentSize(local_graph);
@@ -200,6 +231,21 @@ BaseTileSummary buildBaseTile(
     }
 
     collectPorts(layout, slot, summary.local_coords, summary.ports);
+    if (!ledger.tryCharge(vectorHeapBytes(summary.ports))) {
+        summary.status = BaselineStatus::SkippedByPolicy;
+        return summary;
+    }
+
+    const uint32_t num_ports = summary.numPorts();
+    const uint64_t boundary_matrix_bytes =
+        exactBitMatrixStorageBytes(num_ports, num_ports)
+        + exactBitMatrixStorageBytes(num_local, num_ports)
+        + exactBitMatrixStorageBytes(num_ports, num_local);
+    if (!ledger.tryCharge(boundary_matrix_bytes)) {
+        summary.status = BaselineStatus::SkippedByPolicy;
+        return summary;
+    }
+
     projectBoundaryMatrices(summary);
     summary.status = BaselineStatus::Completed;
     return summary;

@@ -210,4 +210,8 @@ ReachabilityAnswer BrickSearchBaseline::query(
     return queryPortBfsWithAttachments(index_, source, target, port_scratch_);
 }
 
+uint64_t BrickSearchBaseline::indexStorageBytes() const noexcept {
+    return index_.storageBytes();
+}
+
 }  // namespace hbrick

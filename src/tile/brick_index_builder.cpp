@@ -61,11 +61,18 @@ void BrickIndexBuilder::begin(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSize nominal_tile_size,
-    const uint64_t max_memory_bytes
+    const uint64_t max_memory_bytes,
+    PreprocessMemoryLedger* shared_ledger
 ) {
     graph_ = &graph;
     layout_ = &layout;
     max_memory_bytes_ = max_memory_bytes;
+    if (shared_ledger != nullptr) {
+        ledger_ = shared_ledger;
+    } else {
+        owned_ledger_.reset(max_memory_bytes);
+        ledger_ = &owned_ledger_;
+    }
     index_ = BrickIndex{};
     index_.status_ = BaselineStatus::NotRun;
     tile_index_ = BrickTileIndex{};
@@ -94,6 +101,20 @@ void BrickIndexBuilder::begin(
     );
     tile_index_.decomposition_ = decomposition_;
     tile_index_.summaries_.resize(decomposition_.numSlots());
+    if (!ledger_->tryCharge(
+            static_cast<uint64_t>(decomposition_.numSlots()) * sizeof(BaseTileSummary)
+        )) {
+        finishFailure(BaselineStatus::SkippedByPolicy);
+        return;
+    }
+
+    if (!ledger_->tryCharge(
+            static_cast<uint64_t>(graph.numVertices()) * sizeof(uint32_t) * 2U
+        )) {
+        finishFailure(BaselineStatus::SkippedByPolicy);
+        return;
+    }
+
     tile_index_.global_vertex_tile_index_.assign(
         graph.numVertices(),
         std::numeric_limits<uint32_t>::max()
@@ -150,7 +171,7 @@ bool BrickIndexBuilder::step() noexcept {
                 *graph_,
                 *layout_,
                 slot,
-                max_memory_bytes_,
+                *ledger_,
                 &tile_closure_ns,
                 &base_tile_closure_scratch_
             );
@@ -188,6 +209,11 @@ bool BrickIndexBuilder::step() noexcept {
                         index_.tile_index_,
                         graph_->numVertices()
                     );
+                    if (!ledger_->tryCharge(index_.port_index_.estimateStorageBytes())) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
+
                     index_.seam_edges_.clear();
                     seam_deduper_.clear();
                     seam_vertex_cursor_ = 0U;
@@ -200,15 +226,19 @@ bool BrickIndexBuilder::step() noexcept {
                         seam_vertex_cursor_ + kSeamVerticesPerStep,
                         graph_->numVertices()
                     );
-                    collectSeamEdgesForVertexRange(
-                        graph_->csrGraph(),
-                        index_.tile_index_,
-                        index_.port_index_,
-                        seam_vertex_cursor_,
-                        vertex_end,
-                        index_.seam_edges_,
-                        &seam_deduper_
-                    );
+                    if (!collectSeamEdgesForVertexRange(
+                            graph_->csrGraph(),
+                            index_.tile_index_,
+                            index_.port_index_,
+                            seam_vertex_cursor_,
+                            vertex_end,
+                            index_.seam_edges_,
+                            &seam_deduper_,
+                            ledger_
+                        )) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
                     seam_vertex_cursor_ = vertex_end;
                     if (seam_vertex_cursor_ < graph_->numVertices()) {
                         advanceWork();
@@ -250,6 +280,10 @@ bool BrickIndexBuilder::step() noexcept {
 
                     addSeamEdgesToPortGraph(*port_graph_builder_, index_.seam_edges_);
                     index_.port_graph_ = port_graph_builder_->build();
+                    if (!ledger_->tryCharge(index_.port_graph_.estimateStorageBytes())) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
                     port_graph_builder_.reset();
                     index_.status_ = BaselineStatus::Completed;
                     finishSuccess();
@@ -294,13 +328,19 @@ BrickIndex BrickIndexBuilder::takeIndex() {
     port_graph_tile_cursor_ = 0U;
     port_graph_builder_.reset();
     seam_deduper_.clear();
+    ledger_ = nullptr;
     graph_ = nullptr;
     layout_ = nullptr;
     return result;
 }
 
+uint64_t BrickIndexBuilder::chargedStorageBytes() const noexcept {
+    return ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
+}
+
 void BrickIndexBuilder::finishFailure(const BaselineStatus status) noexcept {
     index_.status_ = status;
+    index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     report_.valid = true;
     report_.status = status;
     if (report_.num_base_tiles == 0U && tile_index_.decomposition_.numSlots() > 0U) {
@@ -321,6 +361,7 @@ void BrickIndexBuilder::finishSuccess() noexcept {
     report_.finalize_nanoseconds = monotonicNowNanoseconds() - finalize_started_ns_;
     report_.num_ports = index_.port_index_.numPorts();
     report_.num_seams = static_cast<uint32_t>(index_.seam_edges_.size());
+    index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     progress_.stage = BrickIndexBuildStage::Finished;
     phase_ = BrickIndexBuildStage::Finished;
 }

@@ -17,6 +17,12 @@ namespace hbrick {
 /** @brief Returns whether @p max_memory_bytes disables closure preflight checks. @ingroup hbrick_tile */
 [[nodiscard]] bool isUnlimitedMemoryBudget(uint64_t max_memory_bytes) noexcept;
 
+/** @brief Exact heap bytes for a dense @p num_rows × @p num_cols @ref BitMatrix. @ingroup hbrick_tile */
+[[nodiscard]] uint64_t exactBitMatrixStorageBytes(
+    uint32_t num_rows,
+    uint32_t num_cols
+) noexcept;
+
 /** @brief Estimates bytes for a reflexive @c V×V bit adjacency matrix. @ingroup hbrick_tile */
 [[nodiscard]] uint64_t estimateTileReflexiveAdjacencyBytes(uint32_t num_vertices) noexcept;
 

@@ -80,6 +80,7 @@ public:
 private:
     friend class HBrickIndexBuilder;
     friend class BrickIndexBuilder;
+    friend class BrickIndex;
 
     TileDecomposition decomposition_{};
     std::vector<BaseTileSummary> summaries_{};
