@@ -36,7 +36,8 @@ public:
         const DirectedGridGraph& graph,
         const MazeLayout& layout,
         TileSize nominal_tile_size,
-        uint64_t max_memory_bytes
+        uint64_t max_memory_bytes,
+        bool retain_seam_edges = false
     );
 
     /** @brief Outcome of building this index. @ingroup hbrick_tile */
@@ -51,7 +52,10 @@ public:
     /** @brief Compressed global port graph CSR. @ingroup hbrick_tile */
     [[nodiscard]] const CsrGraph& portGraph() const noexcept { return port_graph_; }
 
-    /** @brief Cross-tile seam edges used to build @ref portGraph. @ingroup hbrick_tile */
+    /** @brief Cross-tile seam edges used to build @ref portGraph. @ingroup hbrick_tile
+     *
+     * Empty after a flat-only build that releases seam storage once @ref portGraph is
+     * assembled. Populated when the builder is started with @c retain_seam_edges. */
     [[nodiscard]] const std::vector<SeamEdge>& seamEdges() const noexcept {
         return seam_edges_;
     }

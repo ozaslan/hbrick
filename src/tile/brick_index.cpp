@@ -46,7 +46,8 @@ BrickIndex BrickIndex::build(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,
     const TileSize nominal_tile_size,
-    const uint64_t max_memory_bytes
+    const uint64_t max_memory_bytes,
+    const bool retain_seam_edges
 ) {
     if (!nominal_tile_size.isValid()) {
         BrickIndex failed_index;
@@ -55,7 +56,14 @@ BrickIndex BrickIndex::build(
     }
 
     BrickIndexBuilder builder;
-    builder.begin(graph, layout, nominal_tile_size, max_memory_bytes);
+    builder.begin(
+        graph,
+        layout,
+        nominal_tile_size,
+        max_memory_bytes,
+        nullptr,
+        retain_seam_edges
+    );
     while (builder.running() && !builder.step()) {
     }
 

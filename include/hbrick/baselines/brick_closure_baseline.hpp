@@ -99,7 +99,7 @@ public:
     /** @brief Returns the built index when preprocessing completed. @ingroup hbrick_baselines */
     [[nodiscard]] const BrickIndex& index() const noexcept { return index_; }
 
-    /** @brief Returns port-closure matrix storage bytes after successful preprocessing. @ingroup hbrick_baselines */
+    /** @brief Returns bytes charged on the shared preprocess ledger after preprocessing. @ingroup hbrick_baselines */
     [[nodiscard]] uint64_t indexStorageBytes() const noexcept;
 
     /** @brief Returns the precomputed port-graph closure after successful preprocessing. @ingroup hbrick_baselines */

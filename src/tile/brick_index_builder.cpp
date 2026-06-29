@@ -62,10 +62,12 @@ void BrickIndexBuilder::begin(
     const MazeLayout& layout,
     const TileSize nominal_tile_size,
     const uint64_t max_memory_bytes,
-    PreprocessMemoryLedger* shared_ledger
+    PreprocessMemoryLedger* shared_ledger,
+    const bool retain_seam_edges
 ) {
     graph_ = &graph;
     layout_ = &layout;
+    retain_seam_edges_ = retain_seam_edges;
     if (shared_ledger != nullptr) {
         ledger_ = shared_ledger;
     } else {
@@ -309,6 +311,10 @@ bool BrickIndexBuilder::step() noexcept {
                     ledger_->releaseCharge(port_graph_pending_charged_bytes_);
                     port_graph_pending_charged_bytes_ = 0U;
                     port_graph_builder_.reset();
+                    report_.num_seams = static_cast<uint32_t>(index_.seam_edges_.size());
+                    if (!retain_seam_edges_) {
+                        releaseSeamEdgeStorage();
+                    }
                     index_.status_ = BaselineStatus::Completed;
                     finishSuccess();
                     return true;
@@ -360,6 +366,28 @@ BrickIndex BrickIndexBuilder::takeIndex() {
 
 uint64_t BrickIndexBuilder::chargedStorageBytes() const noexcept {
     return ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
+}
+
+uint64_t BrickIndexBuilder::estimateInitialLedgerCharge(
+    const uint32_t num_vertices,
+    const uint32_t map_width,
+    const uint32_t map_height,
+    const TileSize nominal_tile_size
+) noexcept {
+    if (!nominal_tile_size.isValid() || map_width == 0U || map_height == 0U) {
+        return 0U;
+    }
+
+    const TileDecomposition decomposition = TileDecomposition::decompose(
+        map_width,
+        map_height,
+        nominal_tile_size
+    );
+    const uint64_t summaries_bytes =
+        static_cast<uint64_t>(decomposition.numSlots()) * sizeof(BaseTileSummary);
+    const uint64_t lookup_bytes =
+        static_cast<uint64_t>(num_vertices) * sizeof(uint32_t) * 2U;
+    return summaries_bytes + lookup_bytes;
 }
 
 void BrickIndexBuilder::adoptPartialBaseTiles() noexcept {
@@ -420,6 +448,16 @@ void BrickIndexBuilder::releaseClosureScratchCharge() noexcept {
     closure_scratch_charged_bytes_ = 0U;
 }
 
+void BrickIndexBuilder::releaseSeamEdgeStorage() noexcept {
+    const uint64_t seam_bytes =
+        static_cast<uint64_t>(index_.seam_edges_.size()) * sizeof(SeamEdge);
+    if (seam_bytes > 0U && ledger_ != nullptr) {
+        ledger_->releaseCharge(seam_bytes);
+    }
+
+    std::vector<SeamEdge>().swap(index_.seam_edges_);
+}
+
 void BrickIndexBuilder::releaseFinalizeStorage() noexcept {
     if (ledger_ == nullptr) {
         return;
@@ -431,12 +469,7 @@ void BrickIndexBuilder::releaseFinalizeStorage() noexcept {
         index_.port_index_ = PortIndex{};
     }
 
-    const uint64_t seam_bytes =
-        static_cast<uint64_t>(index_.seam_edges_.size()) * sizeof(SeamEdge);
-    if (seam_bytes > 0U) {
-        ledger_->releaseCharge(seam_bytes);
-        index_.seam_edges_.clear();
-    }
+    releaseSeamEdgeStorage();
 
     const uint64_t port_graph_bytes = index_.port_graph_.estimateStorageBytes();
     if (port_graph_bytes > 0U) {
@@ -478,7 +511,6 @@ void BrickIndexBuilder::finishSuccess() noexcept {
     report_.status = BaselineStatus::Completed;
     report_.finalize_nanoseconds = monotonicNowNanoseconds() - finalize_started_ns_;
     report_.num_ports = index_.port_index_.numPorts();
-    report_.num_seams = static_cast<uint32_t>(index_.seam_edges_.size());
     releaseClosureScratchCharge();
     index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     progress_.stage = BrickIndexBuildStage::Finished;

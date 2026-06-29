@@ -118,7 +118,8 @@ TEST(PortGraph, SeamEdgeCountMatchesManualScan) {
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
 
     ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);
@@ -207,7 +208,8 @@ TEST(PortGraph, SeamEdgesAreCrossTileOnly) {
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
 
     ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);

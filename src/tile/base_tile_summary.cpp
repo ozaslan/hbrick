@@ -6,7 +6,6 @@
 
 #include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/connected_components.hpp"
-#include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/tile_boundary_order.hpp"
@@ -53,67 +52,50 @@ void collectPorts(
 ) {
     ports.clear();
 
+    const uint32_t cell_count = slot.extent.width * slot.extent.height;
+    std::vector<TilePort> perimeter_ports;
+    perimeter_ports.reserve(local_coords.size());
+    std::vector<uint32_t> port_index_by_cell(
+        cell_count,
+        std::numeric_limits<uint32_t>::max()
+    );
+
     for (uint32_t local_index = 0U; local_index < local_coords.size(); ++local_index) {
         const GridCoord& coord = local_coords[local_index];
         if (!isOnTilePerimeter(coord, slot)) {
             continue;
         }
+
+        const size_t cell_index =
+            static_cast<size_t>(coord.y - slot.origin.y) * slot.extent.width
+            + static_cast<size_t>(coord.x - slot.origin.x);
+
         TilePort port{};
         port.coord = coord;
         port.local_index = local_index;
         port.side = portSideForCoord(coord, slot);
-        ports.push_back(port);
+        port_index_by_cell[cell_index] = static_cast<uint32_t>(perimeter_ports.size());
+        perimeter_ports.push_back(port);
     }
 
     const std::vector<GridCoord> boundary_order = canonicalBoundaryCoords(slot);
-    std::vector<TilePort> ordered_ports;
-    ordered_ports.reserve(ports.size());
+    ports.reserve(perimeter_ports.size());
 
     for (const GridCoord boundary_coord : boundary_order) {
         if (!layout.isPassable(boundary_coord)) {
             continue;
         }
-        for (const TilePort& port : ports) {
-            if (port.coord.x == boundary_coord.x && port.coord.y == boundary_coord.y) {
-                ordered_ports.push_back(port);
-                break;
-            }
+
+        const size_t cell_index =
+            static_cast<size_t>(boundary_coord.y - slot.origin.y) * slot.extent.width
+            + static_cast<size_t>(boundary_coord.x - slot.origin.x);
+        const uint32_t port_index = port_index_by_cell[cell_index];
+        if (port_index == std::numeric_limits<uint32_t>::max()) {
+            continue;
         }
+
+        ports.push_back(perimeter_ports[port_index]);
     }
-
-    ports.swap(ordered_ports);
-}
-
-CsrGraph buildInducedSubgraph(
-    const DirectedGridGraph& graph,
-    const MazeLayout& layout,
-    const TileSlot& slot,
-    const std::vector<uint32_t>& global_vertices
-) {
-    const uint32_t local_count = static_cast<uint32_t>(global_vertices.size());
-    CsrGraphBuilder builder{local_count};
-
-    std::vector<uint32_t> global_to_local(graph.numVertices(), std::numeric_limits<uint32_t>::max());
-    for (uint32_t local_index = 0U; local_index < local_count; ++local_index) {
-        global_to_local[global_vertices[local_index]] = local_index;
-    }
-
-    for (uint32_t local_from = 0U; local_from < local_count; ++local_from) {
-        const uint32_t global_from = global_vertices[local_from];
-        for (const uint32_t global_to : graph.outNeighbors(global_from)) {
-            const uint32_t local_to = global_to_local[global_to];
-            if (local_to == std::numeric_limits<uint32_t>::max()) {
-                continue;
-            }
-            const GridCoord to_coord = graph.coordFromVertex(global_to);
-            if (!slot.contains(to_coord) || !layout.isPassable(to_coord)) {
-                continue;
-            }
-            builder.addEdge(local_from, local_to);
-        }
-    }
-
-    return builder.build();
 }
 
 template<typename T>
@@ -221,8 +203,12 @@ BaseTileSummary buildBaseTile(
 
     try {
         const uint64_t closure_started_ns = monotonicNowNanoseconds();
-        const CsrGraph local_graph =
-            buildInducedSubgraph(graph, layout, slot, summary.global_vertices);
+        const CsrGraph local_graph = buildInducedSubgraph(
+            graph,
+            layout,
+            slot,
+            summary.global_vertices
+        );
         summary.local_closure = buildTileReflexiveAdjacencyOrThrow(
             local_graph,
             std::numeric_limits<uint64_t>::max()

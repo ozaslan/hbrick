@@ -71,7 +71,8 @@ public:
         const MazeLayout& layout,
         TileSize nominal_tile_size,
         uint64_t max_memory_bytes,
-        PreprocessMemoryLedger* shared_ledger = nullptr
+        PreprocessMemoryLedger* shared_ledger = nullptr,
+        bool retain_seam_edges = false
     );
 
     /**
@@ -102,6 +103,19 @@ public:
     /** @brief Bytes charged on the active preprocess ledger. @ingroup hbrick_tile */
     [[nodiscard]] uint64_t chargedStorageBytes() const noexcept;
 
+    /**
+     * @brief Estimates ledger bytes charged before the first base tile is built.
+     * @ingroup hbrick_tile
+     *
+     * Covers the summary vector reservation and global vertex lookup tables.
+     */
+    [[nodiscard]] static uint64_t estimateInitialLedgerCharge(
+        uint32_t num_vertices,
+        uint32_t map_width,
+        uint32_t map_height,
+        TileSize nominal_tile_size
+    ) noexcept;
+
 private:
     enum class FinalizeSubstep : uint8_t {
         PortIndex = 0,
@@ -116,6 +130,7 @@ private:
     [[nodiscard]] bool chargeClosureScratchGrowth() noexcept;
     [[nodiscard]] bool chargePortGraphPendingEdges() noexcept;
     void releaseClosureScratchCharge() noexcept;
+    void releaseSeamEdgeStorage() noexcept;
     void releaseFinalizeStorage() noexcept;
 
     const DirectedGridGraph* graph_ = nullptr;
@@ -144,6 +159,7 @@ private:
     uint64_t closure_scratch_charged_bytes_ = 0U;
     uint64_t port_graph_pending_charged_bytes_ = 0U;
     bool cancelled_ = false;
+    bool retain_seam_edges_ = false;
 };
 
 }  // namespace hbrick

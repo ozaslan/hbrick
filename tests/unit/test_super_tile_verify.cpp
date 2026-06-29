@@ -114,7 +114,8 @@ TEST(SuperTileVerify, OracleA_EightByEightGroupedParentMatchesFlatPortGraph) {
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 
@@ -143,7 +144,8 @@ TEST(SuperTileVerify, OracleA_RandomAsymmetricMapWithObstaclesMatchesFlatPortGra
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 
@@ -170,7 +172,8 @@ TEST(SuperTileVerify, OracleB_TinyMapGroupedParentMatchesCellRegionClosure) {
         graph,
         layout,
         hbrick::TileSize{3U, 3U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 
@@ -197,7 +200,8 @@ TEST(SuperTileVerify, OracleB_PartialEdgeMapMatchesCellRegionClosure) {
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 

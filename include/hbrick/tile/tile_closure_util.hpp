@@ -7,10 +7,14 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 
 #include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/graph/csr_graph.hpp"
+#include "hbrick/graph/directed_grid_graph.hpp"
+#include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
+#include "hbrick/tile/tile_slot.hpp"
 
 namespace hbrick {
 
@@ -47,5 +51,19 @@ namespace hbrick {
 [[nodiscard]] uint32_t largestUndirectedComponentSizeFromAdjacency(
     const BitMatrix& adjacency
 ) noexcept;
+
+/**
+ * @brief Builds the CSR subgraph induced by @p global_vertices inside @p bbox.
+ * @ingroup hbrick_tile
+ *
+ * Uses an O(k log k) sorted local lookup table where @c k = @p global_vertices.size(),
+ * not a full-graph vertex map.
+ */
+[[nodiscard]] CsrGraph buildInducedSubgraph(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSlot& bbox,
+    std::span<const uint32_t> global_vertices
+);
 
 }  // namespace hbrick

@@ -108,4 +108,5 @@ TEST(BrickIndex, ChargedBytesMatchHeapOnCompletedBuild) {
     ASSERT_EQ(index.status(), hbrick::BaselineStatus::Completed);
     EXPECT_GT(index.storageBytes(), 0U);
     EXPECT_EQ(index.storageBytes(), index.measureStorageBytes());
+    EXPECT_TRUE(index.seamEdges().empty());
 }

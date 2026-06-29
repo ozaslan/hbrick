@@ -4,7 +4,6 @@
 #include <limits>
 
 #include "hbrick/bit/boolean_closure.hpp"
-#include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
@@ -114,38 +113,6 @@ void collectRegionCells(
             global_vertices.push_back(layout.vertexId(coord).value);
         }
     }
-}
-
-[[nodiscard]] CsrGraph buildRegionInducedSubgraph(
-    const DirectedGridGraph& graph,
-    const MazeLayout& layout,
-    const TileSlot& region_bbox,
-    const std::span<const uint32_t> global_vertices
-) {
-    const uint32_t local_count = static_cast<uint32_t>(global_vertices.size());
-    CsrGraphBuilder builder{local_count};
-
-    std::vector<uint32_t> global_to_local(graph.numVertices(), std::numeric_limits<uint32_t>::max());
-    for (uint32_t local_index = 0U; local_index < local_count; ++local_index) {
-        global_to_local[global_vertices[local_index]] = local_index;
-    }
-
-    for (uint32_t local_from = 0U; local_from < local_count; ++local_from) {
-        const uint32_t global_from = global_vertices[local_from];
-        for (const uint32_t global_to : graph.outNeighbors(global_from)) {
-            const uint32_t local_to = global_to_local[global_to];
-            if (local_to == std::numeric_limits<uint32_t>::max()) {
-                continue;
-            }
-            const GridCoord to_coord = graph.coordFromVertex(global_to);
-            if (!region_bbox.contains(to_coord) || !layout.isPassable(to_coord)) {
-                continue;
-            }
-            builder.addEdge(local_from, local_to);
-        }
-    }
-
-    return builder.build();
 }
 
 }  // namespace
@@ -268,7 +235,7 @@ RegionCellClosure buildRegionCellClosure(
         return result;
     }
 
-    const CsrGraph region_graph = buildRegionInducedSubgraph(
+    const CsrGraph region_graph = buildInducedSubgraph(
         graph,
         layout,
         region_bbox,

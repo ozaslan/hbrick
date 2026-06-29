@@ -35,7 +35,8 @@ TEST(SuperTileCompose, ComposesFourBaseTilesIntoOneParent) {
         graph,
         layout,
         hbrick::TileSize{4U, 4U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 
@@ -107,7 +108,8 @@ TEST(SuperTileCompose, SkipsImpassableChildrenWithEmptyPorts) {
         graph,
         layout,
         hbrick::TileSize{8U, 8U},
-        std::numeric_limits<uint64_t>::max()
+        std::numeric_limits<uint64_t>::max(),
+        true
     );
     ASSERT_EQ(brick_index.status(), hbrick::BaselineStatus::Completed);
 

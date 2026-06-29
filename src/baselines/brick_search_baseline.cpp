@@ -6,6 +6,7 @@
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/port_index.hpp"
+#include "hbrick/tile/preprocess_memory_ledger.hpp"
 
 namespace hbrick {
 
@@ -117,6 +118,8 @@ void BrickSearchBaseline::resetPreprocessState() noexcept {
     preprocess_active_ = false;
     preprocess_work_completed_ = 0U;
     preprocess_work_total_ = 0U;
+    num_vertices_ = 0U;
+    memory_ledger_.reset(std::numeric_limits<uint64_t>::max());
 }
 
 void BrickSearchBaseline::beginPreprocess(
@@ -132,7 +135,14 @@ void BrickSearchBaseline::beginPreprocess(
 
     num_vertices_ = graph.numVertices();
 
-    index_builder_.begin(graph, layout, nominal_tile_size, max_memory_bytes);
+    memory_ledger_.reset(max_memory_bytes);
+    index_builder_.begin(
+        graph,
+        layout,
+        nominal_tile_size,
+        max_memory_bytes,
+        &memory_ledger_
+    );
     if (!index_builder_.running()) {
         status_ = index_builder_.report().valid
             ? index_builder_.report().status
@@ -211,7 +221,7 @@ ReachabilityAnswer BrickSearchBaseline::query(
 }
 
 uint64_t BrickSearchBaseline::indexStorageBytes() const noexcept {
-    return index_.storageBytes();
+    return memory_ledger_.chargedBytes();
 }
 
 }  // namespace hbrick

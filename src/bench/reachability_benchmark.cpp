@@ -28,6 +28,7 @@
 #include "hbrick/baselines/brick_closure_baseline.hpp"
 #include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/hbrick_baseline.hpp"
+#include "hbrick/tile/brick_index_builder.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/bench/process_memory.hpp"
 #include "hbrick/graph/bfs.hpp"
@@ -536,8 +537,17 @@ void setMemoryCapSkipDetail(
 [[nodiscard]] uint64_t estimatedIndexBytesForMethod(
     const ReachabilityBaselineId method,
     const CsrGraph& graph,
-    const ReachabilityBenchmarkConfig& config
+    const ReachabilityBenchmarkConfig& config,
+    const BaselineInstances* baselines = nullptr,
+    const DirectedGridGraph* grid_graph = nullptr
 ) noexcept {
+    if (baselines != nullptr) {
+        const uint64_t ledger_bytes = indexStorageBytesForBaseline(method, *baselines, graph);
+        if (ledger_bytes > 0U) {
+            return ledger_bytes;
+        }
+    }
+
     switch (method) {
         case ReachabilityBaselineId::FullClosure:
         case ReachabilityBaselineId::SccDagClosure:
@@ -551,12 +561,36 @@ void setMemoryCapSkipDetail(
                 graph.numVertices(),
                 config.grail_params.num_trees
             );
-        case ReachabilityBaselineId::CsrBfs:
-        case ReachabilityBaselineId::CsrDfs:
-        case ReachabilityBaselineId::SccDagSearch:
         case ReachabilityBaselineId::BrickSearch:
-        case ReachabilityBaselineId::BrickClosure:
+            if (grid_graph != nullptr) {
+                return BrickIndexBuilder::estimateInitialLedgerCharge(
+                    graph.numVertices(),
+                    grid_graph->width(),
+                    grid_graph->height(),
+                    config.brick_tile_size
+                );
+            }
+            return 0U;
+        case ReachabilityBaselineId::BrickClosure: {
+            uint64_t bytes = 0U;
+            if (grid_graph != nullptr) {
+                bytes = BrickIndexBuilder::estimateInitialLedgerCharge(
+                    graph.numVertices(),
+                    grid_graph->width(),
+                    grid_graph->height(),
+                    config.brick_tile_size
+                );
+            }
+            bytes += ClosureMatrixBuilder::estimateReflexiveAdjacencyBytes(
+                graph.numVertices()
+            );
+            return bytes;
+        }
         case ReachabilityBaselineId::HBrick:
+            return 0U;
+        case ReachabilityBaselineId::CsrBfs:
+        case ReachabilityBaselineId::SccDagSearch:
+        case ReachabilityBaselineId::CsrDfs:
             return 0U;
     }
 
@@ -1251,6 +1285,11 @@ struct ReachabilityBenchmarkJob::Impl {
             }
             incremental_brick_running = false;
             metrics.status = BaselineStatus::SkippedByPolicy;
+            metrics.estimated_index_bytes = indexStorageBytesForBaseline(
+                method,
+                baselines,
+                graph
+            );
             metrics.policy_skip_detail =
                 std::string("Stopped by user during ")
                 + reachabilityBaselineName(method)
@@ -1374,9 +1413,13 @@ struct ReachabilityBenchmarkJob::Impl {
             setMemoryCapSkipDetail(
                 metrics,
                 method,
-                indexStorageBytesForBaseline(method, baselines, graph) > 0U
-                    ? indexStorageBytesForBaseline(method, baselines, graph)
-                    : estimatedIndexBytesForMethod(method, graph, config),
+                estimatedIndexBytesForMethod(
+                    method,
+                    graph,
+                    config,
+                    &baselines,
+                    grid_context.grid_graph
+                ),
                 config.max_memory_bytes
             );
         }
@@ -1665,21 +1708,18 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                                 "Brick and H-BRICK baselines require DirectedGridGraph "
                                 "and MazeLayout benchmark input.";
                         } else {
-                            const uint64_t actual_index_bytes = indexStorageBytesForBaseline(
-                                method,
-                                impl_->baselines,
-                                impl_->graph
-                            );
                             setMemoryCapSkipDetail(
                                 metrics,
                                 method,
-                                actual_index_bytes > 0U
-                                    ? actual_index_bytes
-                                    : estimatedIndexBytesForMethod(
-                                        method,
-                                        impl_->graph,
-                                        impl_->config
-                                    ),
+                                estimatedIndexBytesForMethod(
+                                    method,
+                                    impl_->graph,
+                                    impl_->config,
+                                    &impl_->baselines,
+                                    impl_->has_grid_benchmark
+                                        ? impl_->gridContext().grid_graph
+                                        : nullptr
+                                ),
                                 impl_->config.max_memory_bytes
                             );
                         }

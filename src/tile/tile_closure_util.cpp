@@ -2,13 +2,42 @@
 
 #include <algorithm>
 #include <bit>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
 #include "hbrick/bit/bit_vector.hpp"
+#include "hbrick/graph/csr_graph_builder.hpp"
 #include "hbrick/tile/hbrick_config.hpp"
 
 namespace hbrick {
+
+namespace {
+
+struct GlobalLocalEntry {
+    uint32_t global_vertex = 0U;
+    uint32_t local_index = 0U;
+};
+
+[[nodiscard]] uint32_t lookupLocalIndex(
+    const std::vector<GlobalLocalEntry>& sorted_map,
+    const uint32_t global_vertex
+) noexcept {
+    const auto it = std::lower_bound(
+        sorted_map.begin(),
+        sorted_map.end(),
+        global_vertex,
+        [](const GlobalLocalEntry& entry, const uint32_t global) noexcept {
+            return entry.global_vertex < global;
+        }
+    );
+    if (it == sorted_map.end() || it->global_vertex != global_vertex) {
+        return std::numeric_limits<uint32_t>::max();
+    }
+    return it->local_index;
+}
+
+}  // namespace
 
 bool isUnlimitedMemoryBudget(const uint64_t max_memory_bytes) noexcept {
     return max_memory_bytes >= kHBrickUnlimitedMemoryBytes;
@@ -132,6 +161,54 @@ uint32_t largestUndirectedComponentSizeFromAdjacency(
         }
     }
     return largest;
+}
+
+CsrGraph buildInducedSubgraph(
+    const DirectedGridGraph& graph,
+    const MazeLayout& layout,
+    const TileSlot& bbox,
+    const std::span<const uint32_t> global_vertices
+) {
+    const uint32_t local_count = static_cast<uint32_t>(global_vertices.size());
+    CsrGraphBuilder builder{local_count};
+    if (local_count == 0U) {
+        return builder.build();
+    }
+
+    std::vector<GlobalLocalEntry> global_to_local;
+    global_to_local.reserve(local_count);
+    for (uint32_t local_index = 0U; local_index < local_count; ++local_index) {
+        global_to_local.push_back(GlobalLocalEntry{
+            global_vertices[local_index],
+            local_index
+        });
+    }
+    std::sort(
+        global_to_local.begin(),
+        global_to_local.end(),
+        [](const GlobalLocalEntry& lhs, const GlobalLocalEntry& rhs) noexcept {
+            return lhs.global_vertex < rhs.global_vertex;
+        }
+    );
+
+    for (uint32_t local_from = 0U; local_from < local_count; ++local_from) {
+        const uint32_t global_from = global_vertices[local_from];
+        for (const uint32_t global_to : graph.outNeighbors(global_from)) {
+            const uint32_t local_to = lookupLocalIndex(global_to_local, global_to);
+            if (local_to == std::numeric_limits<uint32_t>::max()) {
+                continue;
+            }
+
+            const GridCoord to_coord = graph.coordFromVertex(global_to);
+            if (!bbox.contains(to_coord) || !layout.isPassable(to_coord)) {
+                continue;
+            }
+
+            builder.addEdge(local_from, local_to);
+        }
+    }
+
+    return builder.build();
 }
 
 }  // namespace hbrick

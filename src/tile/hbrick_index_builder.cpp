@@ -147,7 +147,9 @@ void HBrickIndexBuilder::begin(
         graph,
         layout,
         config.base_tile_size,
-        config.max_memory_bytes
+        config.max_memory_bytes,
+        nullptr,
+        true
     );
     if (!brick_index_builder_.running()) {
         finishFailure(
