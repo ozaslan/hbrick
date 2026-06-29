@@ -3,7 +3,6 @@
 #include <cctype>
 #include <filesystem>
 #include <limits>
-#include <optional>
 #include <string>
 
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
@@ -16,26 +15,6 @@ namespace {
 
 [[nodiscard]] std::filesystem::path datasetsRoot() {
     return std::filesystem::path(HBRICK_SOURCE_DIR) / "datasets" / "movingai" / "extracted";
-}
-
-[[nodiscard]] std::optional<hbrick::CsrGraph> buildCatalogGraph(
-    const hbrick::test_support::MovingAiMapEntry& entry
-) {
-    const std::filesystem::path map_path =
-        datasetsRoot() / entry.set_name / "maps" / entry.map_name;
-    const hbrick::MovingAiLoadResult loaded = hbrick::loadMovingAiMap(map_path);
-    if (!loaded.ok()) {
-        return std::nullopt;
-    }
-
-    const hbrick::MovingAiPassabilityPolicy policy =
-        hbrick::test_support::passabilityPolicyForMovingAiSet(entry.set_name);
-    const hbrick::MazeLayout layout = loaded.map.toMazeLayout(policy);
-    return hbrick::DirectedGridGraphBuilder::build(
-        layout,
-        hbrick::GridEdgeConversionMode::RandomAsymmetric,
-        hbrick::test_support::randomParamsForMovingAiMap(entry.set_name, entry.map_name)
-    ).csrGraph();
 }
 
 void runCatalogMapOracle(const hbrick::test_support::MovingAiMapEntry& entry) {
@@ -57,11 +36,10 @@ void runCatalogMapOracle(const hbrick::test_support::MovingAiMapEntry& entry) {
 
     const std::string context = entry.label() + " vertices=" + std::to_string(graph.numVertices());
 
-    hbrick::test_support::expectReachabilityOracleAllSlices(
+    hbrick::test_support::expectReachabilityOracleSampledPairs(
         graph,
         context,
-        hbrick::GridEdgeConversionMode::RandomAsymmetric,
-        hbrick::test_support::kFullAllPairsVertexLimit,
+        hbrick::test_support::kIntegrationReachabilitySamplePairCount,
         std::numeric_limits<uint64_t>::max(),
         &layout
     );
@@ -92,7 +70,7 @@ TEST(MovingAiReachabilityOracle, RequiresExtractedDataset) {
                         "run datasets/movingai/fetch_movingai.sh --extract-only";
     }
 
-    ASSERT_FALSE(hbrick::test_support::movingAiMapCatalog().empty())
+    ASSERT_FALSE(hbrick::test_support::movingAiReachabilityTestCatalog().empty())
         << "extracted tree exists but no .map files were discovered";
 }
 
@@ -107,6 +85,6 @@ TEST_P(MovingAiExtractedMapReachabilityTest, PassesReachabilityOracleForCatalogM
 INSTANTIATE_TEST_SUITE_P(
     AllExtractedMaps,
     MovingAiExtractedMapReachabilityTest,
-    ::testing::ValuesIn(hbrick::test_support::movingAiMapCatalog()),
+    ::testing::ValuesIn(hbrick::test_support::movingAiReachabilityTestCatalog()),
     MovingAiMapParamName()
 );

@@ -121,6 +121,22 @@ void expectReachabilityOracleAllSlices(
 );
 
 /**
+ * @brief Verifies SCC labels and a fixed number of evenly spaced reachability pairs.
+ * @ingroup hbrick_test_support
+ *
+ * Pair index @c p = source * V + target is sampled at
+ * @c (i * V²) / sample_pair_count for @c i in @c [0, sample_pair_count).
+ */
+void expectReachabilityOracleSampledPairs(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t sample_pair_count = kIntegrationReachabilitySamplePairCount,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max(),
+    const MazeLayout* layout = nullptr,
+    TileSize brick_tile_size = TileSize{4U, 4U}
+);
+
+/**
  * @brief Counts ordered pairs assigned to @p slice_id when splitting V² pairs into @p slice_count slices.
  * @ingroup hbrick_test_support
  *

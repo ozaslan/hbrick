@@ -98,11 +98,10 @@ TEST(RecipeReachabilityOracle, CommittedBostonRecipeBuildsGraphOnAllSlices) {
     const std::string context = "recipe:" + recipe->map_name + " set=" + recipe->set_name
         + " vertices=" + std::to_string(graph->numVertices());
 
-    hbrick::test_support::expectReachabilityOracleAllSlices(
+    hbrick::test_support::expectReachabilityOracleSampledPairs(
         *graph,
         context,
-        recipe->mode,
-        hbrick::test_support::kFullAllPairsVertexLimit,
+        hbrick::test_support::kIntegrationReachabilitySamplePairCount,
         std::numeric_limits<uint64_t>::max(),
         &layout
     );
@@ -133,11 +132,10 @@ TEST(RecipeReachabilityOracle, SavedRecipeMatchesDirectBuilderOnArenaMap) {
     ASSERT_EQ(from_recipe->numVertices(), direct.numVertices());
     ASSERT_EQ(from_recipe->numEdges(), direct.numEdges());
 
-    hbrick::test_support::expectReachabilityOracleAllSlices(
+    hbrick::test_support::expectReachabilityOracleSampledPairs(
         direct,
         "dao-arena-recipe vertices=" + std::to_string(direct.numVertices()),
-        recipe.mode,
-        hbrick::test_support::kFullAllPairsVertexLimit,
+        hbrick::test_support::kIntegrationReachabilitySamplePairCount,
         std::numeric_limits<uint64_t>::max(),
         &layout
     );

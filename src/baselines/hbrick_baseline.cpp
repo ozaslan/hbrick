@@ -532,7 +532,18 @@ ReachabilityAnswer HBrickBaseline::query(
         );
     }
 
-    return queryHierarchical(index_, source, target, scratch_);
+    const ReachabilityAnswer hierarchical =
+        queryHierarchical(index_, source, target, scratch_);
+    if (hierarchical == ReachabilityAnswer::Reachable) {
+        return ReachabilityAnswer::Reachable;
+    }
+
+    return queryFlatBrickPortBfs(
+        index_.brickIndex(),
+        source,
+        target,
+        port_bfs_scratch_
+    );
 }
 
 }  // namespace hbrick

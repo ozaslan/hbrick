@@ -13,7 +13,8 @@ endif()
 include(GoogleTest)
 
 set(HBRICK_GTEST_TIMEOUT 20 CACHE STRING "Maximum seconds allowed for each Google Test case")
-set(HBRICK_MOVINGAI_GTEST_TIMEOUT 180 CACHE STRING "Maximum seconds for each MovingAI map reachability test")
+set(HBRICK_MOVINGAI_GTEST_TIMEOUT 60 CACHE STRING "Maximum seconds for each MovingAI map reachability test")
+option(HBRICK_FULL_MOVINGAI_TESTS "Register reachability tests for every extracted MovingAI map" OFF)
 
 function(hbrick_register_gtests target_name)
     gtest_discover_tests(
@@ -27,7 +28,9 @@ function(hbrick_register_slow_gtests target_name timeout_seconds)
     gtest_discover_tests(
         ${target_name}
         DISCOVERY_TIMEOUT 120
-        PROPERTIES TIMEOUT ${timeout_seconds}
+        PROPERTIES
+            TIMEOUT ${timeout_seconds}
+            LABELS "slow"
     )
 endfunction()
 
@@ -612,6 +615,14 @@ target_compile_definitions(
     PRIVATE
         HBRICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
+
+if(HBRICK_FULL_MOVINGAI_TESTS)
+    target_compile_definitions(
+        test_movingai_reachability
+        PRIVATE
+            HBRICK_FULL_MOVINGAI_TESTS=1
+    )
+endif()
 
 target_link_libraries(
     test_movingai_reachability

@@ -16,18 +16,61 @@
                 "CMAKE_CXX_STANDARD": "20",
                 "HBRICK_WARNINGS_AS_ERRORS": "ON"
             }
+        },
+        {
+            "name": "dev-full",
+            "inherits": "dev",
+            "displayName": "Development (full MovingAI tests)",
+            "cacheVariables": {
+                "HBRICK_FULL_MOVINGAI_TESTS": "ON"
+            }
         }
     ],
     "buildPresets": [
         {
             "name": "dev",
             "configurePreset": "dev"
+        },
+        {
+            "name": "dev-full",
+            "configurePreset": "dev-full"
         }
     ],
     "testPresets": [
         {
             "name": "dev",
             "configurePreset": "dev",
+            "execution": {
+                "jobs": 0
+            },
+            "output": {
+                "outputOnFailure": true,
+                "shortProgress": true,
+                "verbosity": "verbose"
+            }
+        },
+        {
+            "name": "dev-fast",
+            "configurePreset": "dev",
+            "filter": {
+                "exclude": {
+                    "label": "slow"
+                }
+            },
+            "execution": {
+                "jobs": 0
+            },
+            "output": {
+                "outputOnFailure": true,
+                "shortProgress": true
+            }
+        },
+        {
+            "name": "dev-full",
+            "configurePreset": "dev-full",
+            "execution": {
+                "jobs": 0
+            },
             "output": {
                 "outputOnFailure": true,
                 "shortProgress": true,

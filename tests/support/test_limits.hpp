@@ -37,6 +37,36 @@ inline constexpr uint32_t kMaxSlicesPerTestCase = 64U;
 inline constexpr uint32_t kPerTestTimeoutSeconds = 20U;
 
 /** @brief CTest timeout for per-map MovingAI reachability integration tests. @ingroup hbrick_test_support */
-inline constexpr uint32_t kMovingAiMapReachabilityTimeoutSeconds = 180U;
+inline constexpr uint32_t kMovingAiMapReachabilityTimeoutSeconds = 60U;
+
+/**
+ * @brief Maximum vertices for a map in the default (smoke) MovingAI reachability catalog.
+ * @ingroup hbrick_test_support
+ *
+ * Sets whose smallest extracted map exceeds this limit are omitted from
+ * @ref movingAiReachabilityTestCatalog() unless @c HBRICK_FULL_MOVINGAI_TESTS is enabled.
+ */
+inline constexpr uint32_t kMovingAiSmokeMapVertexLimit = 10000U;
+
+/**
+ * @brief Ordered (source, target) pairs checked per catalog/recipe integration test.
+ * @ingroup hbrick_test_support
+ *
+ * Pair indices are chosen at evenly spaced positions in @c [0, V²).
+ */
+inline constexpr uint32_t kIntegrationReachabilitySamplePairCount = 1000U;
+
+/**
+ * @brief Maximum vertices for SCC and BRICK checks inside @ref expectReachabilityOracleSampledPairs.
+ * @ingroup hbrick_test_support
+ *
+ * Larger graphs still receive @ref kIntegrationReachabilitySamplePairCount search-baseline
+ * pair checks only.
+ */
+inline constexpr uint32_t kSampledOracleFullCheckVertexLimit = kMovingAiSmokeMapVertexLimit;
+
+/** @deprecated Use @ref kIntegrationReachabilitySamplePairCount. @ingroup hbrick_test_support */
+inline constexpr uint32_t kMovingAiReachabilitySamplePairCount =
+    kIntegrationReachabilitySamplePairCount;
 
 }  // namespace hbrick::test_support

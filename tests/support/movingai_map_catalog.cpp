@@ -1,6 +1,12 @@
 #include "movingai_map_catalog.hpp"
 
 #include <algorithm>
+#include <fstream>
+#include <limits>
+#include <optional>
+#include <unordered_map>
+
+#include "test_limits.hpp"
 
 namespace hbrick::test_support {
 
@@ -16,6 +22,85 @@ namespace {
         hash = hash * 131ULL + static_cast<unsigned char>(character);
     }
     return hash;
+}
+
+[[nodiscard]] std::optional<uint64_t> readMovingAiMapVertexCount(
+    const std::filesystem::path& map_path
+) {
+    std::ifstream input(map_path);
+    if (!input) {
+        return std::nullopt;
+    }
+
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.rfind("width ", 0U) == 0U) {
+            width = static_cast<uint32_t>(std::stoul(line.substr(6U)));
+        } else if (line.rfind("height ", 0U) == 0U) {
+            height = static_cast<uint32_t>(std::stoul(line.substr(7U)));
+        } else if (line == "map") {
+            break;
+        }
+    }
+
+    if (width == 0U || height == 0U) {
+        return std::nullopt;
+    }
+
+    return static_cast<uint64_t>(width) * height;
+}
+
+[[nodiscard]] std::vector<MovingAiMapEntry> selectOneSmallestMapPerSet(
+    const std::vector<MovingAiMapEntry>& catalog,
+    const std::filesystem::path& extracted_root
+) {
+    struct SetBest {
+        MovingAiMapEntry entry;
+        uint64_t vertex_count = std::numeric_limits<uint64_t>::max();
+    };
+
+    std::unordered_map<std::string, SetBest> best_by_set;
+    best_by_set.reserve(catalog.size());
+
+    for (const MovingAiMapEntry& entry : catalog) {
+        const std::filesystem::path map_path =
+            extracted_root / entry.set_name / "maps" / entry.map_name;
+        const std::optional<uint64_t> vertex_count = readMovingAiMapVertexCount(map_path);
+        if (!vertex_count.has_value()) {
+            continue;
+        }
+
+        SetBest& best = best_by_set[entry.set_name];
+        if (*vertex_count < best.vertex_count) {
+            best.entry = entry;
+            best.vertex_count = *vertex_count;
+        }
+    }
+
+    std::vector<MovingAiMapEntry> smoke_catalog;
+    smoke_catalog.reserve(best_by_set.size());
+    for (auto& [set_name, best] : best_by_set) {
+        (void)set_name;
+        if (best.vertex_count > kMovingAiSmokeMapVertexLimit) {
+            continue;
+        }
+        smoke_catalog.push_back(best.entry);
+    }
+
+    std::sort(
+        smoke_catalog.begin(),
+        smoke_catalog.end(),
+        [](const MovingAiMapEntry& left, const MovingAiMapEntry& right) {
+            if (left.set_name != right.set_name) {
+                return left.set_name < right.set_name;
+            }
+            return left.map_name < right.map_name;
+        }
+    );
+
+    return smoke_catalog;
 }
 
 }  // namespace
@@ -89,6 +174,24 @@ const std::vector<MovingAiMapEntry>& movingAiMapCatalog() {
         return discoverMovingAiMaps(
             std::filesystem::path(HBRICK_SOURCE_DIR) / "datasets" / "movingai" / "extracted"
         );
+#else
+        return std::vector<MovingAiMapEntry>{};
+#endif
+    }();
+    return catalog;
+}
+
+const std::vector<MovingAiMapEntry>& movingAiReachabilityTestCatalog() {
+    static const std::vector<MovingAiMapEntry> catalog = [] {
+#ifdef HBRICK_SOURCE_DIR
+        const std::filesystem::path extracted_root =
+            std::filesystem::path(HBRICK_SOURCE_DIR) / "datasets" / "movingai" / "extracted";
+        const std::vector<MovingAiMapEntry> full_catalog = discoverMovingAiMaps(extracted_root);
+#ifdef HBRICK_FULL_MOVINGAI_TESTS
+        return full_catalog;
+#else
+        return selectOneSmallestMapPerSet(full_catalog, extracted_root);
+#endif
 #else
         return std::vector<MovingAiMapEntry>{};
 #endif

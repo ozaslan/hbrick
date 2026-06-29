@@ -52,4 +52,14 @@ struct MovingAiMapEntry {
  */
 [[nodiscard]] const std::vector<MovingAiMapEntry>& movingAiMapCatalog();
 
+/**
+ * @brief Maps used by @c test_movingai_reachability.
+ * @ingroup hbrick_test_support
+ *
+ * When @c HBRICK_FULL_MOVINGAI_TESTS is defined at compile time, returns every
+ * discovered map. Otherwise returns one smallest map per benchmark set so the
+ * default CTest run stays fast.
+ */
+[[nodiscard]] const std::vector<MovingAiMapEntry>& movingAiReachabilityTestCatalog();
+
 }  // namespace hbrick::test_support

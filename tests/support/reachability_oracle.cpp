@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 
@@ -791,6 +792,181 @@ void expectAllBaselinesMatchBfsOnSlice(
     }
 }
 
+namespace {
+
+[[nodiscard]] std::vector<std::vector<uint32_t>> groupEvenlySpacedReachabilityPairs(
+    const uint32_t num_vertices,
+    const uint32_t sample_pair_count
+) {
+    std::vector<std::vector<uint32_t>> targets_by_source(num_vertices);
+    if (num_vertices == 0U || sample_pair_count == 0U) {
+        return targets_by_source;
+    }
+
+    const uint64_t total_pairs = static_cast<uint64_t>(num_vertices) * num_vertices;
+    const uint64_t pairs_to_check = std::min<uint64_t>(sample_pair_count, total_pairs);
+    for (uint64_t sample_id = 0U; sample_id < pairs_to_check; ++sample_id) {
+        const uint64_t pair_index = (sample_id * total_pairs) / pairs_to_check;
+        const uint32_t source = static_cast<uint32_t>(pair_index / num_vertices);
+        const uint32_t target = static_cast<uint32_t>(pair_index % num_vertices);
+        targets_by_source[source].push_back(target);
+    }
+
+    return targets_by_source;
+}
+
+void expectSearchBaselinesMatchBfsOnTargets(
+    const CsrGraph& graph,
+    const std::vector<std::vector<uint32_t>>& targets_by_source,
+    const std::string& context
+) {
+    if (graph.numVertices() == 0U) {
+        return;
+    }
+
+    GraphSearchScratch preprocess_scratch(graph.numVertices());
+    GraphSearchScratch query_scratch(graph.numVertices());
+
+    CsrBfsBaseline csr_bfs;
+    CsrDfsBaseline csr_dfs;
+    SccDagSearchBaseline scc_search;
+
+    csr_bfs.preprocess(graph);
+    csr_dfs.preprocess(graph);
+    scc_search.preprocess(graph, preprocess_scratch);
+
+    ASSERT_EQ(csr_bfs.status(), BaselineStatus::Completed) << context;
+    ASSERT_EQ(csr_dfs.status(), BaselineStatus::Completed) << context;
+    ASSERT_EQ(scc_search.status(), BaselineStatus::Completed) << context;
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (const uint32_t target : targets_by_source[source]) {
+            const ReachabilityAnswer expected = bfsReference(
+                graph,
+                source,
+                target,
+                query_scratch
+            );
+
+            EXPECT_EQ(csr_bfs.query(source, target, query_scratch), expected)
+                << context << " baseline=CsrBfs source=" << source
+                << " target=" << target;
+            EXPECT_EQ(csr_dfs.query(source, target, query_scratch), expected)
+                << context << " baseline=CsrDfs source=" << source
+                << " target=" << target;
+            EXPECT_EQ(scc_search.query(source, target, query_scratch), expected)
+                << context << " baseline=SccDagSearch source=" << source
+                << " target=" << target;
+        }
+    }
+}
+
+void expectBrickBaselinesMatchBfsOnTargets(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::vector<std::vector<uint32_t>>& targets_by_source,
+    const std::string& context,
+    const TileSize tile_size,
+    const uint64_t max_memory_bytes
+) {
+    if (graph.numVertices() == 0U) {
+        return;
+    }
+
+    if (!layoutMatchesGraphDimensions(layout, graph)) {
+        ADD_FAILURE() << context << " layout dimensions do not match graph vertex count";
+        return;
+    }
+
+    const DirectedGridGraph grid_graph = directedGridGraphFromLayoutAndCsr(layout, graph);
+
+    BrickSearchBaseline brick_search;
+    brick_search.preprocess(grid_graph, layout, tile_size, max_memory_bytes);
+    ASSERT_EQ(brick_search.status(), BaselineStatus::Completed) << context;
+
+    BrickClosureBaseline brick_closure;
+    brick_closure.preprocess(grid_graph, layout, tile_size, max_memory_bytes);
+    ASSERT_EQ(brick_closure.status(), BaselineStatus::Completed) << context;
+
+    GraphSearchScratch scratch(graph.numVertices());
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (const uint32_t target : targets_by_source[source]) {
+            const ReachabilityAnswer expected = bfsReference(
+                graph,
+                source,
+                target,
+                scratch
+            );
+
+            EXPECT_EQ(brick_search.query(source, target), expected)
+                << context << " baseline=BrickSearch source=" << source
+                << " target=" << target;
+            EXPECT_EQ(brick_closure.query(source, target), expected)
+                << context << " baseline=BrickClosure source=" << source
+                << " target=" << target;
+        }
+    }
+}
+
+}  // namespace
+
+void expectReachabilityOracleSampledPairs(
+    const CsrGraph& graph,
+    const std::string& context,
+    const uint32_t sample_pair_count,
+    const uint64_t max_memory_bytes,
+    const MazeLayout* layout,
+    const TileSize brick_tile_size
+) {
+    if (sample_pair_count == 0U) {
+        ADD_FAILURE() << context << " sample_pair_count must be positive";
+        return;
+    }
+
+    logOracleProgress(
+        context + " sampled oracle starting V=" + std::to_string(graph.numVertices())
+            + " pairs=" + std::to_string(sample_pair_count)
+    );
+
+    const bool run_full_checks =
+        graph.numVertices() <= kSampledOracleFullCheckVertexLimit;
+
+    if (run_full_checks) {
+        expectSccPartitionMatchesBidirectionalBfs(graph, context);
+        logOracleProgress(context + " SCC partition verified");
+    } else {
+        logOracleProgress(
+            context + " SCC partition skipped (V > "
+                + std::to_string(kSampledOracleFullCheckVertexLimit) + ')'
+        );
+    }
+
+    const std::vector<std::vector<uint32_t>> targets_by_source =
+        groupEvenlySpacedReachabilityPairs(graph.numVertices(), sample_pair_count);
+
+    expectSearchBaselinesMatchBfsOnTargets(graph, targets_by_source, context);
+    logOracleProgress(context + " search baselines verified on sampled pairs");
+
+    if (layout != nullptr && run_full_checks) {
+        expectBrickBaselinesMatchBfsOnTargets(
+            *layout,
+            graph,
+            targets_by_source,
+            context,
+            brick_tile_size,
+            max_memory_bytes
+        );
+        logOracleProgress(context + " BRICK baselines verified on sampled pairs");
+    } else if (layout != nullptr) {
+        logOracleProgress(
+            context + " BRICK baselines skipped (V > "
+                + std::to_string(kSampledOracleFullCheckVertexLimit) + ')'
+        );
+    }
+
+    logOracleProgress(context + " sampled oracle finished");
+}
+
 void expectReachabilityOracleAllSlices(
     const CsrGraph& graph,
     const std::string& context,
@@ -805,20 +981,11 @@ void expectReachabilityOracleAllSlices(
     const uint32_t slice_count = computeReachabilityPairSliceCount(graph.numVertices());
     if (slice_count > kMaxSlicesPerTestCase) {
         logOracleProgress(
-            context + " CSR pair oracle skipped (requires " + std::to_string(slice_count)
+            context + " pair oracle skipped (requires " + std::to_string(slice_count)
                 + " slices, V=" + std::to_string(graph.numVertices()) + ')'
         );
         expectSccPartitionMatchesBidirectionalBfs(graph, context);
-        logOracleProgress(context + " SCC partition verified (CSR pair budget exceeded)");
-        if (layout != nullptr) {
-            expectBrickBaselinesMatchBfs(
-                *layout,
-                graph,
-                brick_tile_size,
-                context,
-                max_memory_bytes
-            );
-        }
+        logOracleProgress(context + " SCC partition verified (pair slice budget exceeded)");
         return;
     }
 
