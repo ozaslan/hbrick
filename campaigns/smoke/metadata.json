@@ -1,7 +1,7 @@
 {
   "schema_version": "2",
-  "campaign_id": "run01",
-  "started_at_utc": "2026-06-29T22:55:57Z",
+  "campaign_id": "smoke",
+  "started_at_utc": "2026-06-29T22:55:19Z",
   "git_commit": "d2290b56684303a6a73e1d18c6e9560746c207dd",
   "build_type": "Release",
   "compiler_id": "GNU",

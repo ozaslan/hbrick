@@ -1,0 +1,8 @@
+{
+  "schema_version": "2",
+  "pair_seed": 13238609,
+  "query_count": 64,
+  "warmup_queries": 8,
+  "correctness_check_count": 16,
+  "pair_list_hash": 12438237472407304438
+}
