@@ -1,14 +1,51 @@
 #include "hbrick/tile/port_graph.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <limits>
 
+#include "hbrick/bit/bit_matrix.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
+#include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/port_index.hpp"
 #include "hbrick/tile/preprocess_memory_ledger.hpp"
 
 namespace hbrick {
+
+namespace {
+
+template <typename Callback>
+void forEachSetColumnInRow(
+    const BitMatrix& matrix,
+    const uint32_t row,
+    Callback&& callback
+) {
+    const uint32_t num_cols = matrix.numCols();
+    const BitVector& row_bits = matrix.row(row);
+    const size_t num_words = row_bits.numWords();
+    const size_t full_words = static_cast<size_t>(num_cols) / 64U;
+    const uint32_t tail_bits = num_cols % 64U;
+    const uint64_t tail_mask =
+        tail_bits == 0U ? ~0ULL : ((1ULL << tail_bits) - 1ULL);
+
+    for (size_t word_index = 0U; word_index < num_words; ++word_index) {
+        uint64_t bits = row_bits.word(word_index);
+        if (word_index == full_words && tail_bits != 0U) {
+            bits &= tail_mask;
+        }
+
+        while (bits != 0U) {
+            const uint32_t col = static_cast<uint32_t>(
+                word_index * 64U + static_cast<size_t>(std::countr_zero(bits))
+            );
+            callback(col);
+            bits &= bits - 1U;
+        }
+    }
+}
+
+}  // namespace
 
 [[nodiscard]] bool collectSeamEdgesForVertexRange(
     const CsrGraph& graph,
@@ -65,28 +102,39 @@ void addIntraTilePortEdgesForTile(
         return;
     }
 
-    for (uint32_t port_from = 0U; port_from < summary.numPorts(); ++port_from) {
+    const uint32_t num_ports = summary.numPorts();
+    SeamEdgeDeduper edge_deduper;
+
+    for (uint32_t port_from = 0U; port_from < num_ports; ++port_from) {
         const uint32_t global_from_port_id =
             port_index.portIdForTilePort(tile_index_value, port_from);
         if (global_from_port_id == std::numeric_limits<uint32_t>::max()) {
             continue;
         }
 
-        for (uint32_t port_to = 0U; port_to < summary.numPorts(); ++port_to) {
-            if (!summary.boundary_summary.test(port_from, port_to)) {
-                continue;
-            }
+        forEachSetColumnInRow(
+            summary.boundary_summary,
+            port_from,
+            [&](const uint32_t port_to) {
+                if (port_from == port_to) {
+                    return;
+                }
 
-            const uint32_t global_to_port_id =
-                port_index.portIdForTilePort(tile_index_value, port_to);
-            if (global_to_port_id == std::numeric_limits<uint32_t>::max()) {
-                continue;
-            }
+                const uint32_t global_to_port_id =
+                    port_index.portIdForTilePort(tile_index_value, port_to);
+                if (global_to_port_id == std::numeric_limits<uint32_t>::max()) {
+                    return;
+                }
+                if (global_from_port_id == global_to_port_id) {
+                    return;
+                }
+                if (!edge_deduper.tryInsert(global_from_port_id, global_to_port_id)) {
+                    return;
+                }
 
-            if (global_from_port_id != global_to_port_id) {
                 builder.addEdge(global_from_port_id, global_to_port_id);
             }
-        }
+        );
     }
 }
 

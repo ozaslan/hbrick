@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -42,15 +43,27 @@ void runCatalogMapOracle(const hbrick::test_support::MovingAiMapEntry& entry) {
         datasetsRoot() / entry.set_name / "maps" / entry.map_name;
     ASSERT_TRUE(std::filesystem::exists(map_path)) << map_path.string();
 
-    const std::optional<hbrick::CsrGraph> graph = buildCatalogGraph(entry);
-    ASSERT_TRUE(graph.has_value()) << entry.label();
+    const hbrick::MovingAiLoadResult loaded = hbrick::loadMovingAiMap(map_path);
+    ASSERT_TRUE(loaded.ok()) << entry.label();
 
-    const std::string context = entry.label() + " vertices=" + std::to_string(graph->numVertices());
+    const hbrick::MovingAiPassabilityPolicy policy =
+        hbrick::test_support::passabilityPolicyForMovingAiSet(entry.set_name);
+    const hbrick::MazeLayout layout = loaded.map.toMazeLayout(policy);
+    const hbrick::CsrGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        hbrick::test_support::randomParamsForMovingAiMap(entry.set_name, entry.map_name)
+    ).csrGraph();
+
+    const std::string context = entry.label() + " vertices=" + std::to_string(graph.numVertices());
 
     hbrick::test_support::expectReachabilityOracleAllSlices(
-        *graph,
+        graph,
         context,
-        hbrick::GridEdgeConversionMode::RandomAsymmetric
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        hbrick::test_support::kFullAllPairsVertexLimit,
+        std::numeric_limits<uint64_t>::max(),
+        &layout
     );
 }
 

@@ -66,7 +66,6 @@ void BrickIndexBuilder::begin(
 ) {
     graph_ = &graph;
     layout_ = &layout;
-    max_memory_bytes_ = max_memory_bytes;
     if (shared_ledger != nullptr) {
         ledger_ = shared_ledger;
     } else {
@@ -88,6 +87,9 @@ void BrickIndexBuilder::begin(
     cancelled_ = false;
     base_tile_started_ns_ = 0U;
     finalize_started_ns_ = 0U;
+    closure_scratch_charged_bytes_ = 0U;
+    port_graph_pending_charged_bytes_ = 0U;
+    base_tile_closure_scratch_ = BitMatrix{};
 
     if (!nominal_tile_size.isValid()) {
         finishFailure(BaselineStatus::Failed);
@@ -191,6 +193,11 @@ bool BrickIndexBuilder::step() noexcept {
                 }
             }
 
+            if (!chargeClosureScratchGrowth()) {
+                finishFailure(BaselineStatus::SkippedByPolicy);
+                return true;
+            }
+
             progress_.current_base_tile_index = next_base_tile_index_;
             ++next_base_tile_index_;
             advanceWork();
@@ -277,6 +284,10 @@ bool BrickIndexBuilder::step() noexcept {
                             *port_graph_builder_
                         );
                     }
+                    if (!chargePortGraphPendingEdges()) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
                     port_graph_tile_cursor_ = tile_end;
                     if (port_graph_tile_cursor_ < num_tiles) {
                         advanceWork();
@@ -284,6 +295,10 @@ bool BrickIndexBuilder::step() noexcept {
                     }
 
                     addSeamEdgesToPortGraph(*port_graph_builder_, index_.seam_edges_);
+                    if (!chargePortGraphPendingEdges()) {
+                        finishFailure(BaselineStatus::SkippedByPolicy);
+                        return true;
+                    }
                     const uint64_t port_graph_bytes =
                         port_graph_builder_->estimateBuiltStorageBytes();
                     if (!ledger_->tryCharge(port_graph_bytes)) {
@@ -291,6 +306,8 @@ bool BrickIndexBuilder::step() noexcept {
                         return true;
                     }
                     index_.port_graph_ = port_graph_builder_->build();
+                    ledger_->releaseCharge(port_graph_pending_charged_bytes_);
+                    port_graph_pending_charged_bytes_ = 0U;
                     port_graph_builder_.reset();
                     index_.status_ = BaselineStatus::Completed;
                     finishSuccess();
@@ -345,6 +362,64 @@ uint64_t BrickIndexBuilder::chargedStorageBytes() const noexcept {
     return ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
 }
 
+void BrickIndexBuilder::adoptPartialBaseTiles() noexcept {
+    if (tile_index_.decomposition_.numSlots() == 0U) {
+        return;
+    }
+    if (index_.tile_index_.decomposition_.numSlots() == 0U) {
+        index_.tile_index_ = std::move(tile_index_);
+        tile_index_ = BrickTileIndex{};
+    }
+}
+
+bool BrickIndexBuilder::chargeClosureScratchGrowth() noexcept {
+    if (ledger_ == nullptr) {
+        return true;
+    }
+
+    const uint64_t scratch_bytes = exactBitMatrixStorageBytes(
+        base_tile_closure_scratch_.numRows(),
+        base_tile_closure_scratch_.numCols()
+    );
+    if (scratch_bytes <= closure_scratch_charged_bytes_) {
+        return true;
+    }
+
+    const uint64_t delta = scratch_bytes - closure_scratch_charged_bytes_;
+    if (!ledger_->tryCharge(delta)) {
+        return false;
+    }
+    closure_scratch_charged_bytes_ = scratch_bytes;
+    return true;
+}
+
+bool BrickIndexBuilder::chargePortGraphPendingEdges() noexcept {
+    if (ledger_ == nullptr || !port_graph_builder_.has_value()) {
+        return true;
+    }
+
+    const uint64_t pending_bytes = port_graph_builder_->estimatePendingStorageBytes();
+    if (pending_bytes <= port_graph_pending_charged_bytes_) {
+        return true;
+    }
+
+    const uint64_t delta = pending_bytes - port_graph_pending_charged_bytes_;
+    if (!ledger_->tryCharge(delta)) {
+        return false;
+    }
+    port_graph_pending_charged_bytes_ = pending_bytes;
+    return true;
+}
+
+void BrickIndexBuilder::releaseClosureScratchCharge() noexcept {
+    if (ledger_ == nullptr || closure_scratch_charged_bytes_ == 0U) {
+        return;
+    }
+
+    ledger_->releaseCharge(closure_scratch_charged_bytes_);
+    closure_scratch_charged_bytes_ = 0U;
+}
+
 void BrickIndexBuilder::releaseFinalizeStorage() noexcept {
     if (ledger_ == nullptr) {
         return;
@@ -369,12 +444,19 @@ void BrickIndexBuilder::releaseFinalizeStorage() noexcept {
         index_.port_graph_ = CsrGraph{};
     }
 
+    if (port_graph_pending_charged_bytes_ > 0U) {
+        ledger_->releaseCharge(port_graph_pending_charged_bytes_);
+        port_graph_pending_charged_bytes_ = 0U;
+    }
+
     port_graph_builder_.reset();
     seam_deduper_.clear();
 }
 
 void BrickIndexBuilder::finishFailure(const BaselineStatus status) noexcept {
     releaseFinalizeStorage();
+    adoptPartialBaseTiles();
+    releaseClosureScratchCharge();
     index_.status_ = status;
     index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     report_.valid = true;
@@ -397,6 +479,7 @@ void BrickIndexBuilder::finishSuccess() noexcept {
     report_.finalize_nanoseconds = monotonicNowNanoseconds() - finalize_started_ns_;
     report_.num_ports = index_.port_index_.numPorts();
     report_.num_seams = static_cast<uint32_t>(index_.seam_edges_.size());
+    releaseClosureScratchCharge();
     index_.storage_bytes_ = ledger_ != nullptr ? ledger_->chargedBytes() : 0U;
     progress_.stage = BrickIndexBuildStage::Finished;
     phase_ = BrickIndexBuildStage::Finished;

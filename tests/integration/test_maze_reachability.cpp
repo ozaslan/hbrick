@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <string>
 #include <tuple>
 
@@ -51,7 +52,10 @@ void runOracleOnMaze(
     hbrick::test_support::expectReachabilityOracleAllSlices(
         graph,
         context,
-        mode_scenario.mode
+        mode_scenario.mode,
+        hbrick::test_support::kFullAllPairsVertexLimit,
+        std::numeric_limits<uint64_t>::max(),
+        &maze
     );
 }
 
@@ -222,6 +226,9 @@ TEST(MazeReachabilityOracle, ClosureBaselinesMatchBfsOnSmallBidirectionalMaze) {
     hbrick::test_support::expectReachabilityOracleAllSlices(
         graph,
         "perfect-8x8-bidirectional-closure vertices=" + std::to_string(graph.numVertices()),
-        hbrick::GridEdgeConversionMode::BidirectionalAll
+        hbrick::GridEdgeConversionMode::BidirectionalAll,
+        hbrick::test_support::kFullAllPairsVertexLimit,
+        std::numeric_limits<uint64_t>::max(),
+        &maze
     );
 }

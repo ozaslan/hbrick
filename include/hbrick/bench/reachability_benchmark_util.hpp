@@ -12,9 +12,6 @@
 
 namespace hbrick {
 
-/** @brief Chooses an incremental @c queries_per_step value for @p query_count. @ingroup hbrick_bench */
-[[nodiscard]] uint32_t chooseBenchmarkQueriesPerStep(uint32_t query_count) noexcept;
-
 /** @brief Returns @c true when preprocessing builds a persistent index. @ingroup hbrick_bench */
 [[nodiscard]] bool baselineBuildsPreprocessIndex(
     ReachabilityBaselineId method

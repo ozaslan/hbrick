@@ -16,7 +16,6 @@
 
 #include "hbrick/bench/reachability_benchmark.hpp"
 #include "hbrick/bench/reachability_benchmark_runner.hpp"
-#include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/reachability_density.hpp"

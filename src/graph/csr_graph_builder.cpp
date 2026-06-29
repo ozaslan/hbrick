@@ -14,10 +14,6 @@ void CsrGraphBuilder::addEdge(const uint32_t from, const uint32_t to) {
     edges_.push_back(Edge32{from, to});
 }
 
-void CsrGraphBuilder::addEdge(const Edge32 edge) {
-    addEdge(edge.from, edge.to);
-}
-
 void CsrGraphBuilder::clear() noexcept {
     edges_.clear();
 }
@@ -25,6 +21,10 @@ void CsrGraphBuilder::clear() noexcept {
 uint64_t CsrGraphBuilder::estimateBuiltStorageBytes() const noexcept {
     return static_cast<uint64_t>(num_vertices_ + 1U) * sizeof(uint32_t)
         + static_cast<uint64_t>(edges_.size()) * sizeof(uint32_t);
+}
+
+uint64_t CsrGraphBuilder::estimatePendingStorageBytes() const noexcept {
+    return static_cast<uint64_t>(edges_.capacity()) * sizeof(Edge32);
 }
 
 CsrGraph CsrGraphBuilder::build() const {

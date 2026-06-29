@@ -32,6 +32,39 @@ namespace {
 
 }  // namespace
 
+TEST(BrickIndex, ChargedBytesMatchHeapAfterBaseTileSkip) {
+    hbrick::MazeLayout layout(8U, 8U, true);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+    const hbrick::TileSize tile_size{4U, 4U};
+
+    hbrick::BrickIndexBuilder probe_builder;
+    probe_builder.begin(graph, layout, tile_size, std::numeric_limits<uint64_t>::max());
+    const bool finished_after_first_tile = probe_builder.step();
+    EXPECT_FALSE(finished_after_first_tile);
+    const uint64_t charged_after_first_tile = probe_builder.chargedStorageBytes();
+    ASSERT_GT(charged_after_first_tile, 0U);
+
+    const hbrick::BrickIndex skipped = hbrick::BrickIndex::build(
+        graph,
+        layout,
+        tile_size,
+        charged_after_first_tile
+    );
+    EXPECT_EQ(skipped.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(skipped.storageBytes(), skipped.measureStorageBytes());
+    EXPECT_GT(skipped.storageBytes(), 0U);
+    EXPECT_LE(skipped.storageBytes(), charged_after_first_tile);
+    EXPECT_EQ(skipped.tiles().summaries().size(), 4U);
+    EXPECT_EQ(
+        skipped.tiles().summary(0U, 0U).status,
+        hbrick::BaselineStatus::Completed
+    );
+    EXPECT_EQ(skipped.ports().numPorts(), 0U);
+}
+
 TEST(BrickIndex, ChargedBytesMatchHeapAfterFinalizeSkip) {
     hbrick::MazeLayout layout(8U, 8U, true);
     const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
@@ -50,8 +83,9 @@ TEST(BrickIndex, ChargedBytesMatchHeapAfterFinalizeSkip) {
         base_charged
     );
     EXPECT_EQ(skipped.status(), hbrick::BaselineStatus::SkippedByPolicy);
-    EXPECT_EQ(skipped.storageBytes(), base_charged);
-    EXPECT_EQ(skipped.measureStorageBytes(), base_charged);
+    EXPECT_EQ(skipped.storageBytes(), skipped.measureStorageBytes());
+    EXPECT_GT(skipped.storageBytes(), 0U);
+    EXPECT_LE(skipped.storageBytes(), base_charged);
     EXPECT_EQ(skipped.ports().numPorts(), 0U);
     EXPECT_EQ(skipped.portGraph().numEdges(), 0U);
     EXPECT_TRUE(skipped.seamEdges().empty());

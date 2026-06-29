@@ -1,6 +1,7 @@
 #include "hbrick/tile/base_tile_summary.hpp"
 
 #include <chrono>
+#include <exception>
 #include <limits>
 
 #include "hbrick/bit/boolean_closure.hpp"
@@ -218,40 +219,46 @@ BaseTileSummary buildBaseTile(
         return failPolicy();
     }
 
-    const uint64_t closure_started_ns = monotonicNowNanoseconds();
-    const CsrGraph local_graph = buildInducedSubgraph(graph, layout, slot, summary.global_vertices);
-    summary.local_closure = buildTileReflexiveAdjacencyOrThrow(
-        local_graph,
-        std::numeric_limits<uint64_t>::max()
-    );
-    const uint32_t largest_component_size =
-        largestUndirectedComponentSize(local_graph);
-    const uint32_t squaring_count =
-        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
-    BooleanClosure::transitiveClosureKleeneSquaringInPlace(
-        summary.local_closure,
-        squaring_count,
-        closure_scratch
-    );
-    if (closure_nanoseconds != nullptr) {
-        *closure_nanoseconds = monotonicNowNanoseconds() - closure_started_ns;
-    }
+    try {
+        const uint64_t closure_started_ns = monotonicNowNanoseconds();
+        const CsrGraph local_graph =
+            buildInducedSubgraph(graph, layout, slot, summary.global_vertices);
+        summary.local_closure = buildTileReflexiveAdjacencyOrThrow(
+            local_graph,
+            std::numeric_limits<uint64_t>::max()
+        );
+        const uint32_t largest_component_size =
+            largestUndirectedComponentSize(local_graph);
+        const uint32_t squaring_count =
+            BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+        BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+            summary.local_closure,
+            squaring_count,
+            closure_scratch
+        );
+        if (closure_nanoseconds != nullptr) {
+            *closure_nanoseconds = monotonicNowNanoseconds() - closure_started_ns;
+        }
 
-    collectPorts(layout, slot, summary.local_coords, summary.ports);
-    if (!ledger.tryCharge(vectorHeapBytes(summary.ports))) {
+        collectPorts(layout, slot, summary.local_coords, summary.ports);
+        if (!ledger.tryCharge(vectorHeapBytes(summary.ports))) {
+            return failPolicy();
+        }
+
+        const uint32_t num_ports = summary.numPorts();
+        const uint64_t boundary_matrix_bytes =
+            exactBitMatrixStorageBytes(num_ports, num_ports)
+            + exactBitMatrixStorageBytes(num_local, num_ports)
+            + exactBitMatrixStorageBytes(num_ports, num_local);
+        if (!ledger.tryCharge(boundary_matrix_bytes)) {
+            return failPolicy();
+        }
+
+        projectBoundaryMatrices(summary);
+    } catch (const std::exception&) {
         return failPolicy();
     }
 
-    const uint32_t num_ports = summary.numPorts();
-    const uint64_t boundary_matrix_bytes =
-        exactBitMatrixStorageBytes(num_ports, num_ports)
-        + exactBitMatrixStorageBytes(num_local, num_ports)
-        + exactBitMatrixStorageBytes(num_ports, num_local);
-    if (!ledger.tryCharge(boundary_matrix_bytes)) {
-        return failPolicy();
-    }
-
-    projectBoundaryMatrices(summary);
     summary.status = BaselineStatus::Completed;
     return summary;
 }

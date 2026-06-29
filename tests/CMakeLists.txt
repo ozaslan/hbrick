@@ -274,12 +274,13 @@ add_executable(test_brick_closure_baseline unit/test_brick_closure_baseline.cpp)
 target_link_libraries(
     test_brick_closure_baseline
     PRIVATE
+        hbrick_test_support
         hbrick_baselines
         GTest::gtest_main
         hbrick_project_warnings
 )
 
-hbrick_register_gtests(test_brick_closure_baseline)
+hbrick_register_slow_gtests(test_brick_closure_baseline 120)
 
 add_executable(test_hbrick_baseline unit/test_hbrick_baseline.cpp)
 
@@ -505,6 +506,20 @@ target_link_libraries(
 )
 
 hbrick_register_gtests(test_maze_reachability)
+
+add_executable(test_brick_reachability integration/test_brick_reachability.cpp)
+
+target_link_libraries(
+    test_brick_reachability
+    PRIVATE
+        hbrick_test_support
+        hbrick_baselines
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_slow_gtests(test_brick_reachability 120)
 
 add_executable(test_dag_reachability unit/test_dag_reachability.cpp)
 

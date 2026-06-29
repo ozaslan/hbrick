@@ -18,6 +18,7 @@
 #include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/brick_index.hpp"
 #include "hbrick/tile/tile_size.hpp"
+#include "reachability_oracle.hpp"
 
 namespace {
 
@@ -175,41 +176,12 @@ void expectMatchesBfsOnAllPairs(
     const hbrick::DirectedGridGraph& graph,
     const hbrick::TileSize tile_size
 ) {
-    hbrick::BrickClosureBaseline closure_baseline;
-    closure_baseline.preprocess(
-        graph,
+    hbrick::test_support::expectBrickBaselinesMatchBfs(
         layout,
+        graph.csrGraph(),
         tile_size,
-        std::numeric_limits<uint64_t>::max()
+        "brick-closure-unit"
     );
-    ASSERT_EQ(closure_baseline.status(), hbrick::BaselineStatus::Completed);
-
-    hbrick::BrickSearchBaseline search_baseline;
-    search_baseline.preprocess(
-        graph,
-        layout,
-        tile_size,
-        std::numeric_limits<uint64_t>::max()
-    );
-    ASSERT_EQ(search_baseline.status(), hbrick::BaselineStatus::Completed);
-
-    hbrick::GraphSearchScratch scratch(graph.numVertices());
-    const hbrick::CsrGraph& csr = graph.csrGraph();
-
-    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
-        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
-            const hbrick::ReachabilityAnswer expected =
-                hbrick::Bfs::reachable(csr, source, target, scratch);
-            const hbrick::ReachabilityAnswer closure_answer =
-                closure_baseline.query(source, target);
-            const hbrick::ReachabilityAnswer search_answer =
-                search_baseline.query(source, target);
-            EXPECT_EQ(closure_answer, expected)
-                << "closure source=" << source << " target=" << target;
-            EXPECT_EQ(search_answer, expected)
-                << "search source=" << source << " target=" << target;
-        }
-    }
 }
 
 }  // namespace

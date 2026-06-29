@@ -21,10 +21,22 @@ template<typename T>
     uint64_t bytes = vectorHeapBytes(summary.local_coords);
     bytes += vectorHeapBytes(summary.global_vertices);
     bytes += vectorHeapBytes(summary.ports);
-    bytes += summary.local_closure.memoryBytes();
-    bytes += summary.boundary_summary.memoryBytes();
-    bytes += summary.vertex_to_boundary.memoryBytes();
-    bytes += summary.boundary_to_vertex.memoryBytes();
+    bytes += exactBitMatrixStorageBytes(
+        summary.local_closure.numRows(),
+        summary.local_closure.numCols()
+    );
+    bytes += exactBitMatrixStorageBytes(
+        summary.boundary_summary.numRows(),
+        summary.boundary_summary.numCols()
+    );
+    bytes += exactBitMatrixStorageBytes(
+        summary.vertex_to_boundary.numRows(),
+        summary.vertex_to_boundary.numCols()
+    );
+    bytes += exactBitMatrixStorageBytes(
+        summary.boundary_to_vertex.numRows(),
+        summary.boundary_to_vertex.numCols()
+    );
     return bytes;
 }
 

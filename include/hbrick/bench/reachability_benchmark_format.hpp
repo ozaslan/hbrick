@@ -41,11 +41,6 @@ void formatBenchmarkSpeedupRatio(
     double speedup
 ) noexcept;
 
-/** @brief Human-readable label for @p stage. @ingroup hbrick_bench */
-[[nodiscard]] const char* reachabilityBenchmarkStageLabel(
-    ReachabilityBenchmarkProgress::Stage stage
-) noexcept;
-
 /** @brief One-line progress detail for the active benchmark stage. @ingroup hbrick_bench */
 void formatReachabilityBenchmarkStageDetail(
     char* buffer,

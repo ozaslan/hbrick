@@ -23,9 +23,6 @@ namespace hbrick {
     uint32_t num_cols
 ) noexcept;
 
-/** @brief Estimates bytes for a reflexive @c V×V bit adjacency matrix. @ingroup hbrick_tile */
-[[nodiscard]] uint64_t estimateTileReflexiveAdjacencyBytes(uint32_t num_vertices) noexcept;
-
 /** @brief Returns whether a reflexive adjacency matrix fits in @p max_memory_bytes. @ingroup hbrick_tile */
 [[nodiscard]] bool canAllocateTileReflexiveAdjacency(
     uint32_t num_vertices,

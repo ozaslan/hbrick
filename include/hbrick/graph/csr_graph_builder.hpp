@@ -46,14 +46,6 @@ public:
      */
     void addEdge(uint32_t from, uint32_t to);
 
-    /**
-     * @brief Appends a directed edge from an @ref hbrick::Edge32 value.
-     * @ingroup hbrick_graph
-     *
-     * @param edge Edge endpoints to append.
-     */
-    void addEdge(Edge32 edge);
-
     /** @brief Removes all pending edges without changing the vertex count. @ingroup hbrick_graph */
     void clear() noexcept;
 
@@ -73,6 +65,9 @@ public:
      * @ingroup hbrick_graph
      */
     [[nodiscard]] uint64_t estimateBuiltStorageBytes() const noexcept;
+
+    /** @brief Heap bytes for the pending edge vector (capacity × @c sizeof(Edge32)). @ingroup hbrick_graph */
+    [[nodiscard]] uint64_t estimatePendingStorageBytes() const noexcept;
 
 private:
     /** @brief Validates that @p vertex is within the configured vertex range. @ingroup hbrick_graph */

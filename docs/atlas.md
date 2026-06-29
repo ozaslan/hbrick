@@ -259,14 +259,11 @@ SVG rendering for debugging and test artifacts.
 | [`generateMazeWithExtraPassages`](../tests/support/maze_generator.hpp) | `tests/support/maze_generator.hpp` | Cyclic maze generator | Adds extra wall removals to introduce cycles | Tests requiring cyclic undirected topology |
 | [`buildGridGraph`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Grid-to-CSR wrapper | `DirectedGridGraphBuilder::build(...).csrGraph()` | Convenience in tests |
 | [`bfsReference`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BFS oracle | Ground-truth reachability for test comparison | Validate baselines against BFS |
-| [`runAllBaselinesAgainstBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | All-pairs baseline checker | Runs every baseline and counts BFS mismatches | Integration correctness harness |
 | [`expectAllBaselinesMatchBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Google Test assertion | Fails test when any baseline disagrees with BFS | End-to-end maze reachability tests |
-| [`expectSearchBaselinesMatchBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Search-only assertion | Validates BFS/DFS baselines against BFS | Large-graph slice tests |
 | [`mutuallyReachableViaBidirectionalBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | SCC membership check | Two forward BFS passes test mutual reachability | SCC partition validation |
 | [`expectSccPartitionMatchesBidirectionalBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | SCC oracle assertion | Every vertex pair agrees with bidirectional BFS | `test_scc_reachability` |
 | [`computeReachabilityPairSliceCount`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Pair-slice planner | Splits V² ordered pairs into deterministic slices | Keep large all-pairs tests within time limits |
 | [`expectReachabilityOracleAllSlices`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Full oracle harness | SCC check plus every baseline on all pair slices | MovingAI and recipe integration tests |
-| [`expectReachabilityOracleSlice`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Single-slice oracle | SCC check plus baselines on one pair slice | Parametrized per-map tests |
 | [`kFullAllPairsVertexLimit`](../tests/support/test_limits.hpp) | `tests/support/test_limits.hpp` | Size threshold | All-pairs in one test when V ≤ 600 | Shared test sizing policy |
 | [`kMaxPairsPerSlice`](../tests/support/test_limits.hpp) | `tests/support/test_limits.hpp` | Slice volume cap | Max ordered pairs per Google Test case | Prevent runaway all-pairs cost |
 | [`discoverMovingAiMaps`](../tests/support/movingai_map_catalog.hpp) | `tests/support/movingai_map_catalog.hpp` | Map catalog scanner | Lists every `.map` under an extracted MovingAI root | Build parametrized test inputs |
@@ -276,6 +273,9 @@ SVG rendering for debugging and test artifacts.
 | [`buildGraphFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe-to-graph builder | Loads map, applies recipe policy/mode/seed | `test_recipe_reachability` |
 | [`paramsFromRecipe`](../tests/support/recipe_graph.hpp) | `tests/support/recipe_graph.hpp` | Recipe param adapter | Maps saved recipe fields to `RandomAsymmetricParams` | Recipe round-trip tests |
 | [`expectBrickSearchMatchesBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BRICK-Search oracle | All-pairs check vs BFS on a grid graph | Unit tests for flat BRICK search |
+| [`expectBrickClosureMatchesBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | BRICK-Closure oracle | All-pairs check vs BFS on a grid graph | Unit tests for flat BRICK closure |
+| [`expectBrickBaselinesMatchBfs`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Flat BRICK oracle | Runs both BRICK baselines against BFS | Integration maze / BRICK tests |
+| [`expectBrickBaselinesMatchBfsOnSlice`](../tests/support/reachability_oracle.hpp) | `tests/support/reachability_oracle.hpp` | Flat BRICK slice oracle | Slice-local BRICK checks vs BFS | Large-grid integration tests |
 
 ---
 

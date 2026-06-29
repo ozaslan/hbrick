@@ -102,7 +102,6 @@ void BrickClosureBaseline::resetPreprocessState() noexcept {
     adjacency_vertex_cursor_ = 0U;
     kleene_rounds_remaining_ = 0U;
     kleene_rounds_total_ = 0U;
-    max_memory_bytes_ = 0U;
     query_reachable_ports_ = BitVector{};
     num_vertices_ = 0U;
     memory_ledger_.reset(std::numeric_limits<uint64_t>::max());
@@ -123,10 +122,9 @@ void BrickClosureBaseline::beginPreprocess(
 
     num_vertices_ = graph.numVertices();
 
-    max_memory_bytes_ = max_memory_bytes;
     kleene_options_ = kleene_options;
     kleene_thread_count_ = resolveKleeneThreadCount(kleene_options_);
-    memory_ledger_.reset(max_memory_bytes_);
+    memory_ledger_.reset(max_memory_bytes);
     index_builder_.begin(
         graph,
         layout,

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <limits>
 
@@ -65,10 +66,7 @@ public:
         if (bytes == 0U) {
             return;
         }
-        if (bytes >= charged_bytes_) {
-            charged_bytes_ = 0U;
-            return;
-        }
+        assert(bytes <= charged_bytes_);
         charged_bytes_ -= bytes;
     }
 

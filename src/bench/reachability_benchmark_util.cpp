@@ -2,19 +2,6 @@
 
 namespace hbrick {
 
-uint32_t chooseBenchmarkQueriesPerStep(const uint32_t query_count) noexcept {
-    if (query_count >= 1'000'000U) {
-        return 4096U;
-    }
-    if (query_count >= 100'000U) {
-        return 512U;
-    }
-    if (query_count >= 10'000U) {
-        return 128U;
-    }
-    return 16U;
-}
-
 bool baselineBuildsPreprocessIndex(const ReachabilityBaselineId method) noexcept {
     switch (method) {
         case ReachabilityBaselineId::CsrBfs:

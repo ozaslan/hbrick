@@ -59,7 +59,7 @@ flowchart LR
 | **0** | `hbrick_tile` CMake target, `TileSize` validation | `test_tile_size.cpp` |
 | **1** | `TileDecomposition`, cell→tile, boundary ports | `test_tile_decomposition.cpp` |
 | **2** | `BaseTileSummary`, `S_T`, `R_VB`, `R_BV` | `test_base_tile_summary.cpp` |
-| **3** | `PortIndex`, seam edges, `buildPortGraphCsr`, `BrickIndex` | `test_port_graph.cpp` |
+| **3** | `PortIndex`, seam edges, port-graph CSR, `BrickIndex` | `test_port_graph.cpp`, `test_brick_index.cpp` |
 | **4** | `BrickSearchBaseline` | `test_brick_search_baseline.cpp` + oracle |
 | **5** | `BrickClosureBaseline`, benchmark IDs | oracle + `ReachabilityBenchmarkJob` |
 | **6** | `HierarchyTree`, `RegionNode`, `groupTileSlots` | `test_hierarchy_scaffold.cpp` |
@@ -114,9 +114,11 @@ Per `TileSlot`:
 ## Phase 3 — Port graph (Layer C)
 
 1. `PortIndex`: `port_id ↔ GridCoord ↔ global vertex`.
-2. `collectSeamEdges`: global edge `u→v`, different tiles, both ports.
-3. `buildPortGraphCsr`: for each `S_T[p,q]=1` add `p→q`; add seam edges.
-4. `BrickIndex` = `BrickTileIndex` + `port_graph` + `PortIndex`.
+2. `collectSeamEdgesForVertexRange`: global edge `u→v`, different tiles, both ports (deduped).
+3. `CsrGraphBuilder`: for each `S_T[p,q]=1` add `p→q`; add seam edges; compact to CSR.
+4. `BrickIndex` = `BrickTileIndex` + `port_graph` + `PortIndex` (+ seam list for H-BRICK / UI).
+
+Build path: `BrickIndexBuilder` (incremental) or `BrickIndex::build`; memory tracked via `PreprocessMemoryLedger`.
 
 **Tests:** sampled port-pair reachability vs global BFS.
 

@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cmath>
 
-#include "hbrick/bench/reachability_benchmark_util.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/graph/scc_decomposition.hpp"

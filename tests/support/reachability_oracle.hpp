@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <string>
 #include <vector>
@@ -42,31 +41,10 @@ namespace hbrick::test_support {
     RandomAsymmetricParams params = {}
 );
 
-struct BaselineOracleResult {
-    std::string name;
-    BaselineStatus status = BaselineStatus::NotRun;
-    uint32_t mismatches = 0U;
-};
-
-[[nodiscard]] std::vector<BaselineOracleResult> runAllBaselinesAgainstBfs(
-    const CsrGraph& graph,
-    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
-);
-
-[[nodiscard]] uint32_t countMismatchesAgainstBfs(
-    const CsrGraph& graph,
-    const std::function<ReachabilityAnswer(uint32_t, uint32_t)>& query
-);
-
 void expectAllBaselinesMatchBfs(
     const CsrGraph& graph,
     const std::string& context,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
-);
-
-void expectSearchBaselinesMatchBfs(
-    const CsrGraph& graph,
-    const std::string& context
 );
 
 void expectBrickSearchMatchesBfs(
@@ -74,6 +52,33 @@ void expectBrickSearchMatchesBfs(
     const CsrGraph& graph,
     TileSize tile_size,
     const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectBrickClosureMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/** @brief Verifies both flat BRICK baselines against BFS on all ordered pairs. @ingroup hbrick_test_support */
+void expectBrickBaselinesMatchBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectBrickBaselinesMatchBfsOnSlice(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    TileSize tile_size,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 
@@ -110,7 +115,9 @@ void expectReachabilityOracleAllSlices(
     const std::string& context,
     GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
     uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
-    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max(),
+    const MazeLayout* layout = nullptr,
+    TileSize brick_tile_size = TileSize{4U, 4U}
 );
 
 /**
@@ -138,32 +145,6 @@ void expectAllBaselinesMatchBfsOnSlice(
     const std::string& context,
     uint32_t slice_id,
     uint32_t slice_count,
-    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
-);
-
-/**
- * @brief Verifies SCC labels and baseline reachability for one deterministic pair slice.
- * @ingroup hbrick_test_support
- *
- * Runs @ref expectSccPartitionMatchesBidirectionalBfs on @p slice_id @c 0 only. When
- * @p num_vertices <= @p full_all_pairs_vertex_limit, tests all V² pairs in slice 0 via all
- * baselines. Otherwise tests the search baselines on the pairs belonging to @p slice_id.
- */
-void expectReachabilityOracleSlice(
-    const CsrGraph& graph,
-    const std::string& context,
-    uint32_t slice_id,
-    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
-    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
-    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
-);
-
-/** @brief Runs @ref expectReachabilityOracleAllSlices. @ingroup hbrick_test_support */
-void expectExhaustiveReachabilityOracle(
-    const CsrGraph& graph,
-    const std::string& context,
-    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
-    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 

@@ -133,6 +133,8 @@ void formatBenchmarkSpeedupRatio(
     std::snprintf(buffer, size, "<0.0001x");
 }
 
+namespace {
+
 const char* reachabilityBenchmarkStageLabel(
     const ReachabilityBenchmarkProgress::Stage stage
 ) noexcept {
@@ -158,6 +160,8 @@ const char* reachabilityBenchmarkStageLabel(
 
     return "Unknown";
 }
+
+}  // namespace
 
 void formatReachabilityBenchmarkStageDetail(
     char* buffer,

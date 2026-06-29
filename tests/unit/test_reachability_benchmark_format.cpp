@@ -37,12 +37,6 @@ TEST(ReachabilityBenchmarkFormat, FormatsStageDetailForQuerying) {
     EXPECT_NE(std::string(buffer).find("4 / 16"), std::string::npos);
 }
 
-TEST(ReachabilityBenchmarkUtil, ChooseQueriesPerStepScalesWithWorkload) {
-    EXPECT_EQ(hbrick::chooseBenchmarkQueriesPerStep(512U), 16U);
-    EXPECT_EQ(hbrick::chooseBenchmarkQueriesPerStep(50'000U), 128U);
-    EXPECT_EQ(hbrick::chooseBenchmarkQueriesPerStep(2'000'000U), 4096U);
-}
-
 TEST(ReachabilityBenchmarkUtil, LiveQuerySpeedupUsesPartialCsrBfsStats) {
     hbrick::ReachabilityBenchmarkReport report;
     report.methods.push_back(hbrick::BaselineBenchmarkMetrics{});

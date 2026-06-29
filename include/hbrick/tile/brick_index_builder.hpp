@@ -102,13 +102,6 @@ public:
     /** @brief Bytes charged on the active preprocess ledger. @ingroup hbrick_tile */
     [[nodiscard]] uint64_t chargedStorageBytes() const noexcept;
 
-    /** @brief Active preprocess ledger for this build (never null after @ref begin). @ingroup hbrick_tile */
-    [[nodiscard]] PreprocessMemoryLedger& memoryLedger() noexcept { return *ledger_; }
-
-    [[nodiscard]] const PreprocessMemoryLedger& memoryLedger() const noexcept {
-        return *ledger_;
-    }
-
 private:
     enum class FinalizeSubstep : uint8_t {
         PortIndex = 0,
@@ -119,11 +112,14 @@ private:
     void finishFailure(BaselineStatus status) noexcept;
     void finishSuccess() noexcept;
     void advanceWork() noexcept;
+    void adoptPartialBaseTiles() noexcept;
+    [[nodiscard]] bool chargeClosureScratchGrowth() noexcept;
+    [[nodiscard]] bool chargePortGraphPendingEdges() noexcept;
+    void releaseClosureScratchCharge() noexcept;
     void releaseFinalizeStorage() noexcept;
 
     const DirectedGridGraph* graph_ = nullptr;
     const MazeLayout* layout_ = nullptr;
-    uint64_t max_memory_bytes_ = 0U;
     BrickIndex index_{};
     BrickIndexBuildProgress progress_{};
     BrickIndexBuildReport report_{};
@@ -145,6 +141,8 @@ private:
     uint64_t finalize_started_ns_ = 0U;
 
     BitMatrix base_tile_closure_scratch_{};
+    uint64_t closure_scratch_charged_bytes_ = 0U;
+    uint64_t port_graph_pending_charged_bytes_ = 0U;
     bool cancelled_ = false;
 };
 

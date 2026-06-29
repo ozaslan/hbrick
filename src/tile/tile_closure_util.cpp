@@ -14,10 +14,6 @@ bool isUnlimitedMemoryBudget(const uint64_t max_memory_bytes) noexcept {
     return max_memory_bytes >= kHBrickUnlimitedMemoryBytes;
 }
 
-uint64_t estimateTileReflexiveAdjacencyBytes(const uint32_t num_vertices) noexcept {
-    return exactBitMatrixStorageBytes(num_vertices, num_vertices);
-}
-
 uint64_t exactBitMatrixStorageBytes(
     const uint32_t num_rows,
     const uint32_t num_cols
@@ -36,7 +32,7 @@ bool canAllocateTileReflexiveAdjacency(
     if (isUnlimitedMemoryBudget(max_memory_bytes)) {
         return true;
     }
-    return estimateTileReflexiveAdjacencyBytes(num_vertices) <= max_memory_bytes;
+    return exactBitMatrixStorageBytes(num_vertices, num_vertices) <= max_memory_bytes;
 }
 
 BitMatrix buildTileReflexiveAdjacencyOrThrow(

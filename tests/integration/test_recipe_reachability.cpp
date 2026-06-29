@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -84,6 +85,12 @@ TEST(RecipeReachabilityOracle, CommittedBostonRecipeBuildsGraphOnAllSlices) {
     const std::optional<hbrick::tools::Recipe> recipe = hbrick::tools::loadRecipe(recipe_path);
     ASSERT_TRUE(recipe.has_value());
 
+    const hbrick::MovingAiLoadResult loaded = hbrick::loadMovingAiMap(
+        hbrick::test_support::mapPathForRecipe(*recipe, datasetsRoot())
+    );
+    ASSERT_TRUE(loaded.ok()) << loaded.error;
+
+    const hbrick::MazeLayout layout = loaded.map.toMazeLayout(recipe->policy);
     const std::optional<hbrick::CsrGraph> graph =
         hbrick::test_support::buildGraphFromRecipe(*recipe, datasetsRoot());
     ASSERT_TRUE(graph.has_value()) << recipe->set_name << "/" << recipe->map_name;
@@ -94,7 +101,10 @@ TEST(RecipeReachabilityOracle, CommittedBostonRecipeBuildsGraphOnAllSlices) {
     hbrick::test_support::expectReachabilityOracleAllSlices(
         *graph,
         context,
-        recipe->mode
+        recipe->mode,
+        hbrick::test_support::kFullAllPairsVertexLimit,
+        std::numeric_limits<uint64_t>::max(),
+        &layout
     );
 }
 
@@ -126,6 +136,9 @@ TEST(RecipeReachabilityOracle, SavedRecipeMatchesDirectBuilderOnArenaMap) {
     hbrick::test_support::expectReachabilityOracleAllSlices(
         direct,
         "dao-arena-recipe vertices=" + std::to_string(direct.numVertices()),
-        recipe.mode
+        recipe.mode,
+        hbrick::test_support::kFullAllPairsVertexLimit,
+        std::numeric_limits<uint64_t>::max(),
+        &layout
     );
 }
