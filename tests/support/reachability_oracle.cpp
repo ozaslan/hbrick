@@ -9,6 +9,7 @@
 
 #include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/brick_closure_baseline.hpp"
+#include "hbrick/baselines/hbrick_baseline.hpp"
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
 #include "hbrick/baselines/csr_dfs_baseline.hpp"
 #include "hbrick/baselines/full_closure_baseline.hpp"
@@ -450,6 +451,79 @@ uint64_t reachabilityPairCountInSlice(
 
 namespace {
 
+void checkHBrickAgainstBfsOnSlice(
+    const CsrGraph& graph,
+    const HBrickBaseline& hbrick,
+    GraphSearchScratch& scratch,
+    const std::string& context,
+    const uint32_t slice_id,
+    const uint32_t slice_count
+) {
+    const uint32_t num_vertices = graph.numVertices();
+    const uint64_t total_pairs = static_cast<uint64_t>(num_vertices) * num_vertices;
+    const uint64_t pairs_in_slice =
+        reachabilityPairCountInSlice(num_vertices, slice_id, slice_count);
+    if (pairs_in_slice > 10000U) {
+        logOracleProgress(
+            context + " checking " + std::to_string(pairs_in_slice) + " H-BRICK pairs"
+        );
+    }
+
+    std::vector<std::vector<uint32_t>> targets_by_source(num_vertices);
+    for (uint64_t pair_index = slice_id; pair_index < total_pairs; pair_index += slice_count) {
+        const uint32_t source = static_cast<uint32_t>(pair_index / num_vertices);
+        const uint32_t target = static_cast<uint32_t>(pair_index % num_vertices);
+        targets_by_source[source].push_back(target);
+    }
+
+    uint64_t pairs_checked = 0U;
+    for (uint32_t source = 0U; source < num_vertices; ++source) {
+        const std::vector<uint32_t>& targets = targets_by_source[source];
+        if (targets.empty()) {
+            continue;
+        }
+
+        const uint32_t mark = scratch.nextMark();
+        std::vector<uint32_t>& visited = scratch.visitedMark();
+        std::vector<uint32_t>& queue = scratch.queue();
+        queue.clear();
+        visited[source] = mark;
+        queue.push_back(source);
+
+        std::size_t head = 0U;
+        while (head < queue.size()) {
+            const uint32_t vertex = queue[head];
+            ++head;
+
+            for (const uint32_t neighbor : graph.outNeighbors(vertex)) {
+                if (visited[neighbor] == mark) {
+                    continue;
+                }
+
+                visited[neighbor] = mark;
+                queue.push_back(neighbor);
+            }
+        }
+
+        for (const uint32_t target : targets) {
+            const ReachabilityAnswer expected = visited[target] == mark
+                ? ReachabilityAnswer::Reachable
+                : ReachabilityAnswer::Unreachable;
+            EXPECT_EQ(hbrick.query(source, target), expected)
+                << context << " baseline=HBrick source=" << source
+                << " target=" << target << " slice=" << slice_id << '/'
+                << slice_count;
+            ++pairs_checked;
+            if (pairs_in_slice > 10000U && pairs_checked % 10000U == 0U) {
+                logOracleProgress(
+                    context + ' ' + std::to_string(pairs_checked) + '/'
+                        + std::to_string(pairs_in_slice) + " H-BRICK pairs"
+                );
+            }
+        }
+    }
+}
+
 void checkBrickBaselinesAgainstBfsOnSlice(
     const CsrGraph& graph,
     const BrickSearchBaseline& brick_search,
@@ -628,6 +702,103 @@ void expectBrickBaselinesMatchBfsOnSlice(
         graph,
         brick_search,
         brick_closure,
+        scratch,
+        context,
+        slice_id,
+        slice_count
+    );
+}
+
+void expectHBrickMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    HBrickConfig config,
+    const std::string& context,
+    const uint64_t max_memory_bytes
+) {
+    if (graph.numVertices() == 0U) {
+        return;
+    }
+
+    if (!layoutMatchesGraphDimensions(layout, graph)) {
+        ADD_FAILURE() << context << " layout dimensions do not match graph vertex count";
+        return;
+    }
+
+    config.max_memory_bytes = max_memory_bytes;
+    const DirectedGridGraph grid_graph = directedGridGraphFromLayoutAndCsr(layout, graph);
+
+    HBrickBaseline hbrick;
+    hbrick.preprocess(grid_graph, layout, config);
+    ASSERT_EQ(hbrick.status(), BaselineStatus::Completed) << context;
+
+    const uint32_t slice_count = computeReachabilityPairSliceCount(graph.numVertices());
+    GraphSearchScratch scratch(graph.numVertices());
+
+    if (slice_count > 1U) {
+        logOracleProgress(
+            context + " H-BRICK slice oracle starting (" + std::to_string(slice_count)
+                + " slices, V=" + std::to_string(graph.numVertices()) + ')'
+        );
+    }
+
+    for (uint32_t slice_id = 0U; slice_id < slice_count; ++slice_id) {
+        const std::string slice_context = slice_count == 1U
+            ? context
+            : context + " slice=" + std::to_string(slice_id) + '/'
+                + std::to_string(slice_count);
+        if (slice_count > 1U) {
+            logOracleProgress(slice_context + " begin");
+        }
+
+        checkHBrickAgainstBfsOnSlice(
+            graph,
+            hbrick,
+            scratch,
+            slice_context,
+            slice_id,
+            slice_count
+        );
+
+        if (slice_count > 1U) {
+            logOracleProgress(slice_context + " done");
+        }
+    }
+
+    if (slice_count > 1U) {
+        logOracleProgress(context + " H-BRICK slice oracle finished");
+    }
+}
+
+void expectHBrickMatchesBfsOnSlice(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::string& context,
+    const uint32_t slice_id,
+    const uint32_t slice_count,
+    HBrickConfig config,
+    const uint64_t max_memory_bytes
+) {
+    if (graph.numVertices() == 0U || slice_count == 0U || slice_id >= slice_count) {
+        return;
+    }
+
+    if (!layoutMatchesGraphDimensions(layout, graph)) {
+        ADD_FAILURE() << context << " layout dimensions do not match graph vertex count";
+        return;
+    }
+
+    config.max_memory_bytes = max_memory_bytes;
+    const DirectedGridGraph grid_graph = directedGridGraphFromLayoutAndCsr(layout, graph);
+
+    HBrickBaseline hbrick;
+    hbrick.preprocess(grid_graph, layout, config);
+    ASSERT_EQ(hbrick.status(), BaselineStatus::Completed) << context;
+
+    GraphSearchScratch scratch(graph.numVertices());
+    checkHBrickAgainstBfsOnSlice(
+        graph,
+        hbrick,
         scratch,
         context,
         slice_id,

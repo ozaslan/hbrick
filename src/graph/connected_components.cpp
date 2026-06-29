@@ -1,9 +1,12 @@
 #include "hbrick/graph/connected_components.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <limits>
 #include <vector>
 
+#include "hbrick/bit/bit_matrix.hpp"
+#include "hbrick/bit/bit_vector.hpp"
 #include "hbrick/graph/csr_graph.hpp"
 
 namespace hbrick {
@@ -109,6 +112,44 @@ uint32_t largestUndirectedComponentSize(const CsrGraph& graph) noexcept {
 
     UnionFind union_find{num_vertices};
     uniteAlongEdges(graph, union_find);
+    return union_find.largestComponentSize();
+}
+
+uint32_t largestUndirectedComponentSizeFromReflexiveAdjacency(
+    const BitMatrix& adjacency
+) noexcept {
+    const uint32_t num_vertices = adjacency.numRows();
+    if (num_vertices == 0U || adjacency.numCols() != num_vertices) {
+        return 0U;
+    }
+
+    UnionFind union_find{num_vertices};
+
+    const size_t num_words = adjacency.row(0U).numWords();
+    const size_t full_words = static_cast<size_t>(num_vertices) / 64U;
+    const uint32_t tail_bits = num_vertices % 64U;
+    const uint64_t tail_mask =
+        tail_bits == 0U ? ~0ULL : ((1ULL << tail_bits) - 1ULL);
+
+    for (uint32_t from = 0U; from < num_vertices; ++from) {
+        const BitVector& row = adjacency.row(from);
+        for (size_t word_index = 0U; word_index < num_words; ++word_index) {
+            uint64_t bits = row.word(word_index);
+            if (word_index == full_words && tail_bits != 0U) {
+                bits &= tail_mask;
+            }
+            while (bits != 0U) {
+                const uint32_t to = static_cast<uint32_t>(
+                    word_index * 64U + static_cast<size_t>(std::countr_zero(bits))
+                );
+                if (from != to) {
+                    union_find.unite(from, to);
+                }
+                bits &= bits - 1U;
+            }
+        }
+    }
+
     return union_find.largestComponentSize();
 }
 

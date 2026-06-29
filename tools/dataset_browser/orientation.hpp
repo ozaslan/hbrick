@@ -14,9 +14,9 @@
 #include <memory>
 #include <vector>
 
+#include "hbrick/baselines/hbrick_baseline.hpp"
 #include "hbrick/bench/reachability_benchmark.hpp"
 #include "hbrick/bench/reachability_benchmark_runner.hpp"
-#include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/reachability_density.hpp"
 #include "hbrick/grid/maze_layout.hpp"
@@ -28,12 +28,24 @@ namespace hbrick::tools {
 /** @brief Number of selectable @ref hbrick::ReachabilityBaselineId values. */
 inline constexpr std::size_t kBenchmarkMethodSlotCount = 10U;
 
-/** @brief What right-clicking a cell highlights on the canvas. */
+/** @brief What right-clicking a cell does on the canvas. */
 enum class ProbeMode : uint8_t {
     /** @brief Forward BFS reachable set, colored by hop distance. */
     Reachability,
     /** @brief All cells in the clicked cell's strongly connected component. */
     Component,
+    /**
+     * @brief Forward H-BRICK reachable set from one source (requires a built index).
+     *
+     * Uses @ref HBrickBaseline::query for every passable target cell.
+     */
+    HBrickReachability,
+    /**
+     * @brief Two-click H-BRICK pair test: first click sets source, second sets target.
+     *
+     * Highlights source and target; reachable answers color the target green.
+     */
+    HBrickPair,
 };
 
 /** @brief Per-panel state of the directed-orientation editor. */
@@ -97,6 +109,11 @@ struct OrientationState {
     uint32_t probe_max_depth = 0;
     std::vector<uint8_t> probe_reachable;
     std::vector<uint32_t> probe_depth;  // hop count, valid where probe_reachable
+    bool probe_hbrick_pair_has_source = false;
+    uint32_t probe_hbrick_pair_source = 0U;
+    uint32_t probe_hbrick_pair_target = 0U;
+    bool probe_hbrick_pair_answer_valid = false;
+    ReachabilityAnswer probe_hbrick_pair_answer = ReachabilityAnswer::Unreachable;
     GlTexture probe_overlay;
 };
 
@@ -220,7 +237,7 @@ void openBenchmarkPanel(OrientationState& state) noexcept;
 void ensureBenchmarkMethodDefaults(OrientationState& state) noexcept;
 
 /**
- * @brief Resets method checkboxes to the library default benchmark set (no H-BRICK).
+ * @brief Resets method checkboxes to the library default benchmark set.
  */
 void resetBenchmarkMethodDefaults(OrientationState& state) noexcept;
 
@@ -276,6 +293,32 @@ void tickReachabilityBenchmark(OrientationState& state) noexcept;
  *        distances and stores it as the probe overlay flags.
  */
 void computeProbe(OrientationState& state, uint32_t source_vertex);
+
+/**
+ * @brief Marks passable cells reachable from @p source_vertex via @ref HBrickBaseline.
+ *
+ * @return @c false when @p baseline is not ready or passable cell count exceeds the GUI limit.
+ */
+[[nodiscard]] bool computeHBrickReachabilityProbe(
+    OrientationState& state,
+    const HBrickBaseline& baseline,
+    const MazeLayout& layout,
+    uint32_t source_vertex
+);
+
+/**
+ * @brief Advances the two-click H-BRICK pair probe at @p vertex.
+ *
+ * @return @c true when source and target are set and @p baseline answered the pair.
+ */
+[[nodiscard]] bool advanceHBrickPairProbe(
+    OrientationState& state,
+    const HBrickBaseline& baseline,
+    uint32_t vertex
+);
+
+/** @brief Cycles @p mode through the four probe modes. */
+void cycleProbeMode(ProbeMode& mode) noexcept;
 
 /**
  * @brief Marks all cells sharing @p source_vertex's SCC as the probe set.

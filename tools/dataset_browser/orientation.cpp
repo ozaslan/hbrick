@@ -4,6 +4,9 @@
 #include <chrono>
 #include <cmath>
 
+#include "hbrick/baselines/baseline_status.hpp"
+#include "hbrick/baselines/hbrick_baseline.hpp"
+#include "hbrick/core/types.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
 #include "hbrick/graph/scc_decomposition.hpp"
@@ -186,6 +189,8 @@ bool prepareBenchmarkConfigFromPanel(OrientationState& state) noexcept {
     const bool closure_early_stop = state.benchmark_closure_early_stop;
     const float memory_gib = state.benchmark_memory_gib;
     const hbrick::TileSize brick_tile_size = state.benchmark_config.brick_tile_size;
+    const hbrick::GroupSize hbrick_group_size = state.benchmark_config.hbrick_group_size;
+    const uint32_t hbrick_max_depth = state.benchmark_config.hbrick_max_depth;
     const bool kleene_use_parallel = state.benchmark_config.kleene_use_parallel;
     const uint32_t kleene_num_threads = state.benchmark_config.kleene_num_threads;
 
@@ -204,6 +209,8 @@ bool prepareBenchmarkConfigFromPanel(OrientationState& state) noexcept {
     state.benchmark_config = hbrick::ReachabilityBenchmarkConfig{};
     state.benchmark_config.methods = std::move(methods);
     state.benchmark_config.brick_tile_size = brick_tile_size;
+    state.benchmark_config.hbrick_group_size = hbrick_group_size;
+    state.benchmark_config.hbrick_max_depth = hbrick_max_depth;
     state.benchmark_config.query_count = timed_queries;
     state.benchmark_config.warmup_queries = warmup;
     state.benchmark_config.correctness_check_count = checks;
@@ -513,7 +520,131 @@ void clearProbe(OrientationState& state) {
     state.probe_max_depth = 0;
     state.probe_reachable.clear();
     state.probe_depth.clear();
+    state.probe_hbrick_pair_has_source = false;
+    state.probe_hbrick_pair_source = 0U;
+    state.probe_hbrick_pair_target = 0U;
+    state.probe_hbrick_pair_answer_valid = false;
+    state.probe_hbrick_pair_answer = ReachabilityAnswer::Unreachable;
     destroyTexture(state.probe_overlay);
+}
+
+void cycleProbeMode(ProbeMode& mode) noexcept {
+    switch (mode) {
+        case ProbeMode::Reachability:
+            mode = ProbeMode::Component;
+            break;
+        case ProbeMode::Component:
+            mode = ProbeMode::HBrickReachability;
+            break;
+        case ProbeMode::HBrickReachability:
+            mode = ProbeMode::HBrickPair;
+            break;
+        case ProbeMode::HBrickPair:
+            mode = ProbeMode::Reachability;
+            break;
+    }
+}
+
+namespace {
+
+inline constexpr uint32_t kMaxHBrickReachabilityProbePassable = 8192U;
+
+}  // namespace
+
+bool computeHBrickReachabilityProbe(
+    OrientationState& state,
+    const HBrickBaseline& baseline,
+    const MazeLayout& layout,
+    const uint32_t source_vertex
+) {
+    if (!state.generated || baseline.status() != BaselineStatus::Completed) {
+        return false;
+    }
+
+    const uint32_t passable_count = layout.passableCount();
+    if (passable_count > kMaxHBrickReachabilityProbePassable) {
+        return false;
+    }
+
+    const uint32_t num_vertices = state.graph.numVertices();
+    state.probe_reachable.assign(num_vertices, 0U);
+    state.probe_depth.clear();
+
+    uint32_t count = 0U;
+    for (uint32_t y = 0U; y < layout.height(); ++y) {
+        for (uint32_t x = 0U; x < layout.width(); ++x) {
+            if (!layout.isPassable(x, y)) {
+                continue;
+            }
+            const uint32_t target_vertex = layout.vertexId(GridCoord{x, y}).value;
+            const ReachabilityAnswer answer =
+                baseline.query(source_vertex, target_vertex);
+            if (answer == ReachabilityAnswer::Reachable) {
+                state.probe_reachable[target_vertex] = 1U;
+                ++count;
+            }
+        }
+    }
+
+    state.probe_reach_count = count;
+    state.probe_max_depth = 0U;
+    state.probe_vertex = source_vertex;
+    state.probe_result_mode = ProbeMode::HBrickReachability;
+    state.probe_hbrick_pair_has_source = false;
+    state.probe_hbrick_pair_answer_valid = false;
+    state.probe_valid = true;
+    return true;
+}
+
+bool advanceHBrickPairProbe(
+    OrientationState& state,
+    const HBrickBaseline& baseline,
+    const uint32_t vertex
+) {
+    if (!state.generated || baseline.status() != BaselineStatus::Completed) {
+        return false;
+    }
+
+    const uint32_t num_vertices = state.graph.numVertices();
+    if (vertex >= num_vertices) {
+        return false;
+    }
+
+    state.probe_reachable.assign(num_vertices, 0U);
+    state.probe_depth.clear();
+    state.probe_result_mode = ProbeMode::HBrickPair;
+
+    if (!state.probe_hbrick_pair_has_source) {
+        state.probe_hbrick_pair_has_source = true;
+        state.probe_hbrick_pair_source = vertex;
+        state.probe_hbrick_pair_target = 0U;
+        state.probe_hbrick_pair_answer_valid = false;
+        state.probe_vertex = vertex;
+        state.probe_reachable[vertex] = 1U;
+        state.probe_reach_count = 1U;
+        state.probe_valid = true;
+        return false;
+    }
+
+    if (vertex == state.probe_hbrick_pair_source) {
+        state.probe_vertex = vertex;
+        state.probe_reachable[vertex] = 1U;
+        state.probe_reach_count = 1U;
+        state.probe_valid = true;
+        return false;
+    }
+
+    state.probe_hbrick_pair_target = vertex;
+    state.probe_hbrick_pair_answer =
+        baseline.query(state.probe_hbrick_pair_source, vertex);
+    state.probe_hbrick_pair_answer_valid = true;
+    state.probe_hbrick_pair_has_source = false;
+    state.probe_vertex = state.probe_hbrick_pair_source;
+    state.probe_reachable[state.probe_hbrick_pair_source] = 1U;
+    state.probe_reachable[vertex] = 1U;
+    state.probe_reach_count = 2U;
+    state.probe_valid = true;
+    return true;
 }
 
 void destroyOrientationTextures(OrientationState& state) {
@@ -604,6 +735,10 @@ std::vector<uint8_t> renderProbeOverlayPixels(
     const bool by_distance =
         state.probe_result_mode == ProbeMode::Reachability
         && !state.probe_depth.empty();
+    const bool hbrick_reachability =
+        state.probe_result_mode == ProbeMode::HBrickReachability;
+    const bool hbrick_pair =
+        state.probe_result_mode == ProbeMode::HBrickPair;
     const float depth_scale = state.probe_max_depth > 0U
         ? 1.0F / static_cast<float>(state.probe_max_depth)
         : 0.0F;
@@ -617,7 +752,21 @@ std::vector<uint8_t> renderProbeOverlayPixels(
                 continue;
             }
             const uint32_t vertex = layout.vertexId(GridCoord{x, y}).value;
-            if (vertex == state.probe_vertex) {
+            if (hbrick_pair
+                && state.probe_hbrick_pair_answer_valid
+                && vertex == state.probe_hbrick_pair_target) {
+                if (state.probe_hbrick_pair_answer == ReachabilityAnswer::Reachable) {
+                    pixel[0] = 70U;
+                    pixel[1] = 230U;
+                    pixel[2] = 95U;
+                } else {
+                    pixel[0] = 235U;
+                    pixel[1] = 70U;
+                    pixel[2] = 70U;
+                }
+                pixel[3] = 235U;
+            } else if (vertex == state.probe_vertex
+                || (hbrick_pair && vertex == state.probe_hbrick_pair_source)) {
                 pixel[0] = 255U;
                 pixel[1] = 255U;
                 pixel[2] = 255U;
@@ -627,6 +776,10 @@ std::vector<uint8_t> renderProbeOverlayPixels(
                     const float t =
                         static_cast<float>(state.probe_depth[vertex]) * depth_scale;
                     heatColor(t, pixel);
+                } else if (hbrick_reachability) {
+                    pixel[0] = 120U;
+                    pixel[1] = 210U;
+                    pixel[2] = 255U;
                 } else {
                     // Component probe: one solid highlight color.
                     pixel[0] = 60U;

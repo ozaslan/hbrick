@@ -11,6 +11,7 @@
 
 namespace hbrick {
 
+class BitMatrix;
 class CsrGraph;
 
 /**
@@ -20,6 +21,16 @@ class CsrGraph;
  * Treats each directed edge as an undirected link between its endpoints.
  */
 [[nodiscard]] uint32_t largestUndirectedComponentSize(const CsrGraph& graph) noexcept;
+
+/**
+ * @brief Returns the largest undirected component size in a reflexive adjacency matrix.
+ * @ingroup hbrick_graph
+ *
+ * Treats @c adjacency[i][j] as an undirected link when @c i != @c j.
+ */
+[[nodiscard]] uint32_t largestUndirectedComponentSizeFromReflexiveAdjacency(
+    const BitMatrix& adjacency
+) noexcept;
 
 /**
  * @brief Labels each vertex with its undirected component id.

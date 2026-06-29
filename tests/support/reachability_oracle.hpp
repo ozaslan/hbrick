@@ -19,6 +19,7 @@
 #include "hbrick/graph/random_asymmetric_params.hpp"
 #include "hbrick/graph/scc_decomposition.hpp"
 #include "hbrick/grid/maze_layout.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
 #include "hbrick/tile/tile_size.hpp"
 #include "test_limits.hpp"
 
@@ -79,6 +80,25 @@ void expectBrickBaselinesMatchBfsOnSlice(
     uint32_t slice_id,
     uint32_t slice_count,
     TileSize tile_size,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/** @brief Verifies @ref HBrickBaseline against BFS on all ordered pairs (sliced when large). @ingroup hbrick_test_support */
+void expectHBrickMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    HBrickConfig config,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectHBrickMatchesBfsOnSlice(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    HBrickConfig config,
     uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
 );
 

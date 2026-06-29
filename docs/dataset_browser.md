@@ -38,9 +38,9 @@ The browser serves three overlapping purposes:
 
 1. **Dataset exploration** — Browse hundreds of benchmark maps with thumbnails, search/filter, and side-by-side comparison.
 2. **Library validation** — Every map is loaded via `loadMovingAiMap`, converted to `MazeLayout`, and rendered through the same types the library uses in tests and benchmarks.
-3. **Directed-graph experimentation** — Generate seeded directed graphs from grid adjacencies, run SCC decomposition, estimate reachability density, and probe forward reachability interactively.
+3. **Directed-graph experimentation** — Generate seeded directed graphs from grid adjacencies, run SCC decomposition, estimate reachability density, probe reachability (BFS and H-BRICK), and run reachability baseline benchmarks.
 
-It is **not** a pathfinding solver, map editor, or benchmark runner. It is a visual inspection and analysis front-end for hbrick’s grid-to-graph pipeline.
+It is **not** a pathfinding solver or map editor. It is a visual inspection, indexing, and analysis front-end for hbrick’s grid-to-graph and BRICK/H-BRICK pipelines (including an interactive `ReachabilityBenchmarkJob` runner).
 
 ---
 
@@ -159,7 +159,8 @@ When hovering a map canvas:
 - Raw character, terrain class name, passability under current policy
 - `MazeLayout` vertex id
 - SCC id and size (when SCC labels are valid)
-- Whether the cell is in the current probe highlight
+- Whether the cell is in the current probe highlight (BFS, SCC, or H-BRICK)
+- L0 tile summary when a built H-BRICK index is valid (hover tooltip and inspector)
 
 ### About section
 
@@ -236,14 +237,22 @@ The editor shows the final result as `Density: …` with ±2σ when sampling, or
 
 ### Right-click probe
 
-Two probe modes, selectable via radio buttons in the editor or `Ctrl+Shift+P`:
+Four probe modes, selectable via radio buttons in the orientation editor or `Ctrl+Shift+P` (cycles all four):
 
 | Mode | Behavior |
 |------|----------|
-| **Reachable set (BFS)** | Forward reachable set from the clicked cell, colored by hop distance (yellow near source, violet at frontier). Reports count, percentage of passable cells, and max depth. |
-| **Strongly connected component** | All cells in the same SCC as the clicked cell. Computes SCC labels automatically if needed. Reports SCC size and percentage. |
+| **Reachable set (BFS)** | Forward reachable set from the clicked cell, colored by hop distance. |
+| **Strongly connected component** | All cells in the same SCC as the clicked cell. Computes SCC labels automatically if needed. |
+| **H-BRICK reachable set** | Uses the built `HBrickIndex` to answer reachability from the clicked source to every passable cell (maps with ≤8192 passable cells). Requires **Build / rebuild index** in the BRICK panel. |
+| **H-BRICK pair test** | Two-click test: right-click source, then target. Source is white; target is green (reachable) or red (unreachable). |
 
-Switching modes while a probe is active re-runs the highlight under the new mode. **Clear probe** button, `Esc`, or `Space` removes the overlay.
+Switching modes while a probe is active re-runs the highlight when possible. **Clear probe**, `Esc`, or `Space` removes the overlay.
+
+### Reachability benchmark
+
+The orientation editor can run [`ReachabilityBenchmarkJob`](../include/hbrick/bench/reachability_benchmark.hpp) on the generated grid graph: timed query workloads, optional BFS correctness checks, and comparison of CSR baselines, flat BRICK (`BrickSearch`, `BrickClosure`), and **H-BRICK** (`HBrick`).
+
+Use **Open benchmark panel** to choose methods and start a run. Tile size, group size, max depth, and memory cap come from the BRICK panel via **Sync to benchmark config** (or defaults: `2×2` grouping, full depth). Presets include **Default**, **Flat BRICK**, and **H-BRICK**.
 
 ### Recipes
 
@@ -280,7 +289,7 @@ Example recipe fields:
 
 The **BRICK** window opens automatically after you generate a directed graph or load a saved recipe. You can also open it from **Open BRICK panel** in the orientation editor. Like the orientation editor, it is tied to one map panel and hides when that map tab is not visible.
 
-The panel builds a flat `BrickIndex` from the current `MazeLayout` and `DirectedGridGraph` and draws optional overlays on the map canvas:
+The panel builds a full [`HBrickIndex`](../include/hbrick/tile/hbrick_index.hpp) (L0 base tiles + port graph + super-tile hierarchy) and binds an [`HBrickBaseline`](../include/hbrick/baselines/hbrick_baseline.hpp) query engine for probes and overlays.
 
 | Overlay | Zoom | Description |
 |---------|------|-------------|
@@ -296,9 +305,9 @@ The panel builds a flat `BrickIndex` from the current `MazeLayout` and `Directed
 | **Tile width / height** | Nominal base tile size (`TileSize`; both ≥ 2) |
 | **Group width / height** | H-BRICK grouping (`GroupSize`); drawn as **Hierarchy regions** when super levels exist |
 | **Max depth** | H-BRICK hierarchy depth (`0` = full depth); limits how many super levels are built and drawn |
-| **Benchmark memory cap (GiB)** | Copied into the reachability benchmark config via **Sync to benchmark config**; panel builds ignore it and always allocate closures |
+| **Benchmark memory cap (GiB)** | Copied into the reachability benchmark config via **Sync to benchmark config**; panel index builds always use unlimited closure memory |
 | **Build / rebuild index** | Runs full `HBrickIndexBuilder` preprocess (base closures, port graph, hierarchy, super-tile composition) with a progress bar |
-| **Sync to benchmark config** | Copies tile parameters into the reachability benchmark job config |
+| **Sync to benchmark config** | Copies base tile size, group size, max depth, and memory cap into the reachability benchmark job config |
 | **Hierarchy level** | `All` = L0 base tiles/ports/seams + L1..Lmax boundary cells; `L0 base` = flat BRICK only; `L1`+ = that level's boundary cells and cross-region seam arrows |
 | **Impassable-only tiles** | When unchecked (default), skip tile outlines and labels for tiles that contain only blocked cells |
 
@@ -337,7 +346,7 @@ Shortcuts are disabled while a text input field has focus. Full list: **Help →
 | `P` | Pin preview panel |
 | `Alt+1/2/3` | Terrain / passability / SCC view |
 | `Esc` / `Space` | Clear probe highlight |
-| Right-click | Probe cell (with generated graph) |
+| Right-click | Probe cell (BFS, SCC, or H-BRICK — mode in orientation editor) |
 
 ### Orientation editor (when open)
 
@@ -347,7 +356,7 @@ Shortcuts are disabled while a text input field has focus. Full list: **Help →
 | `D` | Randomize seed |
 | `C` | Compute SCCs |
 | `Ctrl+S` | Save recipe |
-| `Ctrl+Shift+P` | Switch probe mode (BFS / SCC) |
+| `Ctrl+Shift+P` | Cycle probe mode: BFS / SCC / H-BRICK set / H-BRICK pair |
 
 ---
 
@@ -364,7 +373,9 @@ The browser exercises these hbrick components end to end:
 | `SccDecomposition` | Component labeling and condensation stats |
 | `Bfs` | Right-click reachability probes |
 | `ReachabilityDensityEstimator` | Reachable-pair density via library API ([guide](reachability_density.md)) |
-| `BrickIndex` | Flat BRICK tile decomposition, ports, and seam edges (BRICK panel) |
+| `BrickIndex` / `HBrickIndex` | Full H-BRICK preprocess product (BRICK panel) |
+| `HBrickBaseline` | Interactive H-BRICK reachability probes |
+| `ReachabilityBenchmarkJob` | Reachability baseline benchmarks from the orientation editor |
 
 The browser does not implement density logic locally; `orientation.cpp` builds the passable vertex universe and delegates to `ReachabilityDensityEstimator`.
 

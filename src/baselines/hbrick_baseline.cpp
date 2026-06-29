@@ -482,6 +482,20 @@ ReachabilityAnswer HBrickBaseline::queryHierarchical(
     return ReachabilityAnswer::Unreachable;
 }
 
+void HBrickBaseline::adoptPrebuiltIndex(HBrickIndex index) {
+    status_ = BaselineStatus::NotRun;
+    index_ = HBrickIndex{};
+    scratch_ = HBrickQueryScratch{};
+    port_bfs_scratch_ = GraphSearchScratch{};
+
+    index_ = index;
+    status_ = index_.status();
+    if (status_ == BaselineStatus::Completed) {
+        scratch_.prepare(index_);
+        port_bfs_scratch_.resetForGraph(index_.brickIndex().ports().numPorts());
+    }
+}
+
 void HBrickBaseline::preprocess(
     const DirectedGridGraph& graph,
     const MazeLayout& layout,

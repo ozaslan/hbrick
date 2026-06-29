@@ -615,11 +615,33 @@ void invalidateBrickIndex(BrickPanelState& brick) noexcept {
     brick.build_in_progress = false;
     brick.index_builder = HBrickIndexBuilder{};
     brick.build_report = HBrickBuildReport{};
-    brick.cached_hbrick_index.reset();
+    brick.query_baseline = HBrickBaseline{};
     brick.num_tiles = 0U;
     brick.num_ports = 0U;
     brick.num_seams = 0U;
     brick.num_hierarchy_levels = 0U;
+}
+
+void syncBrickPanelToBenchmarkConfig(
+    OrientationState& orient,
+    const BrickPanelState& brick
+) noexcept {
+    orient.benchmark_config.brick_tile_size =
+        TileSize{brick.base_tile_width, brick.base_tile_height};
+    orient.benchmark_config.hbrick_group_size =
+        GroupSize{brick.group_w, brick.group_h};
+    orient.benchmark_config.hbrick_max_depth = brick.max_depth;
+    orient.benchmark_config.max_memory_bytes = memoryBytesFromGib(brick.memory_gib);
+}
+
+bool brickQueryReady(const BrickPanelState& brick, const uint64_t graph_epoch) noexcept {
+    return brick.index_valid
+        && brick.graph_epoch_built == graph_epoch
+        && brick.query_baseline.status() == BaselineStatus::Completed;
+}
+
+const HBrickIndex& brickHbrickIndex(const BrickPanelState& brick) noexcept {
+    return brick.query_baseline.index();
 }
 
 void syncBrickIndexWithGraph(BrickPanelState& brick, const uint64_t graph_epoch) noexcept {
@@ -637,9 +659,7 @@ bool brickIndexMatchesEpoch(
     const BrickPanelState& brick,
     const uint64_t graph_epoch
 ) noexcept {
-    return brick.index_valid
-        && brick.cached_hbrick_index.has_value()
-        && brick.graph_epoch_built == graph_epoch;
+    return brickQueryReady(brick, graph_epoch);
 }
 
 namespace {
@@ -760,8 +780,8 @@ void tickBrickIndexBuild(BrickPanelState& brick) noexcept {
     brick.index_status = brick.build_report.status;
 
     if (brick.build_report.status == BaselineStatus::Completed) {
-        brick.cached_hbrick_index = brick.index_builder.takeIndex();
-        brick.index_valid = true;
+        brick.query_baseline.adoptPrebuiltIndex(brick.index_builder.takeIndex());
+        brick.index_valid = brick.query_baseline.status() == BaselineStatus::Completed;
         applyBuildReportCounts(brick);
         return;
     }
@@ -837,10 +857,16 @@ void drawBrickPanel(MapPanel& panel) {
     ImGui::InputFloat("Benchmark memory cap (GiB)", &brick.memory_gib, 1.0F, 8.0F, "%.0f");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Used only when syncing to the reachability benchmark config. "
-            "Panel builds always run with unlimited closure memory."
+            "Memory budget for BRICK / H-BRICK benchmark preprocessing.\n"
+            "Index builds in this panel always use unlimited closure memory."
         );
     }
+
+    ImGui::TextWrapped(
+        "Builds a full H-BRICK index: L0 base tiles (cell closures + port graph) "
+        "and super-tile interface closures up to max depth. The same index powers "
+        "map overlays, H-BRICK right-click probes, and the HBrick benchmark method."
+    );
 
     ImGui::SeparatorText("Build");
 
@@ -872,9 +898,13 @@ void drawBrickPanel(MapPanel& panel) {
     }
 
     if (ImGui::Button("Sync to benchmark config")) {
-        orient.benchmark_config.brick_tile_size =
-            TileSize{brick.base_tile_width, brick.base_tile_height};
-        orient.benchmark_config.max_memory_bytes = memoryBytesFromGib(brick.memory_gib);
+        syncBrickPanelToBenchmarkConfig(orient, brick);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Copies base tile size, group size, max depth, and memory cap into the\n"
+            "reachability benchmark job (Orientation panel -> benchmark)."
+        );
     }
 
     if (brick.index_valid) {
@@ -886,11 +916,11 @@ void drawBrickPanel(MapPanel& panel) {
             brick.num_ports,
             brick.num_seams
         );
-        if (brick.cached_hbrick_index.has_value()) {
+        if (brick.index_valid) {
             ImGui::SeparatorText("Index storage");
-            drawIndexStorageEstimate(brick.cached_hbrick_index->estimateStorageBreakdown());
+            drawIndexStorageEstimate(brick.query_baseline.index().estimateStorageBreakdown());
             ImGui::SeparatorText("Graph nodes by level");
-            drawLevelGraphStats(brick.cached_hbrick_index->levelGraphStats());
+            drawLevelGraphStats(brick.query_baseline.index().levelGraphStats());
         }
     } else {
         ImGui::TextWrapped("Status: %s", baselineStatusLabel(brick.index_status));
@@ -1087,11 +1117,12 @@ void drawBrickOverlays(
     const uint32_t y_last,
     const BrickOverlayPass pass
 ) {
-    if (!brick.index_valid || !brick.cached_hbrick_index.has_value()) {
+    if (!brick.index_valid
+        || brick.query_baseline.status() != BaselineStatus::Completed) {
         return;
     }
 
-    const HBrickIndex& hbrick_index = *brick.cached_hbrick_index;
+    const HBrickIndex& hbrick_index = brick.query_baseline.index();
     const BrickIndex& index = hbrick_index.brickIndex();
     const HierarchyTree& hierarchy = hbrick_index.hierarchy();
 
@@ -1296,11 +1327,12 @@ bool drawBrickTileHoverInfo(
     const MazeLayout& layout,
     const GridCoord coord
 ) noexcept {
-    if (!brick.index_valid || !brick.cached_hbrick_index.has_value()) {
+    if (!brick.index_valid
+        || brick.query_baseline.status() != BaselineStatus::Completed) {
         return false;
     }
 
-    const HBrickIndex& hbrick_index = *brick.cached_hbrick_index;
+    const HBrickIndex& hbrick_index = brick.query_baseline.index();
     if (hbrick_index.status() != BaselineStatus::Completed) {
         return false;
     }

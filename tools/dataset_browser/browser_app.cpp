@@ -15,6 +15,7 @@
 #include "hbrick/core/status_reporting.hpp"
 #include "hbrick/io/movingai_loader.hpp"
 #include "hbrick/tile/hbrick_build_format.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
 
 #ifndef HBRICK_RECIPES_DIR
 #define HBRICK_RECIPES_DIR "recipes"
@@ -523,12 +524,12 @@ void BrowserApp::drawShortcutsWindow() {
         {"P", "Pin the active preview panel"},
         {"Alt+1/2/3", "Terrain / passability / SCC view on active map"},
         {"Esc / Space", "Clear the probe highlight on the active map"},
-        {"Right-click", "Probe a cell (BFS or SCC, set in Orient panel)"},
+        {"Right-click", "Probe a cell (mode in Orientation panel: BFS, SCC, H-BRICK)"},
         {"Ctrl+Shift+Enter", "Generate directed graph (orientation editor)"},
         {"D", "Roll dice / randomize seed (orientation editor)"},
         {"C", "Compute SCCs (orientation editor)"},
         {"Ctrl+S", "Save current recipe (orientation editor)"},
-        {"Ctrl+Shift+P", "Switch probe mode: BFS reachability / SCC"},
+        {"Ctrl+Shift+P", "Cycle probe mode: BFS / SCC / H-BRICK set / H-BRICK pair"},
         {"Mouse wheel", "Zoom around the cursor"},
         {"Left/middle drag", "Pan the canvas"},
         {"Click (gallery)", "Open map in the reusable preview panel"},
@@ -788,9 +789,7 @@ void BrowserApp::handleMapShortcuts(MapPanel& panel) {
     }
 
     if (chordPressed(io, ImGuiKey_P, true, true)) {
-        panel.orient.probe_mode = panel.orient.probe_mode == ProbeMode::Reachability
-            ? ProbeMode::Component
-            : ProbeMode::Reachability;
+        cycleProbeMode(panel.orient.probe_mode);
     }
 
     if (!panel.orient.editor_open) {
@@ -1661,14 +1660,58 @@ void BrowserApp::setProbe(MapPanel& panel, const uint32_t x, const uint32_t y) {
     }
     const uint32_t vertex = panel.layout.vertexId(GridCoord{x, y}).value;
 
-    if (panel.orient.probe_mode == ProbeMode::Component) {
-        // The component probe needs SCC labels; compute them transparently.
-        if (!panel.orient.scc_valid) {
-            computeScc(panel.orient, panel.layout);
+    switch (panel.orient.probe_mode) {
+        case ProbeMode::Component: {
+            if (!panel.orient.scc_valid) {
+                computeScc(panel.orient, panel.layout);
+            }
+            computeComponentProbe(panel.orient, vertex);
+            break;
         }
-        computeComponentProbe(panel.orient, vertex);
-    } else {
-        computeProbe(panel.orient, vertex);
+        case ProbeMode::HBrickReachability: {
+            if (!brickQueryReady(panel.brick, panel.orient.graph_epoch)) {
+                status_ =
+                    "H-BRICK probe: build the index in the BRICK panel first";
+                return;
+            }
+            if (!computeHBrickReachabilityProbe(
+                    panel.orient,
+                    panel.brick.query_baseline,
+                    panel.layout,
+                    vertex)) {
+                status_ =
+                    "H-BRICK reachability probe failed "
+                    "(index missing or >8192 passable cells)";
+                return;
+            }
+            break;
+        }
+        case ProbeMode::HBrickPair: {
+            if (!brickQueryReady(panel.brick, panel.orient.graph_epoch)) {
+                status_ =
+                    "H-BRICK pair probe: build the index in the BRICK panel first";
+                return;
+            }
+            const bool pair_complete = advanceHBrickPairProbe(
+                panel.orient,
+                panel.brick.query_baseline,
+                vertex
+            );
+            if (!pair_complete) {
+                const std::string cell =
+                    "(" + std::to_string(x) + ", " + std::to_string(y) + ")";
+                status_ = "H-BRICK source " + cell + " — right-click target cell";
+                if (!panel.orient.probe_valid) {
+                    return;
+                }
+                break;
+            }
+            break;
+        }
+        case ProbeMode::Reachability:
+        default:
+            computeProbe(panel.orient, vertex);
+            break;
     }
     if (!panel.orient.probe_valid) {
         return;
@@ -1689,8 +1732,26 @@ void BrowserApp::setProbe(MapPanel& panel, const uint32_t x, const uint32_t y) {
         status_ = "SCC of " + cell + ": "
             + std::to_string(panel.orient.probe_reach_count) + " of "
             + std::to_string(passable) + " passable cells";
-    } else {
-        status_ = "Reachable from " + cell + ": "
+    } else if (panel.orient.probe_result_mode == ProbeMode::HBrickReachability) {
+        status_ = "H-BRICK reachable from " + cell + ": "
+            + std::to_string(panel.orient.probe_reach_count) + " of "
+            + std::to_string(passable) + " passable cells";
+    } else if (panel.orient.probe_result_mode == ProbeMode::HBrickPair
+        && panel.orient.probe_hbrick_pair_answer_valid) {
+        const GridCoord source_coord =
+            panel.layout.coordFromVertex(VertexId{panel.orient.probe_hbrick_pair_source});
+        const GridCoord target_coord =
+            panel.layout.coordFromVertex(VertexId{panel.orient.probe_hbrick_pair_target});
+        const char* answer =
+            panel.orient.probe_hbrick_pair_answer == ReachabilityAnswer::Reachable
+            ? "REACHABLE"
+            : "UNREACHABLE";
+        status_ = std::string("H-BRICK (") + std::to_string(source_coord.x) + ", "
+            + std::to_string(source_coord.y) + ") -> ("
+            + std::to_string(target_coord.x) + ", " + std::to_string(target_coord.y)
+            + "): " + answer;
+    } else if (panel.orient.probe_result_mode == ProbeMode::Reachability) {
+        status_ = "BFS reachable from " + cell + ": "
             + std::to_string(panel.orient.probe_reach_count) + " of "
             + std::to_string(passable) + " passable cells, max depth "
             + std::to_string(panel.orient.probe_max_depth);
@@ -1908,7 +1969,7 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
             }
         }
         itemTooltip(
-            "Tile decomposition, boundary ports, and cross-tile seam edges.\n"
+            "Tile decomposition, H-BRICK index build, overlays, and probes.\n"
             "Auto-opens after graph generation or recipe load."
         );
     } else {
@@ -2190,10 +2251,25 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         "Run the benchmark twice with this on/off to compare preprocess time."
     );
 
+    char hbrick_depth_buf[16];
+    if (orient.benchmark_config.hbrick_max_depth == kHBrickFullDepth) {
+        std::snprintf(hbrick_depth_buf, sizeof(hbrick_depth_buf), "full");
+    } else {
+        std::snprintf(
+            hbrick_depth_buf,
+            sizeof(hbrick_depth_buf),
+            "%u",
+            orient.benchmark_config.hbrick_max_depth
+        );
+    }
     ImGui::TextDisabled(
-        "Flat BRICK tile: %u x %u (BRICK panel -> Sync to benchmark config)",
+        "BRICK/H-BRICK: %u×%u tiles, group %u×%u, depth %s "
+        "(BRICK panel → Sync to benchmark config)",
         orient.benchmark_config.brick_tile_size.width,
-        orient.benchmark_config.brick_tile_size.height
+        orient.benchmark_config.brick_tile_size.height,
+        orient.benchmark_config.hbrick_group_size.group_w,
+        orient.benchmark_config.hbrick_group_size.group_h,
+        hbrick_depth_buf
     );
 
     ensureBenchmarkMethodDefaults(orient);
@@ -2213,32 +2289,53 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
 
     ImGui::SeparatorText("Right-click probe");
 
-    int probe_mode = orient.probe_mode == ProbeMode::Component ? 1 : 0;
-    bool probe_mode_changed = false;
-    if (ImGui::RadioButton("Reachable set (BFS)", &probe_mode, 0)) {
-        probe_mode_changed = orient.probe_mode != ProbeMode::Reachability;
+    int probe_mode_sel = static_cast<int>(orient.probe_mode);
+    const ProbeMode previous_probe_mode = orient.probe_mode;
+    if (ImGui::RadioButton("Reachable set (BFS)", &probe_mode_sel, 0)) {
         orient.probe_mode = ProbeMode::Reachability;
     }
     itemTooltip(
         "Highlights every cell reachable from the clicked cell by\n"
-        "following arcs forward. Colored by hop distance: yellow is\n"
-        "close to the source, violet is the far frontier."
+        "following arcs forward. Colored by hop distance."
     );
-    if (ImGui::RadioButton("Strongly connected component", &probe_mode, 1)) {
-        probe_mode_changed = orient.probe_mode != ProbeMode::Component;
+    if (ImGui::RadioButton("Strongly connected component", &probe_mode_sel, 1)) {
         orient.probe_mode = ProbeMode::Component;
     }
     itemTooltip(
-        "Highlights the cells that can reach the clicked cell AND be\n"
-        "reached from it (its SCC). Computes SCC labels automatically\n"
-        "if needed."
+        "Highlights the SCC of the clicked cell. Computes SCC labels\n"
+        "automatically when needed."
+    );
+    if (ImGui::RadioButton("H-BRICK reachable set", &probe_mode_sel, 2)) {
+        orient.probe_mode = ProbeMode::HBrickReachability;
+    }
+    itemTooltip(
+        "Uses the built H-BRICK index to test reachability from the\n"
+        "clicked source to every passable cell (≤8192 cells). Build the\n"
+        "index in the BRICK panel first."
+    );
+    if (ImGui::RadioButton("H-BRICK pair test", &probe_mode_sel, 3)) {
+        orient.probe_mode = ProbeMode::HBrickPair;
+    }
+    itemTooltip(
+        "Two-click test: right-click source, then target. Highlights\n"
+        "source (white) and target (green=reachable, red=unreachable)."
     );
 
-    if (probe_mode_changed && orient.probe_valid) {
-        // Re-run the active probe under the newly selected mode.
+    if (orient.probe_mode != previous_probe_mode && orient.probe_valid) {
         const GridCoord coord =
             panel.layout.coordFromVertex(VertexId{orient.probe_vertex});
         setProbe(panel, coord.x, coord.y);
+    }
+
+    if (orient.probe_hbrick_pair_has_source && !orient.probe_hbrick_pair_answer_valid) {
+        const GridCoord source_coord =
+            panel.layout.coordFromVertex(VertexId{orient.probe_hbrick_pair_source});
+        ImGui::TextColored(
+            ImVec4(1.0F, 0.85F, 0.35F, 1.0F),
+            "H-BRICK pair: source (%u, %u) — right-click target",
+            source_coord.x,
+            source_coord.y
+        );
     }
 
     if (orient.probe_valid) {
@@ -2254,9 +2351,28 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
                 "SCC of (%u, %u): %u of %u cells (%.1f%%)",
                 coord.x, coord.y, orient.probe_reach_count, passable, percent
             );
+        } else if (orient.probe_result_mode == ProbeMode::HBrickReachability) {
+            ImGui::TextWrapped(
+                "H-BRICK from (%u, %u): %u of %u cells (%.1f%%)",
+                coord.x, coord.y, orient.probe_reach_count, passable, percent
+            );
+        } else if (orient.probe_result_mode == ProbeMode::HBrickPair
+            && orient.probe_hbrick_pair_answer_valid) {
+            const GridCoord target_coord =
+                panel.layout.coordFromVertex(VertexId{orient.probe_hbrick_pair_target});
+            ImGui::TextWrapped(
+                "H-BRICK (%u, %u) → (%u, %u): %s",
+                coord.x,
+                coord.y,
+                target_coord.x,
+                target_coord.y,
+                orient.probe_hbrick_pair_answer == ReachabilityAnswer::Reachable
+                    ? "REACHABLE"
+                    : "UNREACHABLE"
+            );
         } else {
             ImGui::TextWrapped(
-                "From (%u, %u): %u of %u cells (%.1f%%), max depth %u",
+                "BFS from (%u, %u): %u of %u cells (%.1f%%), max depth %u",
                 coord.x, coord.y, orient.probe_reach_count, passable, percent,
                 orient.probe_max_depth
             );
@@ -2267,8 +2383,8 @@ void BrowserApp::drawOrientationEditor(MapPanel& panel) {
         itemTooltip("Shortcut: Esc or Space");
     } else if (orient.generated) {
         ImGui::TextWrapped(
-            "Right-click a passable cell on the canvas to probe it. "
-            "Esc or Space clears the highlight."
+            "Right-click a passable cell on the canvas. "
+            "Ctrl+Shift+P cycles probe modes. Esc or Space clears the highlight."
         );
     } else {
         ImGui::TextDisabled("Generate a graph first");
@@ -3042,8 +3158,10 @@ void drawBenchmarkMethodSelection(
     if (ImGui::Button("Default")) {
         resetBenchmarkMethodDefaults(orient);
     }
-    itemTooltip("CsrBfs, CsrDfs, SccDagSearch, SccDagClosure, TwoHop, Grail, "
-                "BrickSearch, BrickClosure, FullClosure (no H-BRICK).");
+    itemTooltip(
+        "CsrBfs, CsrDfs, SccDagSearch, SccDagClosure, TwoHop, Grail,\n"
+        "BrickSearch, BrickClosure, FullClosure (HBrick is optional)."
+    );
     ImGui::SameLine();
     if (ImGui::Button("Flat BRICK")) {
         setBenchmarkMethodPreset(
@@ -3052,6 +3170,13 @@ void drawBenchmarkMethodSelection(
                 hbrick::ReachabilityBaselineId::BrickSearch,
                 hbrick::ReachabilityBaselineId::BrickClosure,
             }
+        );
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("H-BRICK")) {
+        setBenchmarkMethodPreset(
+            orient,
+            {hbrick::ReachabilityBaselineId::HBrick}
         );
     }
     ImGui::SameLine();
@@ -3103,7 +3228,7 @@ void drawBenchmarkMethodSelection(
                 || method == hbrick::ReachabilityBaselineId::BrickClosure) {
                 ImGui::TextDisabled("flat L0 BRICK");
             } else if (method == hbrick::ReachabilityBaselineId::HBrick) {
-                ImGui::TextDisabled("hierarchy (experimental)");
+                ImGui::TextDisabled("hierarchical BRICK");
             } else if (method == hbrick::ReachabilityBaselineId::SccDagClosure
                 || method == hbrick::ReachabilityBaselineId::FullClosure) {
                 ImGui::TextDisabled("Warshall closure");
@@ -3840,15 +3965,26 @@ void BrowserApp::drawInspectorPanel() {
             );
         }
         if (passable && active->orient.probe_valid) {
-            ImGui::Text(
-                "Probe reachable: %s",
-                active->orient.probe_reachable[vertex.value] != 0U ? "yes" : "no"
-            );
+            if (active->orient.probe_result_mode == ProbeMode::HBrickPair
+                && active->orient.probe_hbrick_pair_answer_valid) {
+                ImGui::Text(
+                    "H-BRICK pair: %s",
+                    active->orient.probe_hbrick_pair_answer
+                        == ReachabilityAnswer::Reachable
+                    ? "REACHABLE"
+                    : "UNREACHABLE"
+                );
+            } else {
+                ImGui::Text(
+                    "Probe reachable: %s",
+                    active->orient.probe_reachable[vertex.value] != 0U ? "yes" : "no"
+                );
+            }
         }
 
         if (active->brick.index_valid
             && brickIndexMatchesEpoch(active->brick, active->orient.graph_epoch)) {
-            ImGui::SeparatorText("BRICK tile (L0 index)");
+            ImGui::SeparatorText("BRICK / H-BRICK (L0 tile)");
             (void)drawBrickTileHoverInfo(active->brick, active->layout, coord);
         }
     } else {

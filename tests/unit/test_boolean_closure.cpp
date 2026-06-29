@@ -7,6 +7,8 @@
 #include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/csr_graph_builder.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 #include "hbrick/tile/tile_closure_util.hpp"
 
 namespace {
@@ -186,12 +188,9 @@ TEST(BooleanClosure, KleeneSquaringMatchesWarshallOnRandomGraphs) {
                 graph,
                 std::numeric_limits<uint64_t>::max()
             );
-            const uint32_t largest_component =
-                hbrick::largestUndirectedComponentSize(graph);
+            hbrick::GraphSearchScratch scratch{num_vertices};
             const uint32_t squaring_count =
-                hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
-                    largest_component
-                );
+                hbrick::kleeneSquaringCountForCsrGraph(graph, scratch);
 
             hbrick::BitMatrix warshall = base;
             hbrick::BitMatrix kleene = base;
@@ -229,10 +228,9 @@ TEST(BooleanClosure, ParallelKleeneSquaringMatchesSerial) {
                 graph,
                 std::numeric_limits<uint64_t>::max()
             );
+            hbrick::GraphSearchScratch scratch{num_vertices};
             const uint32_t squaring_count =
-                hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
-                    hbrick::largestUndirectedComponentSize(graph)
-                );
+                hbrick::kleeneSquaringCountForCsrGraph(graph, scratch);
 
             hbrick::BitMatrix serial = base;
             hbrick::BitMatrix parallel = base;

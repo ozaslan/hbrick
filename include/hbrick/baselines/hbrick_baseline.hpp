@@ -38,6 +38,14 @@ public:
     );
 
     /**
+     * @brief Binds a pre-built @ref HBrickIndex for query-only use (no preprocess rebuild).
+     * @ingroup hbrick_baselines
+     *
+     * Replaces any prior index held by this baseline and prepares query scratch from @p index.
+     */
+    void adoptPrebuiltIndex(HBrickIndex index);
+
+    /**
      * @brief Answers reachability using hierarchical H-BRICK query steps.
      * @ingroup hbrick_baselines
      */

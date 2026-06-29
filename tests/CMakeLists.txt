@@ -350,6 +350,7 @@ add_executable(test_bit_vector unit/test_bit_vector.cpp)
 add_executable(test_bit_matrix unit/test_bit_matrix.cpp)
 add_executable(test_boolean_closure unit/test_boolean_closure.cpp)
 add_executable(test_connected_components unit/test_connected_components.cpp)
+add_executable(test_kleene_squaring_bounds unit/test_kleene_squaring_bounds.cpp)
 
 target_link_libraries(
     test_bit_vector
@@ -385,10 +386,20 @@ target_link_libraries(
         hbrick_project_warnings
 )
 
+target_link_libraries(
+    test_kleene_squaring_bounds
+    PRIVATE
+        hbrick_graph
+        hbrick_tile
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
 hbrick_register_gtests(test_bit_vector)
 hbrick_register_gtests(test_bit_matrix)
 hbrick_register_gtests(test_boolean_closure)
 hbrick_register_gtests(test_connected_components)
+hbrick_register_gtests(test_kleene_squaring_bounds)
 
 add_executable(test_closure_matrix_builder unit/test_closure_matrix_builder.cpp)
 
@@ -523,6 +534,20 @@ target_link_libraries(
 )
 
 hbrick_register_slow_gtests(test_brick_reachability 120)
+
+add_executable(test_hbrick_reachability integration/test_hbrick_reachability.cpp)
+
+target_link_libraries(
+    test_hbrick_reachability
+    PRIVATE
+        hbrick_test_support
+        hbrick_baselines
+        hbrick_graph
+        GTest::gtest_main
+        hbrick_project_warnings
+)
+
+hbrick_register_slow_gtests(test_hbrick_reachability 300)
 
 add_executable(test_dag_reachability unit/test_dag_reachability.cpp)
 

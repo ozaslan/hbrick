@@ -6,11 +6,11 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 #include <imgui.h>
 
 #include "hbrick/baselines/baseline_status.hpp"
+#include "hbrick/baselines/hbrick_baseline.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/hbrick_build_report.hpp"
@@ -40,6 +40,7 @@ enum class BrickOverlayPass : uint8_t {
     Seams = 2,
 };
 
+struct OrientationState;
 struct MapPanel;
 
 /** @brief Per-map BRICK visualization and parameter state. */
@@ -79,7 +80,8 @@ struct BrickPanelState {
     HBrickIndexBuilder index_builder{};
     HBrickBuildReport build_report{};
 
-    std::optional<HBrickIndex> cached_hbrick_index{};
+    /** @brief Query engine bound to the last successful @ref HBrickIndex build. */
+    HBrickBaseline query_baseline{};
 };
 
 /** @brief Resets BRICK panel to defaults (map open / orientation reset). */
@@ -90,6 +92,25 @@ void requestBrickPanelOpen(BrickPanelState& brick) noexcept;
 
 /** @brief Clears the cached index (graph changed or user invalidated). */
 void invalidateBrickIndex(BrickPanelState& brick) noexcept;
+
+/**
+ * @brief Copies BRICK panel tile / hierarchy / memory settings into the benchmark config.
+ */
+void syncBrickPanelToBenchmarkConfig(
+    OrientationState& orient,
+    const BrickPanelState& brick
+) noexcept;
+
+/** @brief Returns @c true when @p brick has a query-ready H-BRICK index for @p graph_epoch. */
+[[nodiscard]] bool brickQueryReady(
+    const BrickPanelState& brick,
+    uint64_t graph_epoch
+) noexcept;
+
+/**
+ * @brief Returns the built H-BRICK index when @ref brickQueryReady is @c true.
+ */
+[[nodiscard]] const HBrickIndex& brickHbrickIndex(const BrickPanelState& brick) noexcept;
 
 /**
  * @brief Returns whether @p brick has a valid index for @p graph_epoch.

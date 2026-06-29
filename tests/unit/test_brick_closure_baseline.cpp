@@ -13,7 +13,7 @@
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
 #include "hbrick/graph/graph_search_scratch.hpp"
-#include "hbrick/graph/random_asymmetric_params.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/brick_index.hpp"
@@ -97,8 +97,9 @@ void expectPortKleeneClosureMatchesWarshallOracle(
     EXPECT_TRUE(hbrick::bitMatricesEqual(kleene, warshall));
 
     const uint32_t n_max = hbrick::largestUndirectedComponentSize(index.portGraph());
+    hbrick::GraphSearchScratch scc_scratch{index.portGraph().numVertices()};
     const uint32_t k_trunc =
-        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(n_max);
+        hbrick::kleeneSquaringCountForCsrGraph(index.portGraph(), scc_scratch);
     const uint32_t k_full =
         hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(
             index.portGraph().numVertices()

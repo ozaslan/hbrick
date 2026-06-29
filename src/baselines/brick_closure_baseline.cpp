@@ -6,6 +6,8 @@
 #include "hbrick/bit/kleene_squaring_options.hpp"
 #include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/brick_tile_index.hpp"
 #include "hbrick/tile/port_index.hpp"
@@ -185,10 +187,9 @@ void BrickClosureBaseline::runAdjacencyBatch() noexcept {
 }
 
 void BrickClosureBaseline::beginKleeneClosure() noexcept {
-    const uint32_t largest_component_size =
-        largestUndirectedComponentSize(index_.portGraph());
+    GraphSearchScratch scc_scratch{index_.portGraph().numVertices()};
     kleene_rounds_total_ =
-        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+        kleeneSquaringCountForCsrGraph(index_.portGraph(), scc_scratch);
     kleene_rounds_remaining_ = kleene_rounds_total_;
     preprocess_work_total_ += static_cast<uint64_t>(kleene_rounds_total_);
     preprocess_phase_ = PreprocessPhase::KleeneClosure;

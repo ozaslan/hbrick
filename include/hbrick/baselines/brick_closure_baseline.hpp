@@ -27,8 +27,10 @@ class MazeLayout;
  * @ingroup hbrick_baselines
  *
  * Preprocessing builds a @ref BrickIndex (base tiles + global port CSR) and then
- * materializes a reflexive transitive closure over the port graph via Kleene squaring
- * (@c ceil(log2(n_max)) rounds on the largest undirected port component).
+ * materializes a reflexive transitive closure over the port graph via truncated
+ * Kleene squaring. The round budget is @c min(ceil(log2(n_max)),
+ * ceil(log2(C + S_max))) where @c n_max is the largest undirected component,
+ * @c C is the directed SCC count, and @c S_max is the largest SCC size.
  *
  * Query first applies the same-tile local-closure shortcut; otherwise it answers
  * whether there exist ports @c p,q such that @c R_VB(source,p) and

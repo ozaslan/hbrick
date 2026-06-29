@@ -5,8 +5,9 @@
 #include <limits>
 
 #include "hbrick/bit/boolean_closure.hpp"
-#include "hbrick/graph/connected_components.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 #include "hbrick/grid/maze_layout.hpp"
 #include "hbrick/tile/tile_boundary_order.hpp"
 #include "hbrick/tile/tile_closure_util.hpp"
@@ -213,10 +214,10 @@ BaseTileSummary buildBaseTile(
             local_graph,
             std::numeric_limits<uint64_t>::max()
         );
-        const uint32_t largest_component_size =
-            largestUndirectedComponentSize(local_graph);
-        const uint32_t squaring_count =
-            BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+        const uint32_t squaring_count = [&]() {
+            GraphSearchScratch scc_scratch{num_local};
+            return kleeneSquaringCountForCsrGraph(local_graph, scc_scratch);
+        }();
         BooleanClosure::transitiveClosureKleeneSquaringInPlace(
             summary.local_closure,
             squaring_count,

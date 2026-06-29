@@ -116,3 +116,23 @@ TEST(HBrickBaseline, SkippedWhenMemoryBudgetExceeded) {
     baseline.preprocess(graph, layout, config);
     EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
 }
+
+TEST(HBrickBaseline, MatchesBfsOnNineBySevenPartialEdgeTiles) {
+    hbrick::MazeLayout layout(9U, 7U);
+    layout.setPassable(hbrick::GridCoord{3U, 3U}, false);
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        hbrick::RandomAsymmetricParams{17U, 0.55, 0.45, 0.0, 0.0}
+    );
+
+    expectMatchesBfsOnAllPairs(
+        layout,
+        graph,
+        configFor(
+            hbrick::TileSize{4U, 4U},
+            hbrick::GroupSize{2U, 2U},
+            hbrick::kHBrickFullDepth
+        )
+    );
+}

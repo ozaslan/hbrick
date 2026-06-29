@@ -4,6 +4,8 @@
 
 #include "hbrick/bit/boolean_closure.hpp"
 #include "hbrick/graph/connected_components.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 
 namespace hbrick {
 
@@ -61,10 +63,8 @@ void ClosureMatrixBuilder::transitiveClosureKleeneTruncatedInPlace(
     BitMatrix* scratch,
     const KleeneSquaringOptions options
 ) {
-    const uint32_t largest_component_size =
-        largestUndirectedComponentSize(graph);
-    const uint32_t squaring_count =
-        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    GraphSearchScratch scc_scratch{graph.numVertices()};
+    const uint32_t squaring_count = kleeneSquaringCountForCsrGraph(graph, scc_scratch);
     BooleanClosure::transitiveClosureKleeneSquaringInPlace(
         reflexive_relation,
         squaring_count,

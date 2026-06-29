@@ -13,6 +13,7 @@ add_library(
     dag_reachability.cpp
     reachability_density.cpp
     connected_components.cpp
+    kleene_squaring_bounds.cpp
 )
 
 target_include_directories(
@@ -22,7 +23,7 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(hbrick_graph PUBLIC hbrick_core hbrick_grid hbrick_project_options)
+target_link_libraries(hbrick_graph PUBLIC hbrick_core hbrick_grid hbrick_bit hbrick_project_options)
 target_link_libraries(hbrick_graph PRIVATE hbrick_project_warnings)
 
 find_package(Threads REQUIRED)

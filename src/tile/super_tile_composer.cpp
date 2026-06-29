@@ -5,6 +5,8 @@
 #include <stdexcept>
 
 #include "hbrick/bit/boolean_closure.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/kleene_squaring_bounds.hpp"
 #include "hbrick/tile/base_tile_summary.hpp"
 #include "hbrick/tile/tile_boundary_order.hpp"
 #include "hbrick/tile/tile_closure_util.hpp"
@@ -236,10 +238,11 @@ BitMatrix computeInterfaceClosure(
     BitMatrix composed_adjacency,
     BitMatrix* scratch
 ) {
-    const uint32_t largest_component_size =
-        largestUndirectedComponentSizeFromAdjacency(composed_adjacency);
-    const uint32_t squaring_count =
-        BooleanClosure::kleeneSquaringCountForLargestComponent(largest_component_size);
+    GraphSearchScratch scc_scratch{composed_adjacency.numRows()};
+    const uint32_t squaring_count = kleeneSquaringCountForReflexiveAdjacency(
+        composed_adjacency,
+        scc_scratch
+    );
     BooleanClosure::transitiveClosureKleeneSquaringInPlace(
         composed_adjacency,
         squaring_count,
