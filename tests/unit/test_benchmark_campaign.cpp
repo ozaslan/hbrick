@@ -1,11 +1,13 @@
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
 #include "hbrick/bench/benchmark_campaign.hpp"
 #include "hbrick/bench/benchmark_campaign_dataset.hpp"
 #include "hbrick/bench/benchmark_campaign_gallery.hpp"
+#include "hbrick/bench/benchmark_campaign_analysis.hpp"
 #include "hbrick/bench/benchmark_campaign_config.hpp"
 #include "hbrick/bench/benchmark_campaign_run.hpp"
 #include "hbrick/bench/reachability_benchmark_util.hpp"
@@ -84,7 +86,7 @@ TEST(BenchmarkCampaign, SmokeGridJobWritesResults) {
 
     hbrick::BenchmarkCampaignMapContext map{};
     map.map_id = "smoke";
-    map.generator_type = "unit_test";
+    map.generator_type = "smoke_grid";
 
     hbrick::ReachabilityBenchmarkConfig config{};
     config.query_count = 16U;
@@ -109,6 +111,10 @@ TEST(BenchmarkCampaign, SmokeGridJobWritesResults) {
     const std::string results = readFile(paths.results_csv);
     EXPECT_NE(results.find("CsrBfs"), std::string::npos);
     EXPECT_NE(results.find("BrickSearch"), std::string::npos);
+    EXPECT_NE(results.find("correctness_failed"), std::string::npos);
+    EXPECT_NE(results.find("map_class"), std::string::npos);
+    EXPECT_NE(results.find("steady_clock"), std::string::npos);
+    EXPECT_NE(results.find("smoke_grid"), std::string::npos);
 
     const std::string workload = readFile(paths.workload_json);
     EXPECT_NE(workload.find("\"pair_seed\":"), std::string::npos);
@@ -206,6 +212,60 @@ TEST(BenchmarkCampaign, ParseReachabilityBaselineNames) {
     hbrick::ReachabilityBaselineId method = hbrick::ReachabilityBaselineId::CsrBfs;
     EXPECT_TRUE(hbrick::reachabilityBaselineFromName("brickclosure", method));
     EXPECT_EQ(method, hbrick::ReachabilityBaselineId::BrickClosure);
+}
+
+TEST(BenchmarkCampaign, ConfigSweepExpandsBrickVariants) {
+    const hbrick::ReachabilityBenchmarkConfig base =
+        hbrick::benchmarkCampaignConfigFromPreset("brick");
+    std::string error;
+    const std::vector<hbrick::ReachabilityBenchmarkConfig> expanded =
+        hbrick::expandBenchmarkCampaignConfigSweep(base, "brick", error);
+    ASSERT_TRUE(error.empty()) << error;
+    EXPECT_EQ(expanded.size(), 4U);
+}
+
+TEST(BenchmarkCampaign, ConfigIdIsStable) {
+    hbrick::ReachabilityBenchmarkConfig config =
+        hbrick::benchmarkCampaignConfigFromPreset("smoke");
+    const std::string first = hbrick::benchmarkCampaignConfigId(config);
+    const std::string second = hbrick::benchmarkCampaignConfigId(config);
+    EXPECT_EQ(first, second);
+    EXPECT_FALSE(first.empty());
+}
+
+TEST(BenchmarkCampaign, ResultsCsvHeaderIsGolden) {
+    const char* header = hbrick::benchmarkCampaignResultsCsvHeaderLine();
+    EXPECT_NE(std::strstr(header, "query_min_ns"), nullptr);
+    EXPECT_NE(std::strstr(header, "query_max_ns"), nullptr);
+    EXPECT_NE(std::strstr(header, "correctness_failed"), nullptr);
+    EXPECT_NE(std::strstr(header, "map_class"), nullptr);
+    EXPECT_NE(std::strstr(header, "kleene_rounds_scheduled"), nullptr);
+    EXPECT_NE(std::strstr(header, "timer_source"), nullptr);
+    EXPECT_EQ(header[std::strlen(header) - 1U], '\n');
+}
+
+TEST(BenchmarkCampaign, MapClassDerivation) {
+    hbrick::BenchmarkCampaignMapCharacterization stats{};
+    EXPECT_EQ(
+        hbrick::benchmarkCampaignMapClass("procedural_maze", stats),
+        "perfect_maze"
+    );
+    stats.extra_openings = 2U;
+    EXPECT_EQ(
+        hbrick::benchmarkCampaignMapClass("procedural_maze", stats),
+        "cyclic_maze"
+    );
+    EXPECT_EQ(hbrick::benchmarkCampaignMapClass("movingai", stats), "movingai");
+    EXPECT_EQ(hbrick::benchmarkCampaignMapClass("smoke_grid", stats), "smoke_grid");
+}
+
+TEST(BenchmarkCampaign, KleeneOraclePresetIncludesClosureOracles) {
+    const hbrick::ReachabilityBenchmarkConfig config =
+        hbrick::benchmarkCampaignConfigFromPreset("kleene-oracle");
+    ASSERT_EQ(config.methods.size(), 3U);
+    EXPECT_EQ(config.methods[0], hbrick::ReachabilityBaselineId::FullClosure);
+    EXPECT_EQ(config.methods[1], hbrick::ReachabilityBaselineId::SccDagClosure);
+    EXPECT_EQ(config.methods[2], hbrick::ReachabilityBaselineId::BrickClosure);
 }
 
 TEST(BenchmarkCampaign, GenerateAndRunFromManifest) {

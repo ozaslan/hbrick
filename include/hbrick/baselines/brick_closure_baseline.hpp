@@ -116,6 +116,16 @@ public:
         return kleene_thread_count_;
     }
 
+    /** @brief Scheduled Kleene squaring rounds for the last preprocess run. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t kleeneRoundsScheduled() const noexcept {
+        return kleene_rounds_total_;
+    }
+
+    /** @brief Executed Kleene squaring rounds for the last preprocess run. @ingroup hbrick_baselines */
+    [[nodiscard]] uint32_t kleeneRoundsExecuted() const noexcept {
+        return kleene_rounds_executed_;
+    }
+
 private:
     enum class PreprocessPhase : uint8_t {
         Idle = 0,
@@ -143,6 +153,7 @@ private:
     uint32_t adjacency_vertex_cursor_ = 0U;
     uint32_t kleene_rounds_remaining_ = 0U;
     uint32_t kleene_rounds_total_ = 0U;
+    uint32_t kleene_rounds_executed_ = 0U;
     bool kleene_scc_compression_tried_ = false;
     KleeneSquaringOptions kleene_options_{};
     uint32_t kleene_thread_count_ = 1U;

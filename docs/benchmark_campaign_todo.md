@@ -1,6 +1,6 @@
 # Benchmark Campaign — TODO
 
-CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: sections 0–1, 2 (partial), 3–6 (partial) implemented** (see `docs/benchmark_campaign.md`, `docs/benchmark_campaign_seeding.md`).
+CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRICK, CSR/graph baselines, and Kleene/Warshall closure variants. **Status: sections 0–13 largely implemented** (see `docs/benchmark_campaign.md`, `docs/benchmark_campaign_seeding.md`, `docs/benchmark_campaign_kleene.md`, `docs/benchmark_campaign_decisions.md`).
 
 **Goal:** reproducible maps, precise preprocess/query/memory numbers, hard memory caps, disk artifacts (data + gallery), and fair comparison across methods on the same query workload.
 
@@ -15,7 +15,7 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 - [x] Reuse `reachability_oracle` / BFS checks for post-run correctness on sampled pairs (already wired in `ReachabilityBenchmarkConfig::correctness_check_count`).
 - [x] Reuse `tools/dataset_browser/map_render` pixel paths (or extract to `hbrick_viz`) for gallery PNG/SVG export without linking the full GUI. *(Headless passability PPM in `benchmark_campaign_gallery`; orientation overlay still future.)*
 - [x] Reuse `currentProcessRssBytes()` (`process_memory.cpp`) to sample peak RSS during preprocess, not only ledger-estimated index bytes.
-- [ ] Reuse existing micro-benchmarks (`kleene_closure_benchmark`, `port_closure_benchmark`) as optional preprocess-only tracks, separate from end-to-end query campaigns.
+- [x] Reuse existing micro-benchmarks (`kleene_closure_benchmark`, `port_closure_benchmark`) as optional preprocess-only tracks, separate from end-to-end query campaigns. (`kleene-micro` CLI wrapper; see `docs/benchmark_campaign_kleene.md`.)
 
 ---
 
@@ -35,7 +35,7 @@ CLI-driven, dataset-scale reachability study: flat BRICK (BFS + closure), H-BRIC
 - [x] Document the seeding contract: which RNG seeds control maze carving, extra openings, orientation, and query pairs, and in what order they are consumed. (`docs/benchmark_campaign_seeding.md`)
 - [x] Add tests: fixed generator + recipe parameters → identical `MazeLayout`, identical CSR `(V, E)`, identical orientation edge set, identical gallery image hash.
 - [ ] Add tests for `tools::Recipe` round-trip (save/load JSON) so CLI and GUI produce the same directed graph from the same recipe file. *(Covered in `test_recipe_reachability`; campaign-specific round-trip optional.)*
-- [ ] Add smoke test for the CLI campaign driver on one tiny map (one BRICK config, one H-BRICK config, one CSR baseline) with golden summary rows.
+- [x] Add smoke test for the CLI campaign driver on one tiny map (one BRICK config, one H-BRICK config, one CSR baseline) with golden summary rows. (`smoke` command + unit tests; golden CSV header test.)
 - [x] Pin environment notes in docs: monotonic timers, whether hyperthreading/turbo affects comparability, and recommended `taskset` / thread limits for published numbers.
 
 ---
@@ -74,50 +74,50 @@ Precompute once per map and copy into every benchmark row:
 
 - [x] Build `hbrick_benchmark_campaign` (or similar) CLI: load manifest → run methods → append results.
 - [x] Support `--resume` / skip-completed rows so multi-day sweeps can continue after interruption.
-- [x] Support `--methods`, `--maps`, and `--configs` filters for partial reruns. (`--map`, `--method`, `--methods`, `--preset`; `--configs` still future.)
+- [x] Support `--methods`, `--maps`, and `--configs` filters for partial reruns.
 - [x] Log progress to stderr and per-campaign `logs/` with enough context to debug a single failing row.
 
 ### 6a. Flat BRICK sweeps
 
-- [ ] Sweep tile size, memory cap, Kleene parallel options (`kleene_use_parallel`, thread count), and closure early-stop policy.
-- [ ] Run both **BRICK-Search** and **BRICK-Closure** on each map and parameter tuple.
+- [x] Sweep tile size, memory cap, Kleene parallel options (`kleene_use_parallel`, thread count), and closure early-stop policy. (`--configs brick`, `brick-kleene`; memory/early-stop columns in results)
+- [x] Run both **BRICK-Search** and **BRICK-Closure** on each map and parameter tuple. (`--preset brick` / `all`)
 
 ### 6b. H-BRICK sweeps
 
-- [ ] Sweep base tile size, `group_size`, `max_depth`, and memory cap.
+- [x] Sweep base tile size, `group_size`, `max_depth`, and memory cap. (`--configs hbrick`)
 - [x] H-BRICK is **not** in `ReachabilityBenchmarkConfig::defaultMethodList()` today — include it explicitly in the campaign method list. (`--preset all` / `brick` / `smoke`)
 
 ### 6c. CSR / graph baselines (same maps, same query pairs)
 
 - [x] CsrBfs, CsrDfs, Grail, TwoHop, SccDagSearch, SccDagClosure, FullClosure on every map. (`--preset csr` or `all`)
-- [ ] Use **CsrBfs** as the reference for speedup columns (consistent with existing `ReachabilityBenchmarkJob`).
+- [x] Use **CsrBfs** as the reference for speedup columns (consistent with existing `ReachabilityBenchmarkJob`).
 
 ---
 
 ## 7. Correctness on every campaign row
 
-- [ ] Run `correctness_check_count` random pairs per method against BFS oracle (or existing harness) and record mismatch count in results.
+- [x] Run `correctness_check_count` random pairs per method against BFS oracle (or existing harness) and record mismatch count in results.
 - [ ] For closure methods, optionally spot-check truncated Kleene vs Warshall on port/interface matrices for small `P` or `Γ` only (too expensive at scale).
-- [ ] Never report throughput for rows where correctness checks failed unless flagged `correctness_failed=true`.
+- [x] Never report throughput for rows where correctness checks failed unless flagged `correctness_failed=true`.
 
 ---
 
 ## 8. Memory accounting and hard limits
 
-- [ ] Pre-flight estimate: refuse to start a case when projected `BitMatrix` / CSR storage exceeds `max_memory_bytes` (use `ClosureMatrixBuilder::estimateReflexiveAdjacencyBytes`, tile preflight helpers).
-- [ ] Record ledger-charged index bytes, `indexStorageBytes()`, closure scratch bytes, and peak RSS samples at end of preprocess.
+- [x] Pre-flight estimate: refuse to start a case when projected `BitMatrix` / CSR storage exceeds `max_memory_bytes` (use `ClosureMatrixBuilder::estimateReflexiveAdjacencyBytes`, tile preflight helpers).
+- [x] Record ledger-charged index bytes, `indexStorageBytes()`, closure scratch bytes, and peak RSS samples at end of preprocess.
 - [ ] Add debug assertions (or test-only checks) that charged bytes match `BitMatrix::memoryBytes()` + CSR footprint for built indexes.
-- [ ] Record `skipped_by_policy` with the reason (memory, tile size, empty ports, etc.) in the results row.
+- [x] Record `skipped_by_policy` with the reason (memory, tile size, empty ports, etc.) in the results row.
 
 ---
 
 ## 9. Timing and throughput (high precision)
 
-- [ ] Use `steady_clock` / `BenchTimer` for preprocess, warmup, and timed query phases; document timer source in the schema.
+- [x] Use `steady_clock` / `BenchTimer` for preprocess, warmup, and timed query phases; document timer source in the schema.
 - [ ] Report preprocess wall time with phase breakdown where available (index build, adjacency fill, Kleene/Warshall rounds, H-BRICK hierarchy levels).
-- [ ] Report query stats: count, mean, median, min, max, p90/p95; **queries per second** from timed batch only (exclude warmup and correctness checks).
-- [ ] Report **end-to-end** time (preprocess + all timed queries) and **amortized QPS** at the campaign’s `query_count` so BRICK/H-BRICK preprocess cost is visible.
-- [ ] Record `kleene_rounds_scheduled` vs `kleene_rounds_effective` (early fixpoint) when exposed by the baseline.
+- [x] Report query stats: count, mean, median, min, max, p90/p95; **queries per second** from timed batch only (exclude warmup and correctness checks).
+- [x] Report **end-to-end** time (preprocess + all timed queries) and **amortized QPS** at the campaign’s `query_count` so BRICK/H-BRICK preprocess cost is visible.
+- [x] Record `kleene_rounds_scheduled` vs `kleene_rounds_effective` (early fixpoint) when exposed by the baseline.
 
 ---
 
@@ -134,37 +134,37 @@ Closure ladder to benchmark explicitly (not only the production default):
 | W0 | Warshall on full reflexive matrix (oracle) |
 | W1 | Warshall on condensation DAG only (`SccDagClosure` storage model) |
 
-- [ ] Expose each variant as a named benchmark mode (flags or config enum), including CSR-built vs bit-matrix-built adjacency where both exist.
+- [x] Expose each variant as a named benchmark mode (flags or config enum), including CSR-built vs bit-matrix-built adjacency where both exist. *(W0/W1 via `--preset kleene-oracle`; K0–K2 in `kleene_closure_benchmark`; K3 in production BRICK.)*
 - [ ] Correctness: each Kleene variant vs W0 on a sampled subset; report max matrix dimension where full Warshall is feasible.
-- [ ] **Separate experiment track** for K3 vs `SccDagClosure` (W1): comparable preprocess cost, different storage/query models — do not mix in the main leaderboard without labeling.
-- [ ] Document production default: K3 with fallback to K2/K1 when \(C = V\).
+- [x] **Separate experiment track** for K3 vs `SccDagClosure` (W1): comparable preprocess cost, different storage/query models — do not mix in the main leaderboard without labeling.
+- [x] Document production default: K3 with fallback to K2/K1 when \(C = V\). (`docs/benchmark_campaign_kleene.md`)
 
 ---
 
 ## 11. Analysis and reporting
 
-- [ ] Produce campaign `summary.md`: tables of winners per map class (sparse, cyclic, large SCC count, etc.).
-- [ ] Plot-friendly `results.csv` columns for preprocess time, index MB, QPS, speedup vs CsrBfs, and map characterization fields.
+- [x] Produce campaign `summary.md`: tables of winners per map class (sparse, cyclic, large SCC count, etc.).
+- [x] Plot-friendly `results.csv` columns for preprocess time, index MB, QPS, speedup vs CsrBfs, and map characterization fields.
 - [ ] Optional: export JSON Lines for streaming ingestion; optional notebook or script templates for pandas/R (out of repo is fine).
-- [ ] Tag rows with `map_class` buckets (e.g. `perfect_maze`, `cyclic_maze`, `movingai`, `random_asymmetric`) for grouped analysis.
+- [x] Tag rows with `map_class` buckets (e.g. `perfect_maze`, `cyclic_maze`, `movingai`, `random_asymmetric`) for grouped analysis.
 
 ---
 
 ## 12. CI and regression
 
-- [ ] PR smoke: 1–2 tiny maps, 2–3 methods, &lt;60s total, verifies CLI + oracle + CSV write.
+- [x] PR smoke: 1–2 tiny maps, 2–3 methods, &lt;60s total, verifies CLI + oracle + CSV write. (`ctest -R BenchmarkCampaign`)
 - [ ] Nightly or manual full campaign job (document how to run, do not block PR CI).
-- [ ] Keep a small **golden** `results.csv` snippet or checksum test for schema stability.
+- [x] Keep a small **golden** `results.csv` snippet or checksum test for schema stability. (`ResultsCsvHeaderIsGolden` unit test)
 
 ---
 
 ## 13. Open questions
 
-- [ ] Primary storage for large campaigns: one big `results.csv` or one file per (map, method) for easier resume?
-- [ ] Global campaign memory budget vs per-case `max_memory_bytes`?
-- [ ] Include `ReachabilityDensity` in manifest for all maps or only when `V` is below a threshold?
-- [ ] Should gallery include orientation edge overlay, SCC coloring, or port/tile boundaries for BRICK debugging?
-- [ ] Publish separate leaderboards for **index MB** vs **QPS** vs **end-to-end** (preprocess amortized)?
+- [x] Primary storage for large campaigns: one big `results.csv` or one file per (map, method) for easier resume? *(One `results.csv`; see `docs/benchmark_campaign_decisions.md`)*
+- [x] Global campaign memory budget vs per-case `max_memory_bytes`? *(Per-case cap for now.)*
+- [x] Include `ReachabilityDensity` in manifest for all maps or only when `V` is below a threshold? *(Not by default.)*
+- [x] Should gallery include orientation edge overlay, SCC coloring, or port/tile boundaries for BRICK debugging? *(PPM passability only in v1.)*
+- [x] Publish separate leaderboards for **index MB** vs **QPS** vs **end-to-end** (preprocess amortized)? *(Documented views from same CSV.)*
 
 ---
 

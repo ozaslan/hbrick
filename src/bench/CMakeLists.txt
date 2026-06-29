@@ -12,6 +12,7 @@ add_library(
     benchmark_campaign_gallery.cpp
     benchmark_campaign_run.cpp
     benchmark_campaign_config.cpp
+    benchmark_campaign_analysis.cpp
     benchmark_campaign_log.cpp
     ${CMAKE_SOURCE_DIR}/tests/support/maze_generator.cpp
     ${CMAKE_SOURCE_DIR}/tests/support/movingai_map_catalog.cpp

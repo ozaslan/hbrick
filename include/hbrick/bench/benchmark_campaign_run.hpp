@@ -34,6 +34,7 @@ struct BenchmarkCampaignManifestEntry {
 struct BenchmarkCampaignRunOptions {
     bool resume = false;
     std::vector<std::string> map_ids;
+    std::vector<std::string> config_sweeps{"default"};
     std::filesystem::path datasets_root_override;
     BenchmarkCampaignLogger* logger = nullptr;
 };

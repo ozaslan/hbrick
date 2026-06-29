@@ -64,7 +64,23 @@ Schema version: `2` (`kBenchmarkCampaignSchemaVersion`). See `docs/benchmark_cam
 | `smoke` | CsrBfs, BrickSearch, BrickClosure, HBrick |
 | `csr` | CsrBfs, CsrDfs, SccDagSearch, SccDagClosure, TwoHop, Grail, FullClosure |
 | `brick` | BrickSearch, BrickClosure, HBrick |
+| `kleene-oracle` | FullClosure (W0), SccDagClosure (W1), BrickClosure (K3 path) |
 | `all` | CSR preset + brick preset (default for `run`) |
+
+### Config sweeps (`--configs`)
+
+| Sweep | Variants |
+|-------|----------|
+| `default` | Single config (base parameters) |
+| `brick-tile` | Tile 4×4 and 8×8 |
+| `brick-kleene` | Kleene sequential vs parallel |
+| `brick` | Tile × Kleene (4 variants) |
+| `hbrick` | Tile 4×4/8×8 × depth 2/full |
+| `all` | Union of `brick` + `hbrick` sweeps |
+
+Results rows include `config_id`, `map_class`, `correctness_failed`, query min/max, Kleene round counts, `timer_source` (`steady_clock`), plus tile, memory, Kleene, and H-BRICK columns for resume and plotting.
+
+See `docs/benchmark_campaign_kleene.md` for the Kleene/Warshall variant matrix and `docs/benchmark_campaign_decisions.md` for storage and leaderboard conventions.
 
 Override with `--method NAME` (repeatable) or `--methods CsrBfs,BrickSearch`.
 
@@ -75,7 +91,14 @@ Override with `--method NAME` (repeatable) or `--methods CsrBfs,BrickSearch`.
 - `benchmark_campaign_run.hpp` — `runBenchmarkCampaignFromManifest`
 - `benchmark_campaign_config.hpp` — method presets and name parsing
 - `benchmark_campaign_log.hpp` — per-run log files under `logs/`
+- `benchmark_campaign_analysis.hpp` — `map_class`, summary regeneration, golden CSV header
 - `benchmark_campaign_gallery.hpp` — headless passability PPM export
+
+### Kleene micro-benchmark
+
+```bash
+./build/dev/src/bench/hbrick_benchmark_campaign kleene-micro
+```
 
 ## Tests
 

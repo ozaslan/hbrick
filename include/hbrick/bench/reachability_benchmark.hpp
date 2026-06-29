@@ -189,6 +189,10 @@ struct BaselineBenchmarkMetrics {
     bool kleene_parallel = false;
     /** @brief Effective Kleene worker count when @ref kleene_parallel is @c true. @ingroup hbrick_bench */
     uint32_t kleene_thread_count = 1U;
+    /** @brief Scheduled Kleene squaring rounds for @ref ReachabilityBaselineId::BrickClosure. @ingroup hbrick_bench */
+    uint32_t kleene_rounds_scheduled = 0U;
+    /** @brief Executed Kleene squaring rounds (early fixpoint may stop sooner). @ingroup hbrick_bench */
+    uint32_t kleene_rounds_effective = 0U;
     /**
      * @brief Human-readable explanation when @ref status is @ref BaselineStatus::SkippedByPolicy.
      * @ingroup hbrick_bench

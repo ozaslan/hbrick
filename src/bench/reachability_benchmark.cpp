@@ -1407,6 +1407,10 @@ struct ReachabilityBenchmarkJob::Impl {
             metrics.warshall_pivots_completed = metrics.warshall_pivot_total;
             metrics.kleene_parallel = baselines.brick_closure.kleeneOptions().use_parallel;
             metrics.kleene_thread_count = baselines.brick_closure.kleeneThreadCount();
+            metrics.kleene_rounds_scheduled =
+                baselines.brick_closure.kleeneRoundsScheduled();
+            metrics.kleene_rounds_effective =
+                baselines.brick_closure.kleeneRoundsExecuted();
         }
 
         if (metrics.status == BaselineStatus::SkippedByPolicy) {
@@ -1736,6 +1740,10 @@ bool ReachabilityBenchmarkJob::step() noexcept {
                             impl_->baselines.brick_closure.kleeneOptions().use_parallel;
                         metrics.kleene_thread_count =
                             impl_->baselines.brick_closure.kleeneThreadCount();
+                        metrics.kleene_rounds_scheduled =
+                            impl_->baselines.brick_closure.kleeneRoundsScheduled();
+                        metrics.kleene_rounds_effective =
+                            impl_->baselines.brick_closure.kleeneRoundsExecuted();
                     }
 
                     if (metrics.status != BaselineStatus::Completed) {

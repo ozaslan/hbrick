@@ -34,15 +34,19 @@ void printUsage(const char* program) {
         "       [--datasets-root PATH] [--movingai-set SET --movingai-map MAP]\n"
         "       [--movingai-smoke]\n"
         "  %s run <campaign_dir> [--id NAME] [--resume] [--map MAP_ID ...]\n"
-        "       [--preset smoke|csr|brick|all] [--method NAME ...]\n"
-        "       [--methods CsrBfs,BrickSearch,...] [--datasets-root PATH]\n"
+        "       [--preset smoke|csr|brick|kleene-oracle|all] [--method NAME ...]\n"
+        "       [--methods CsrBfs,BrickSearch,...] [--configs default|brick|hbrick|all]\n"
+        "       [--datasets-root PATH]\n"
         "  %s smoke <campaign_dir> [--id NAME]\n"
+        "  %s kleene-micro\n"
         "\n"
         "  init            Create campaign layout (manifest, results headers, metadata).\n"
         "  generate        Procedural mazes + recipes + gallery PPM + manifest rows.\n"
         "  import-movingai MovingAI maps from disk into manifest (no benchmarks).\n"
         "  run             Benchmark manifest rows (use --resume to skip completed maps).\n"
-        "  smoke           init + run a small grid benchmark.\n",
+        "  smoke           init + run a small grid benchmark.\n"
+        "  kleene-micro    Run kleene_closure_benchmark (preprocess-only Kleene/Warshall study).\n",
+        program,
         program,
         program,
         program,
@@ -398,8 +402,17 @@ int runBenchmark(
         options.datasets_root_override = datasets_root;
     }
 
-    hbrick::BenchmarkCampaignLogger logger;
     std::string error;
+    const std::string config_sweeps_csv = stringOption(argc, argv, "--configs", "default");
+    if (!hbrick::parseBenchmarkCampaignConfigSweepNames(
+            config_sweeps_csv,
+            options.config_sweeps,
+            error)) {
+        std::fprintf(stderr, "run failed: %s\n", error.c_str());
+        return 1;
+    }
+
+    hbrick::BenchmarkCampaignLogger logger;
     if (!logger.open(paths.logs_dir, campaign_id, error)) {
         std::fprintf(stderr, "run warning: could not open log file: %s\n", error.c_str());
     } else {
@@ -465,15 +478,42 @@ int runSmoke(const std::filesystem::path& campaign_dir, std::string campaign_id)
     return 0;
 }
 
+int runKleeneMicro(const char* program_path) {
+    const std::filesystem::path executable_path = program_path;
+    const std::filesystem::path kleene_binary =
+        executable_path.parent_path() / "kleene_closure_benchmark";
+    std::error_code error;
+    if (!std::filesystem::exists(kleene_binary, error)) {
+        std::fprintf(
+            stderr,
+            "kleene-micro: %s not found (build kleene_closure_benchmark)\n",
+            kleene_binary.c_str()
+        );
+        return 1;
+    }
+    const std::string command = kleene_binary.string();
+    std::printf("Running %s\n", command.c_str());
+    return std::system(command.c_str());
+}
+
 }  // namespace
 
 int main(const int argc, char** argv) {
-    if (argc < 3) {
+    if (argc < 2) {
         printUsage(argv[0]);
         return 1;
     }
 
     const char* command = argv[1];
+    if (std::strcmp(command, "kleene-micro") == 0) {
+        return runKleeneMicro(argv[0]);
+    }
+
+    if (argc < 3) {
+        printUsage(argv[0]);
+        return 1;
+    }
+
     const std::filesystem::path campaign_dir = argv[2];
     const std::string campaign_id = campaignIdFromArgs(argc, argv);
 

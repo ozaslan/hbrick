@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "hbrick/bench/benchmark_campaign_config.hpp"
 #include "hbrick/bench/reachability_benchmark.hpp"
 #include "hbrick/graph/directed_grid_graph.hpp"
 #include "hbrick/grid/maze_layout.hpp"
@@ -118,6 +119,10 @@ struct BenchmarkCampaignResultRow {
     BenchmarkCampaignMapContext map;
     BaselineBenchmarkMetrics metrics;
     BenchmarkCampaignQueryWorkload workload;
+    BenchmarkCampaignRunParameters run_parameters;
+    std::string map_class;
+    uint32_t passable_cells = 0U;
+    uint32_t num_sccs = 0U;
     std::string campaign_id;
     std::string run_timestamp_utc;
     uint32_t num_vertices = 0U;
@@ -157,7 +162,10 @@ struct BenchmarkCampaignResultRow {
     const BenchmarkCampaignMetadata& metadata,
     const BenchmarkCampaignQueryWorkload& workload,
     const ReachabilityBenchmarkReport& report,
-    uint64_t peak_preprocess_rss_bytes
+    const ReachabilityBenchmarkConfig& config,
+    uint64_t peak_preprocess_rss_bytes,
+    const std::string& map_class = {},
+    const BenchmarkCampaignMapCharacterization* map_characterization = nullptr
 );
 
 /** @brief Writes or overwrites @c workload.json. @ingroup hbrick_bench */
@@ -220,7 +228,9 @@ struct BenchmarkCampaignResultRow {
     ReachabilityBenchmarkConfig config,
     std::string& error_message,
     bool append_manifest = true,
-    BenchmarkCampaignLogger* logger = nullptr
+    BenchmarkCampaignLogger* logger = nullptr,
+    const std::string& map_class = {},
+    const BenchmarkCampaignMapCharacterization* map_characterization = nullptr
 );
 
 }  // namespace hbrick

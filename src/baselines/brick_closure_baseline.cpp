@@ -105,6 +105,7 @@ void BrickClosureBaseline::resetPreprocessState() noexcept {
     adjacency_vertex_cursor_ = 0U;
     kleene_rounds_remaining_ = 0U;
     kleene_rounds_total_ = 0U;
+    kleene_rounds_executed_ = 0U;
     kleene_scc_compression_tried_ = false;
     query_reachable_ports_ = BitVector{};
     num_vertices_ = 0U;
@@ -218,6 +219,7 @@ bool BrickClosureBaseline::runKleeneStep() noexcept {
                 scc_scratch,
                 &port_closure_scratch_,
                 kleene_options_)) {
+            kleene_rounds_executed_ = 0U;
             preprocess_work_completed_ += static_cast<uint64_t>(kleene_rounds_remaining_);
             kleene_rounds_remaining_ = 0U;
             status_ = BaselineStatus::Completed;
@@ -231,6 +233,7 @@ bool BrickClosureBaseline::runKleeneStep() noexcept {
         port_closure_scratch_,
         kleene_options_
     );
+    ++kleene_rounds_executed_;
     ++preprocess_work_completed_;
     if (fixpoint) {
         kleene_rounds_remaining_ = 0U;

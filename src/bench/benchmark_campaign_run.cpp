@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "hbrick/bench/benchmark_campaign_analysis.hpp"
 #include "hbrick/bench/benchmark_campaign_config.hpp"
 #include "hbrick/bench/benchmark_campaign_dataset.hpp"
 #include "hbrick/graph/directed_grid_graph_builder.hpp"
@@ -127,13 +128,20 @@ namespace {
     return true;
 }
 
-using CompletedMethodMap =
-    std::unordered_map<std::string, std::unordered_set<std::string>>;
+using CompletedResultKeys = std::unordered_set<std::string>;
 
-[[nodiscard]] CompletedMethodMap completedMethodsFromResults(
+[[nodiscard]] std::string completedResultKey(
+    const std::string& map_id,
+    const std::string& method_name,
+    const std::string& config_id
+) {
+    return map_id + '\x1f' + method_name + '\x1f' + config_id;
+}
+
+[[nodiscard]] CompletedResultKeys completedResultKeysFromResults(
     const std::filesystem::path& results_csv
 ) {
-    CompletedMethodMap completed;
+    CompletedResultKeys completed;
     std::ifstream input(results_csv);
     if (!input.is_open()) {
         return completed;
@@ -149,24 +157,29 @@ using CompletedMethodMap =
         if (!splitCsvLine(line, fields) || fields.size() < 6U) {
             continue;
         }
-        if (fields[5] == "Completed") {
-            completed[fields[3]].insert(fields[4]);
+        if (fields[6] != "Completed") {
+            continue;
         }
+        const std::string config_id =
+            fields.size() > 34U ? fields[34] : std::string{};
+        completed.insert(completedResultKey(fields[3], fields[5], config_id));
     }
     return completed;
 }
 
-[[nodiscard]] bool allMethodsCompleted(
+[[nodiscard]] bool allMethodsCompletedForConfig(
     const std::string& map_id,
     const std::span<const ReachabilityBaselineId> methods,
-    const CompletedMethodMap& completed
+    const std::string& config_id,
+    const CompletedResultKeys& completed
 ) {
-    const auto iterator = completed.find(map_id);
-    if (iterator == completed.end()) {
-        return false;
-    }
     for (const ReachabilityBaselineId method : methods) {
-        if (iterator->second.count(reachabilityBaselineName(method)) == 0U) {
+        const std::string key = completedResultKey(
+            map_id,
+            reachabilityBaselineName(method),
+            config_id
+        );
+        if (completed.count(key) == 0U) {
             return false;
         }
     }
@@ -374,69 +387,113 @@ bool runBenchmarkCampaignFromManifest(
         config = benchmarkCampaignConfigFromPreset("all");
     }
 
-    const CompletedMethodMap completed =
+    const std::vector<ReachabilityBenchmarkConfig> config_variants =
+        expandBenchmarkCampaignConfigSweeps(
+            config,
+            options.config_sweeps,
+            error_message
+        );
+    if (!error_message.empty()) {
+        return false;
+    }
+
+    const CompletedResultKeys completed =
         options.resume
-            ? completedMethodsFromResults(paths.results_csv)
-            : CompletedMethodMap{};
+            ? completedResultKeysFromResults(paths.results_csv)
+            : CompletedResultKeys{};
 
     bool ran_any = false;
     for (const BenchmarkCampaignManifestEntry& entry : entries) {
         if (!mapMatchesFilter(entry.map.map_id, options.map_ids)) {
             continue;
         }
-        if (options.resume
-            && allMethodsCompleted(entry.map.map_id, config.methods, completed)) {
-            if (options.logger != nullptr) {
-                options.logger->infof(
-                    "Skipping %s (all methods already completed)",
-                    entry.map.map_id.c_str()
-                );
-            }
-            continue;
-        }
-
-        if (options.logger != nullptr) {
-            options.logger->infof(
-                "Running manifest row %s (%s)",
-                entry.map.map_id.c_str(),
-                entry.map.generator_type.c_str()
-            );
-        }
 
         MazeLayout layout{1U, 1U, false};
         DirectedGridGraph graph{};
-        if (!rebuildCampaignMapFromManifestEntry(
-                entry,
-                options.datasets_root_override,
-                layout,
-                graph,
-                error_message)) {
-            if (options.logger != nullptr) {
-                options.logger->error(error_message.c_str());
-            }
-            return false;
-        }
+        bool map_built = false;
 
-        if (!runBenchmarkCampaignGridJob(
-                paths,
-                metadata,
-                entry.map,
-                graph,
-                layout,
-                config,
-                error_message,
-                false,
-                options.logger)) {
-            return false;
+        for (const ReachabilityBenchmarkConfig& variant : config_variants) {
+            const std::string config_id = benchmarkCampaignConfigId(variant);
+            if (options.resume
+                && allMethodsCompletedForConfig(
+                    entry.map.map_id,
+                    variant.methods,
+                    config_id,
+                    completed
+                )) {
+                if (options.logger != nullptr) {
+                    options.logger->infof(
+                        "Skipping %s config %s (all methods completed)",
+                        entry.map.map_id.c_str(),
+                        config_id.c_str()
+                    );
+                }
+                continue;
+            }
+
+            if (!map_built) {
+                if (options.logger != nullptr) {
+                    options.logger->infof(
+                        "Running manifest row %s (%s)",
+                        entry.map.map_id.c_str(),
+                        entry.map.generator_type.c_str()
+                    );
+                }
+                if (!rebuildCampaignMapFromManifestEntry(
+                        entry,
+                        options.datasets_root_override,
+                        layout,
+                        graph,
+                        error_message)) {
+                    if (options.logger != nullptr) {
+                        options.logger->error(error_message.c_str());
+                    }
+                    return false;
+                }
+                map_built = true;
+            }
+
+            if (options.logger != nullptr) {
+                options.logger->infof(
+                    "  config %s (%zu methods)",
+                    config_id.c_str(),
+                    variant.methods.size()
+                );
+            }
+
+            const std::string map_class = benchmarkCampaignMapClass(
+                entry.map.generator_type,
+                entry.characterization
+            );
+            if (!runBenchmarkCampaignGridJob(
+                    paths,
+                    metadata,
+                    entry.map,
+                    graph,
+                    layout,
+                    variant,
+                    error_message,
+                    false,
+                    options.logger,
+                    map_class,
+                    &entry.characterization)) {
+                return false;
+            }
+            ran_any = true;
         }
-        ran_any = true;
     }
 
     if (!ran_any) {
         error_message = "No manifest rows matched filters or all were skipped";
         return false;
     }
-    return true;
+
+    return regenerateBenchmarkCampaignSummaryFromResults(
+        paths.results_csv,
+        paths.summary_md,
+        metadata,
+        error_message
+    );
 }
 
 }  // namespace hbrick

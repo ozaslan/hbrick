@@ -9,6 +9,8 @@
 
 #include "hbrick/baselines/baseline_status.hpp"
 #include "hbrick/bench/benchmark_campaign_log.hpp"
+#include "hbrick/bench/benchmark_campaign_analysis.hpp"
+#include "hbrick/bench/benchmark_campaign_config.hpp"
 #include "hbrick/bench/process_memory.hpp"
 #include "hbrick/bench/reachability_benchmark_format.hpp"
 
@@ -110,14 +112,7 @@ namespace {
 }
 
 [[nodiscard]] std::string campaignResultsCsvHeader() {
-    return "campaign_schema_version,campaign_id,run_timestamp_utc,map_id,generator_type,"
-           "method,status,policy_skip_detail,num_vertices,num_edges,pair_seed,pair_list_hash,"
-           "query_count,warmup_queries,correctness_check_count,preprocess_ns,"
-           "estimated_index_bytes,peak_preprocess_rss_bytes,query_count_timed,"
-           "query_mean_ns,query_median_ns,query_p95_ns,queries_per_second,"
-           "total_benchmark_ns,speedup_vs_bfs,total_speedup_vs_bfs,"
-           "correctness_checks,correctness_mismatches,warshall_matrix_order,"
-           "kleene_parallel,kleene_thread_count\n";
+    return benchmarkCampaignResultsCsvHeaderLine();
 }
 
 [[nodiscard]] std::string campaignManifestCsvHeader() {
@@ -172,6 +167,7 @@ namespace {
 }
 
 [[nodiscard]] std::string formatResultCsvRow(const BenchmarkCampaignResultRow& row) {
+    const bool correctness_failed = row.metrics.correctness_mismatches > 0U;
     std::ostringstream stream;
     stream << kBenchmarkCampaignSchemaVersion << ','
            << csvEscape(row.campaign_id) << ','
@@ -195,15 +191,32 @@ namespace {
            << row.metrics.query_stats.mean_nanoseconds << ','
            << row.metrics.query_stats.median_nanoseconds << ','
            << row.metrics.query_stats.p95_nanoseconds << ','
+           << row.metrics.query_stats.min_nanoseconds << ','
+           << row.metrics.query_stats.max_nanoseconds << ','
            << row.metrics.query_stats.queries_per_second << ','
            << row.metrics.total_benchmark_nanoseconds << ','
            << row.metrics.speedup_vs_bfs << ','
            << row.metrics.total_speedup_vs_bfs << ','
            << row.metrics.correctness_checks << ','
            << row.metrics.correctness_mismatches << ','
+           << (correctness_failed ? "true" : "false") << ','
            << row.metrics.warshall_matrix_order << ','
            << (row.metrics.kleene_parallel ? "true" : "false") << ','
-           << row.metrics.kleene_thread_count << '\n';
+           << row.metrics.kleene_thread_count << ','
+           << csvEscape(row.run_parameters.config_id) << ','
+           << row.run_parameters.brick_tile_width << ','
+           << row.run_parameters.brick_tile_height << ','
+           << row.run_parameters.max_memory_bytes << ','
+           << row.run_parameters.hbrick_group_width << ','
+           << row.run_parameters.hbrick_group_height << ','
+           << row.run_parameters.hbrick_max_depth << ','
+           << (row.run_parameters.closure_early_stop ? "true" : "false") << ','
+           << csvEscape(row.map_class) << ','
+           << row.passable_cells << ','
+           << row.num_sccs << ','
+           << row.metrics.kleene_rounds_scheduled << ','
+           << row.metrics.kleene_rounds_effective << ','
+           << "steady_clock" << '\n';
     return stream.str();
 }
 
@@ -354,21 +367,36 @@ std::vector<BenchmarkCampaignResultRow> benchmarkCampaignRowsFromReport(
     const BenchmarkCampaignMetadata& metadata,
     const BenchmarkCampaignQueryWorkload& workload,
     const ReachabilityBenchmarkReport& report,
-    const uint64_t peak_preprocess_rss_bytes
+    const ReachabilityBenchmarkConfig& config,
+    const uint64_t peak_preprocess_rss_bytes,
+    const std::string& map_class,
+    const BenchmarkCampaignMapCharacterization* map_characterization
 ) {
     std::vector<BenchmarkCampaignResultRow> rows;
     rows.reserve(report.methods.size());
     const std::string run_timestamp = currentUtcTimestamp();
+    const BenchmarkCampaignRunParameters run_parameters =
+        benchmarkCampaignRunParametersFromConfig(config);
+    BenchmarkCampaignMapCharacterization empty_characterization{};
+    const BenchmarkCampaignMapCharacterization& characterization =
+        map_characterization != nullptr ? *map_characterization : empty_characterization;
+    const std::string resolved_map_class = map_class.empty()
+        ? benchmarkCampaignMapClass(map.generator_type, characterization)
+        : map_class;
     for (const BaselineBenchmarkMetrics& method_metrics : report.methods) {
         BenchmarkCampaignResultRow row{};
         row.map = map;
         row.metrics = method_metrics;
         row.workload = workload;
+        row.run_parameters = run_parameters;
         row.campaign_id = metadata.campaign_id;
         row.run_timestamp_utc = run_timestamp;
         row.num_vertices = report.num_vertices;
         row.num_edges = report.num_edges;
         row.peak_preprocess_rss_bytes = peak_preprocess_rss_bytes;
+        row.map_class = resolved_map_class;
+        row.passable_cells = characterization.passable_cells;
+        row.num_sccs = characterization.num_strongly_connected_components;
         rows.push_back(row);
     }
     return rows;
@@ -484,8 +512,8 @@ bool writeBenchmarkCampaignSummaryMd(
            << "| CPU | " << metadata.cpu_model << " |\n"
            << "| Threads | " << metadata.hardware_concurrency << " |\n\n"
            << "## Results\n\n"
-           << "| Map | Method | Status | Preprocess | QPS | Total vs BFS |\n"
-           << "|-----|--------|--------|------------|-----|-------------|\n";
+           << "| Map | Method | Config | Status | Preprocess | QPS | Total vs BFS |\n"
+           << "|-----|--------|--------|--------|------------|-----|-------------|\n";
 
     for (const BenchmarkCampaignResultRow& row : rows) {
         char preprocess_buffer[32];
@@ -502,6 +530,7 @@ bool writeBenchmarkCampaignSummaryMd(
         );
         stream << "| " << row.map.map_id << " | "
                << reachabilityBaselineName(row.metrics.method) << " | "
+               << row.run_parameters.config_id << " | "
                << baselineStatusLabel(row.metrics.status) << " | "
                << preprocess_buffer << " | "
                << row.metrics.query_stats.queries_per_second << " | "
@@ -536,12 +565,15 @@ bool runBenchmarkCampaignGridJob(
     ReachabilityBenchmarkConfig config,
     std::string& error_message,
     const bool append_manifest,
-    BenchmarkCampaignLogger* logger
+    BenchmarkCampaignLogger* logger,
+    const std::string& map_class,
+    const BenchmarkCampaignMapCharacterization* map_characterization
 ) {
     if (logger != nullptr) {
         logger->infof(
-            "Starting benchmark for map %s (%u vertices, %llu edges)",
+            "Starting benchmark for map %s config %s (%u vertices, %llu edges)",
             map.map_id.c_str(),
+            benchmarkCampaignConfigId(config).c_str(),
             graph.numVertices(),
             static_cast<unsigned long long>(graph.numEdges())
         );
@@ -584,7 +616,16 @@ bool runBenchmarkCampaignGridJob(
     }
 
     const std::vector<BenchmarkCampaignResultRow> rows =
-        benchmarkCampaignRowsFromReport(map, metadata, workload, report, peak_rss);
+        benchmarkCampaignRowsFromReport(
+            map,
+            metadata,
+            workload,
+            report,
+            config,
+            peak_rss,
+            map_class,
+            map_characterization
+        );
     if (!appendBenchmarkCampaignResultsCsv(paths.results_csv, rows, error_message)) {
         if (logger != nullptr) {
             logger->error(error_message.c_str());
@@ -605,10 +646,10 @@ bool runBenchmarkCampaignGridJob(
         logger->infof("Finished map %s", map.map_id.c_str());
     }
 
-    return writeBenchmarkCampaignSummaryMd(
+    return regenerateBenchmarkCampaignSummaryFromResults(
+        paths.results_csv,
         paths.summary_md,
         metadata,
-        rows,
         error_message
     );
 }
