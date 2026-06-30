@@ -1,0 +1,23 @@
+2026-06-30T21:23:41Z [INFO] Campaign log opened for run01
+2026-06-30T21:23:41Z [INFO] Running manifest row proc_w5h5_c1_o1_open2_random_asymmetric_i0 (procedural_maze)
+2026-06-30T21:23:41Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (7 methods)
+2026-06-30T21:23:41Z [INFO] Starting benchmark for map proc_w5h5_c1_o1_open2_random_asymmetric_i0 config t4x4_k0_mem512m_hg2x2_dfull (121 vertices, 24 edges)
+2026-06-30T21:23:41Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 3389112.5)
+2026-06-30T21:23:41Z [INFO]   CsrDfs: Completed (preprocess 0 ns, QPS 8164827.5)
+2026-06-30T21:23:41Z [INFO]   SccDagSearch: Completed (preprocess 34185 ns, QPS 19541984.7)
+2026-06-30T21:23:41Z [INFO]   SccDagClosure: Completed (preprocess 49516 ns, QPS 26307676.5)
+2026-06-30T21:23:41Z [INFO]   TwoHop: Completed (preprocess 62759 ns, QPS 20032866.4)
+2026-06-30T21:23:41Z [INFO]   Grail: Completed (preprocess 24649 ns, QPS 9231213.0)
+2026-06-30T21:23:41Z [INFO]   FullClosure: Completed (preprocess 39959 ns, QPS 26594639.5)
+2026-06-30T21:23:41Z [INFO] Finished map proc_w5h5_c1_o1_open2_random_asymmetric_i0
+2026-06-30T21:23:41Z [INFO] Running manifest row proc_w5h5_c1_o1_open2_random_asymmetric_i1 (procedural_maze)
+2026-06-30T21:23:41Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (7 methods)
+2026-06-30T21:23:41Z [INFO] Starting benchmark for map proc_w5h5_c1_o1_open2_random_asymmetric_i1 config t4x4_k0_mem512m_hg2x2_dfull (121 vertices, 24 edges)
+2026-06-30T21:23:41Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 8538456.4)
+2026-06-30T21:23:41Z [INFO]   CsrDfs: Completed (preprocess 0 ns, QPS 8246891.3)
+2026-06-30T21:23:41Z [INFO]   SccDagSearch: Completed (preprocess 16991 ns, QPS 8355909.5)
+2026-06-30T21:23:41Z [INFO]   SccDagClosure: Completed (preprocess 62682 ns, QPS 10837355.0)
+2026-06-30T21:23:41Z [INFO]   TwoHop: Completed (preprocess 88642 ns, QPS 9490620.6)
+2026-06-30T21:23:41Z [INFO]   Grail: Completed (preprocess 24855 ns, QPS 5718242.5)
+2026-06-30T21:23:41Z [INFO]   FullClosure: Completed (preprocess 49869 ns, QPS 10813094.0)
+2026-06-30T21:23:41Z [INFO] Finished map proc_w5h5_c1_o1_open2_random_asymmetric_i1

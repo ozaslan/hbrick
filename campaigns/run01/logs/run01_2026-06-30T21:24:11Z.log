@@ -1,0 +1,21 @@
+2026-06-30T21:24:11Z [INFO] Campaign log opened for run01
+2026-06-30T21:24:11Z [INFO] Skipping proc_w5h5_c1_o1_open2_random_asymmetric_i0 config t4x4_k0_mem512m_hg2x2_dfull (all methods completed)
+2026-06-30T21:24:11Z [INFO] Running manifest row proc_w5h5_c1_o1_open2_random_asymmetric_i0 (procedural_maze)
+2026-06-30T21:24:11Z [INFO]   config t4x4_k1n0_mem512m_hg2x2_dfull (3 methods)
+2026-06-30T21:24:11Z [INFO] Starting benchmark for map proc_w5h5_c1_o1_open2_random_asymmetric_i0 config t4x4_k1n0_mem512m_hg2x2_dfull (121 vertices, 24 edges)
+2026-06-30T21:24:11Z [INFO]   BrickSearch: Completed (preprocess 118352 ns, QPS 21574245.7)
+2026-06-30T21:24:11Z [INFO]   BrickClosure: Completed (preprocess 166454 ns, QPS 21897185.9)
+2026-06-30T21:24:11Z [INFO]   HBrick: Completed (preprocess 296098 ns, QPS 9223895.7)
+2026-06-30T21:24:11Z [INFO] Finished map proc_w5h5_c1_o1_open2_random_asymmetric_i0
+2026-06-30T21:24:11Z [INFO]   config t8x8_k0_mem512m_hg2x2_dfull (3 methods)
+2026-06-30T21:24:11Z [INFO] Starting benchmark for map proc_w5h5_c1_o1_open2_random_asymmetric_i0 config t8x8_k0_mem512m_hg2x2_dfull (121 vertices, 24 edges)
+2026-06-30T21:24:11Z [INFO]   BrickSearch: Completed (preprocess 82439 ns, QPS 15833745.7)
+2026-06-30T21:24:11Z [INFO]   BrickClosure: Completed (preprocess 90101 ns, QPS 16574943.3)
+2026-06-30T21:24:11Z [INFO]   HBrick: Completed (preprocess 149046 ns, QPS 14909726.3)
+2026-06-30T21:24:11Z [INFO] Finished map proc_w5h5_c1_o1_open2_random_asymmetric_i0
+2026-06-30T21:24:11Z [INFO]   config t8x8_k1n0_mem512m_hg2x2_dfull (3 methods)
+2026-06-30T21:24:11Z [INFO] Starting benchmark for map proc_w5h5_c1_o1_open2_random_asymmetric_i0 config t8x8_k1n0_mem512m_hg2x2_dfull (121 vertices, 24 edges)
+2026-06-30T21:24:11Z [INFO]   BrickSearch: Completed (preprocess 85354 ns, QPS 18830452.4)
+2026-06-30T21:24:11Z [INFO]   BrickClosure: Completed (preprocess 139498 ns, QPS 16402896.1)
+2026-06-30T21:24:11Z [INFO]   HBrick: Completed (preprocess 139903 ns, QPS 13486460.9)
+2026-06-30T21:24:11Z [INFO] Finished map proc_w5h5_c1_o1_open2_random_asymmetric_i0
