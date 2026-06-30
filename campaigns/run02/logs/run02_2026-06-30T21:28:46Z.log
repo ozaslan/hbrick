@@ -1,0 +1,33 @@
+2026-06-30T21:28:46Z [INFO] Campaign log opened for run02
+2026-06-30T21:28:46Z [INFO] Running manifest row proc_w31h31_c42_o0_open43_random_asymmetric_i0 (procedural_maze)
+2026-06-30T21:28:46Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:28:46Z [INFO] Starting benchmark for map proc_w31h31_c42_o0_open43_random_asymmetric_i0 config t4x4_k0_mem512m_hg2x2_dfull (3969 vertices, 1030 edges)
+2026-06-30T21:28:46Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 9460458.2)
+2026-06-30T21:28:46Z [INFO]   BrickSearch: Completed (preprocess 5458633 ns, QPS 7613609.3)
+2026-06-30T21:28:46Z [INFO]   BrickClosure: Completed (preprocess 10859073 ns, QPS 4494382.0)
+2026-06-30T21:28:46Z [INFO]   HBrick: Completed (preprocess 94587742 ns, QPS 257135.5)
+2026-06-30T21:28:46Z [INFO] Finished map proc_w31h31_c42_o0_open43_random_asymmetric_i0
+2026-06-30T21:28:46Z [INFO] Running manifest row proc_w31h31_c42_o0_open43_random_asymmetric_i1 (procedural_maze)
+2026-06-30T21:28:46Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:28:46Z [INFO] Starting benchmark for map proc_w31h31_c42_o0_open43_random_asymmetric_i1 config t4x4_k0_mem512m_hg2x2_dfull (3969 vertices, 1030 edges)
+2026-06-30T21:28:46Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 9351256.6)
+2026-06-30T21:28:46Z [INFO]   BrickSearch: Completed (preprocess 4085913 ns, QPS 2888738.4)
+2026-06-30T21:28:46Z [INFO]   BrickClosure: Completed (preprocess 11092235 ns, QPS 1603889.4)
+2026-06-30T21:28:46Z [INFO]   HBrick: Completed (preprocess 95430795 ns, QPS 292796.3)
+2026-06-30T21:28:46Z [INFO] Finished map proc_w31h31_c42_o0_open43_random_asymmetric_i1
+2026-06-30T21:28:46Z [INFO] Running manifest row proc_w31h31_c42_o0_open43_random_asymmetric_i2 (procedural_maze)
+2026-06-30T21:28:46Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:28:46Z [INFO] Starting benchmark for map proc_w31h31_c42_o0_open43_random_asymmetric_i2 config t4x4_k0_mem512m_hg2x2_dfull (3969 vertices, 1030 edges)
+2026-06-30T21:28:46Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 8259130.2)
+2026-06-30T21:28:46Z [INFO]   BrickSearch: Completed (preprocess 3812326 ns, QPS 6250610.4)
+2026-06-30T21:28:46Z [INFO]   BrickClosure: Completed (preprocess 12616899 ns, QPS 4148570.7)
+2026-06-30T21:28:46Z [INFO]   HBrick: Completed (preprocess 96778174 ns, QPS 355090.0)
+2026-06-30T21:28:46Z [INFO] Finished map proc_w31h31_c42_o0_open43_random_asymmetric_i2
+2026-06-30T21:28:46Z [INFO] Running manifest row proc_w31h31_c42_o0_open43_random_asymmetric_i3 (procedural_maze)
+2026-06-30T21:28:46Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:28:46Z [INFO] Starting benchmark for map proc_w31h31_c42_o0_open43_random_asymmetric_i3 config t4x4_k0_mem512m_hg2x2_dfull (3969 vertices, 1030 edges)
+2026-06-30T21:28:46Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 8707483.0)
+2026-06-30T21:28:46Z [INFO]   BrickSearch: Completed (preprocess 5135891 ns, QPS 4419584.3)
+2026-06-30T21:28:46Z [INFO]   BrickClosure: Completed (preprocess 12690155 ns, QPS 2892001.8)
+2026-06-30T21:28:46Z [INFO]   HBrick: Completed (preprocess 104874303 ns, QPS 340975.1)
+2026-06-30T21:28:46Z [INFO] Finished map proc_w31h31_c42_o0_open43_random_asymmetric_i3

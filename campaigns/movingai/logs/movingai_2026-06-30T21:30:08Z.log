@@ -1,0 +1,42 @@
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_bgmaps_AR0408SR.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_bgmaps_AR0408SR.map config t4x4_k0_mem512m_hg2x2_dfull (2500 vertices, 308 edges)
+2026-06-30T21:30:08Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 9536581.7)
+2026-06-30T21:30:08Z [INFO]   BrickSearch: Completed (preprocess 746587 ns, QPS 29506685.1)
+2026-06-30T21:30:08Z [INFO]   BrickClosure: Completed (preprocess 1056174 ns, QPS 30146019.8)
+2026-06-30T21:30:08Z [INFO]   HBrick: Completed (preprocess 6355520 ns, QPS 16649323.6)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_bgmaps_AR0408SR.map
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_da2_ht_store.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (4 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_da2_ht_store.map config t4x4_k0_mem512m_hg2x2_dfull (1369 vertices, 407 edges)
+2026-06-30T21:30:08Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 9653092.0)
+2026-06-30T21:30:08Z [INFO]   BrickSearch: Completed (preprocess 1130759 ns, QPS 10394672.7)
+2026-06-30T21:30:08Z [INFO]   BrickClosure: Completed (preprocess 1843511 ns, QPS 7091412.7)
+2026-06-30T21:30:08Z [INFO]   HBrick: Completed (preprocess 9850760 ns, QPS 1197604.8)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_da2_ht_store.map
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:30:08Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 12096012.1)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:30:08Z [INFO]   BrickSearch: Completed (preprocess 560433 ns, QPS 13465179.9)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:30:08Z [INFO]   BrickClosure: Completed (preprocess 973522 ns, QPS 6899525.7)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:30:08Z [INFO] Campaign log opened for movingai
+2026-06-30T21:30:08Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:30:08Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:30:08Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:30:08Z [INFO]   HBrick: Completed (preprocess 2800580 ns, QPS 1856687.0)
+2026-06-30T21:30:08Z [INFO] Finished map movingai_dao_ost102d.map

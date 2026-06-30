@@ -1,0 +1,24 @@
+2026-06-30T21:29:09Z [INFO] Campaign log opened for movingai
+2026-06-30T21:29:09Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:29:09Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:29:09Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:29:09Z [INFO]   CsrBfs: Completed (preprocess 0 ns, QPS 14946286.8)
+2026-06-30T21:29:09Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:29:09Z [INFO] Campaign log opened for movingai
+2026-06-30T21:29:09Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:29:09Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:29:09Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:29:09Z [INFO]   BrickSearch: Completed (preprocess 625756 ns, QPS 9038271.4)
+2026-06-30T21:29:09Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:29:09Z [INFO] Campaign log opened for movingai
+2026-06-30T21:29:09Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:29:09Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:29:09Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:29:09Z [INFO]   BrickClosure: Completed (preprocess 1072558 ns, QPS 11562782.3)
+2026-06-30T21:29:09Z [INFO] Finished map movingai_dao_ost102d.map
+2026-06-30T21:29:09Z [INFO] Campaign log opened for movingai
+2026-06-30T21:29:09Z [INFO] Running manifest row movingai_dao_ost102d.map (movingai)
+2026-06-30T21:29:09Z [INFO]   config t4x4_k0_mem512m_hg2x2_dfull (1 methods)
+2026-06-30T21:29:09Z [INFO] Starting benchmark for map movingai_dao_ost102d.map config t4x4_k0_mem512m_hg2x2_dfull (616 vertices, 192 edges)
+2026-06-30T21:29:09Z [INFO]   HBrick: Completed (preprocess 4433501 ns, QPS 872790.7)
+2026-06-30T21:29:09Z [INFO] Finished map movingai_dao_ost102d.map

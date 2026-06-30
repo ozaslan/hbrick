@@ -4,8 +4,8 @@
 |-------|-------|
 | Campaign | `run01` |
 | Schema | `2` |
-| Started | 2026-06-30T21:24:11Z |
-| Git | `1062cedbcfce482a401f036fa50c435d7fdb9f84` |
+| Started | 2026-06-30T21:28:34Z |
+| Git | `6b862090eca836b343211e2bd41c6cf72d1d6a00` |
 | Build | Release |
 | Compiler | GNU 13.3.0 |
 | CPU | Intel(R) Core(TM) i7-8650U CPU @ 1.90GHz |
@@ -47,6 +47,12 @@
 | proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickSearch | t8x8_k1n0_mem512m_hg2x2_dfull | Completed | 1.88305e+07 | - | 0 |
 | proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickClosure | t8x8_k1n0_mem512m_hg2x2_dfull | Completed | 1.64029e+07 | - | 0 |
 | proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | HBrick | t8x8_k1n0_mem512m_hg2x2_dfull | Completed | 1.34865e+07 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickSearch | t4x4_k0_mem512m_hg2x2_d2 | Completed | 2.18617e+07 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickClosure | t4x4_k0_mem512m_hg2x2_d2 | Completed | 2.15579e+07 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | HBrick | t4x4_k0_mem512m_hg2x2_d2 | Completed | 9.59952e+06 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickSearch | t8x8_k0_mem512m_hg2x2_d2 | Completed | 1.0637e+07 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | BrickClosure | t8x8_k0_mem512m_hg2x2_d2 | Completed | 2.10094e+07 | - | 0 |
+| proc_w5h5_c1_o1_open2_random_asymmetric_i0 | cyclic_maze | HBrick | t8x8_k0_mem512m_hg2x2_d2 | Completed | 1.35299e+07 | - | 0 |
 
 ## Best completed QPS by map class
 

@@ -1,0 +1,12 @@
+{
+  "schema": "hbrick_orientation_recipe_v1",
+  "set": "run02",
+  "map": "proc_w31h31_c42_o0_open43_random_asymmetric_i3",
+  "policy": "ground_only",
+  "mode": "random_asymmetric",
+  "seed": "0x0000000000ca0151",
+  "p_one_way": 0.25,
+  "p_bidirectional": 0.15,
+  "gradient_angle_degrees": 45,
+  "p_against_gradient": 0.05
+}

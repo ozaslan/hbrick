@@ -1,0 +1,11 @@
+{
+  "schema_version": "2",
+  "campaign_id": "movingai",
+  "started_at_utc": "2026-06-30T21:29:22Z",
+  "git_commit": "6b862090eca836b343211e2bd41c6cf72d1d6a00",
+  "build_type": "Release",
+  "compiler_id": "GNU",
+  "compiler_version": "13.3.0",
+  "cpu_model": "Intel(R) Core(TM) i7-8650U CPU @ 1.90GHz",
+  "hardware_concurrency": 8
+}
