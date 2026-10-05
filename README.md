@@ -1,10 +1,12 @@
-# hbrick
+# HBRICK
 
-![H-BRICK: the letter H built from bricks, followed by the word BRICK](images/hbrick.png)
+Hierarchical Boundary Reachability Index with Compressed Kleene Closure
 
-hbrick is a C++20 library for exact directed reachability on grid maps. It builds a compressed sparse row graph from a Moving AI grid, orients the edges with a recorded recipe, and answers reachability queries with search, with flat BRICK, and with H-BRICK.
+![HBRICK: the letter H built from bricks, followed by the word BRICK](images/hbrick.png)
 
-H-BRICK partitions the map into tiles, replaces each tile by the Boolean reachability among its boundary ports, and composes those summaries up a hierarchy. A query reads the hierarchy and returns whether one passable cell can reach another. Flat BRICK is the same idea on a single level. The library also includes the baselines used in the evaluation: breadth-first search, depth-first search, SCC condensation, GRAIL, O'Reach, 2-hop labeling, and full transitive closure.
+HBRICK (Hierarchical Boundary Reachability Index with Compressed Kleene Closure) is a C++20 library for exact directed reachability on grid maps. It builds a compressed sparse row graph from a Moving AI grid, orients the edges with a recorded recipe, and answers reachability queries with search, with flat BRICK, and with the hierarchical index.
+
+The hierarchical index partitions the map into tiles, replaces each tile by the Boolean reachability among its boundary ports, and composes those summaries up a hierarchy. A query reads the hierarchy and returns whether one passable cell can reach another. Flat BRICK is the same idea on a single level: it keeps the tile closures and searches the flat port graph. The library also includes the baselines used in the evaluation: breadth-first search, depth-first search, SCC condensation, GRAIL, O'Reach, 2-hop labeling, and full transitive closure.
 
 This repository is only that library. It contains the sources, the tests, the command-line benchmarks, the eight evaluation maps, and the 48 orientation recipes. GRAIL and O'Reach are included under `third_party/` with their own license files.
 
