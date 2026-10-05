@@ -19,6 +19,8 @@ datasets/movingai/<set>/maps/<file>.map
 
 Each file is an occupancy grid from the Moving AI Lab 2D pathfinding benchmarks. Passable cells and blocked cells are recorded; the file does not store a directed graph. H-BRICK turns a grid into a directed graph by applying an orientation recipe. The manuscript uses six recipes on each of these eight maps, 48 instances in total. The recipe files, the meaning of each field, and the calibrated probabilities are in [`../../recipes/README.md`](../../recipes/README.md).
 
+The manuscript benchmark loads these eight files and no others. For every recipe that names one of them, `tools/run_manuscript_benchmarks.sh` times `HBrickSkipLift` on the full tile and group sweep, flat `BrickSearch` on the eight tile sides, and at tile 24 and group 4 also BFS, SCC-DAG search, GRAIL, O'Reach, and 2-hop. It then times batched queries at batch sizes 4, 16, and 64. The rows land in `campaigns/manuscript/results.csv` and `campaigns/manuscript/batch.csv`. The protocol is written out in the repository [README](../../README.md) under Manuscript matrix and in the [recipe README](../../recipes/README.md).
+
 ## Citation
 
 If you use these grids, cite the benchmark paper that published the collection:

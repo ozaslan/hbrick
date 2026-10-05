@@ -1,5 +1,7 @@
 # hbrick
 
+![H-BRICK: the letter H built from bricks, followed by the word BRICK](images/hbrick.png)
+
 hbrick is a C++20 library for exact directed reachability on grid maps. It builds a compressed sparse row graph from a Moving AI grid, orients the edges with a recorded recipe, and answers reachability queries with search, with flat BRICK, and with H-BRICK.
 
 H-BRICK partitions the map into tiles, replaces each tile by the Boolean reachability among its boundary ports, and composes those summaries up a hierarchy. A query reads the hierarchy and returns whether one passable cell can reach another. Flat BRICK is the same idea on a single level. The library also includes the baselines used in the evaluation: breadth-first search, depth-first search, SCC condensation, GRAIL, O'Reach, 2-hop labeling, and full transitive closure.
@@ -102,24 +104,50 @@ Run these from the repository root after the build above. The reported H-BRICK o
 
 ### Manuscript matrix
 
-`tools/run_manuscript_benchmarks.sh` runs the measurements behind the published tables. It imports every recipe, then writes two CSV files under `campaigns/manuscript/`.
+`tools/run_manuscript_benchmarks.sh` is the setting that covers the published evaluation. It reads every JSON file in `recipes/` and the map named by that file under `datasets/movingai/`. It writes two CSV files under `campaigns/manuscript/`. The campaign preset and the config sweep are both named `manuscript`. The older preset named `paper` is a different, earlier protocol (tile 16, group 2, method `HBrick`) and is not this matrix.
 
-`results.csv` holds the single-pair matrix. `HBrickSkipLift` is timed at every base tile in {4, 8, 16, 24, 32, 48, 64, 96} and every group size in {2, 4, 8}. Flat `BrickSearch` is timed at each of those tile sizes. At tile 24 and group 4 the same file also records `CsrBfs`, `SccDagSearch`, `Grail`, `Oreach`, and `TwoHop`. Each of those jobs times 8192 queries after 128 warmup queries, in chunks of 128. An index that would pass 4 GiB is skipped. A preprocess that runs longer than one hour is stopped.
-
-`batch.csv` holds the many-to-many matrix: batch sizes 4, 16, and 64, two warmup batches and eleven timed repetitions, at tile 24 and group 4, on every recipe.
+The script first imports the 48 recipes into a campaign manifest, then runs the single-pair stage, then the batch stage. A finished single-pair row is not repeated: the campaign is started with `--resume`. Extra arguments are forwarded only to that campaign run.
 
 ```bash
 ./tools/run_manuscript_benchmarks.sh
-```
-
-The full matrix is thousands of jobs. `--resume` is already on, and extra arguments go to the campaign run, so a machine can take a slice and continue later:
-
-```bash
 ./tools/run_manuscript_benchmarks.sh --max-jobs 4
 HBRICK_SKIP_BATCH=1 ./tools/run_manuscript_benchmarks.sh --max-jobs 4
 ```
 
-The same single-pair matrix is the campaign preset `manuscript` with config sweep `manuscript`. The short commands below are one recipe at a time.
+`--max-jobs` limits how many recipes the single-pair stage visits in this invocation. The batch stage still walks every recipe unless `HBRICK_SKIP_BATCH=1`.
+
+#### Single-pair file: `results.csv`
+
+Every job uses the same clock protocol. There are 128 untimed warmup queries, then 8192 timed queries, measured with `std::chrono::steady_clock` in chunks of 128. After the timed queries, 256 pairs are checked against the search answer and the mismatch count is stored. Each method runs in its own process so the recorded memory is that method's. An index whose estimated size exceeds 4 GiB is skipped and the row says so. A preprocess that is still running after one hour is stopped.
+
+On each of the 48 recipes the runner builds these configurations.
+
+| What is timed | Tile side b | Group size g | Rows per recipe |
+|---------------|-------------|--------------|-----------------|
+| `HBrickSkipLift` | 4, 8, 16, 24, 32, 48, 64, 96 | 2, 4, and 8 at every tile | 24 |
+| `BrickSearch` (flat BRICK: the same base tiles, then BFS on the flat port graph) | those eight tile sides | not used; the flat encoding stores group 0 | 8 |
+| `CsrBfs`, `SccDagSearch`, `Grail`, `Oreach`, `TwoHop` | 24 only | 4 only | 5 |
+
+`HBrickSkipLift` at tile 24 and group 4 is the operating point used everywhere else in the paper. It is one of the 24 hierarchy rows, not a sixth extra copy. The five external methods are attached to that same configuration, so the file can be joined on recipe and on `(b, g) = (24, 4)`. `SccDagSearch` is search on the strongly connected component condensation. `TwoHop` is the exact 2-hop labeler; on the large maps it is the method most likely to be skipped by the 4 GiB cap, which is the outcome reported for most of the 48 instances.
+
+That is 24 + 8 + 5 = 37 measured rows per recipe, and 1776 rows for all 48 recipes, plus any skipped rows that still occupy a line. The hierarchy parameter tables are the 24 `HBrickSkipLift` rows. The flat-versus-hierarchy comparison is `BrickSearch` against `HBrickSkipLift` at the same tile, read at group 4 for the operating point. The external-baseline tables are the five methods plus `HBrickSkipLift` at tile 24 and group 4. The break-even query count is not a separate job. It is `preprocess_time / (bfs_query_time - hbrick_query_time)` computed from the `CsrBfs` and `HBrickSkipLift` rows of that operating point. When the H-BRICK query is not faster than BFS, that ratio is not a finite threshold.
+
+#### Batch file: `batch.csv`
+
+After the single-pair stage, `hbrick_batch_pilot` runs once per recipe at tile 24 and group 4. For each batch size `k` in {4, 16, 64} it draws `k` distinct sources and `k` distinct targets, warms up with two batch calls, then times eleven repetitions. The CSV has one row per method at that `k`. The methods are:
+
+| CSV `method` | What it does |
+|--------------|----------------|
+| `batch-h-brick` | One batched `HBrickSkipLift` query over the `k` by `k` pairs, sharing source lifts, target lifts, and ancestor frontiers |
+| `scalar-h-brick` | The same pairs as independent `HBrickSkipLift` queries, which is the denominator of the batch speedup |
+| `oreach` | O'Reach on each pair, with no cross-pair sharing |
+| `bfs-per-source` | One BFS per distinct source, answering every target of that source |
+| `scc-dag-search` | Search on the condensation DAG |
+| `scc-dag-closure` | Boolean closure on the condensation DAG; its preprocess is abandoned after 60 seconds |
+
+The index build for skip-lift H-BRICK, O'Reach, and the SCC-DAG search is recorded on those rows as well. This file is the batch table and the batch-versus-O'Reach comparison. It does not repeat the tile and group sweep.
+
+The short commands below time one recipe with a smaller query count. They are not the manuscript matrix.
 
 One method on paper map M6, regime V01 (Boston, 256 by 256, dense orientation):
 

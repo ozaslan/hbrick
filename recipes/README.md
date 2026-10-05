@@ -76,3 +76,17 @@ Map M1 is the exception. `maze512-1-0` is a tree: every corridor is a bridge, so
 | M8 | 94.6 percent (0.35) | 71.0 percent (0.11) | 37.0 percent (0.06) | 15.3 percent (0.04) | 3.0 percent (0.02) | 7.6 percent |
 
 For M2 through M8, V01–V05 entries are the measured reachability density, and V06 is the measured density of the 45-degree gradient with backflow 0.05. Parentheses are p_bi.
+
+## What the manuscript benchmark runs on these files
+
+`tools/run_manuscript_benchmarks.sh` takes every `*.json` in this directory as one instance. The map is loaded from `datasets/movingai/<set>/maps/<map>`, using the `set` and `map` fields. Nothing in the JSON is rewritten.
+
+For each file the single-pair campaign writes rows to `campaigns/manuscript/results.csv`:
+
+- `HBrickSkipLift` at all 24 combinations of tile side 4, 8, 16, 24, 32, 48, 64, 96 and group size 2, 4, 8. The published operating point is the one cell tile 24, group 4.
+- `BrickSearch` at each of those eight tile sides, with the hierarchy group left unused. That is the flat BRICK ablation.
+- On the operating-point cell only, also `CsrBfs`, `SccDagSearch`, `Grail`, `Oreach`, and `TwoHop`.
+
+Each of those rows times 8192 queries after 128 warmup queries. The batch stage then appends `campaigns/manuscript/batch.csv` for the same file: batch sizes 4, 16, and 64, two warmup batches and eleven timed repetitions, at tile 24 and group 4. That stage records batched H-BRICK, scalar H-BRICK on the same pairs, O'Reach, one BFS per source, SCC-DAG search, and SCC-DAG closure.
+
+The full description of the clock protocol, the 4 GiB skip rule, and the break-even formula is in the repository [README](../README.md) under Manuscript matrix.
