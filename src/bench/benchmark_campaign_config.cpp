@@ -223,6 +223,41 @@ void expandHbrickGroupSweep(
     }
 }
 
+/** Published MDPI sweep: HBrickSkipLift over b × g, flat BrickSearch over b, and the external baselines at the operating point. */
+void expandManuscriptSweep(
+    const ReachabilityBenchmarkConfig& base,
+    std::vector<ReachabilityBenchmarkConfig>& configs
+) {
+    static constexpr uint32_t kTiles[] = {4U, 8U, 16U, 24U, 32U, 48U, 64U, 96U};
+    static constexpr uint32_t kGroups[] = {2U, 4U, 8U};
+
+    for (const uint32_t tile : kTiles) {
+        for (const uint32_t group : kGroups) {
+            ReachabilityBenchmarkConfig variant = base;
+            variant.brick_tile_size = TileSize{tile, tile};
+            variant.hbrick_group_size = GroupSize{group, group};
+            variant.hbrick_max_depth = kHBrickFullDepth;
+            variant.methods = {ReachabilityBaselineId::HBrickSkipLift};
+            if (tile == 24U && group == 4U) {
+                variant.methods.push_back(ReachabilityBaselineId::CsrBfs);
+                variant.methods.push_back(ReachabilityBaselineId::SccDagSearch);
+                variant.methods.push_back(ReachabilityBaselineId::Grail);
+                variant.methods.push_back(ReachabilityBaselineId::Oreach);
+                variant.methods.push_back(ReachabilityBaselineId::TwoHop);
+            }
+            appendUniqueConfig(variant, configs);
+        }
+    }
+
+    for (const uint32_t tile : kTiles) {
+        ReachabilityBenchmarkConfig flat = base;
+        flat.brick_tile_size = TileSize{tile, tile};
+        markFlatBrickConfigEncoding(flat);
+        flat.methods = {ReachabilityBaselineId::BrickSearch};
+        appendUniqueConfig(flat, configs);
+    }
+}
+
 void expandHbrickVariantBgSweep(
     const ReachabilityBenchmarkConfig& base,
     std::vector<ReachabilityBenchmarkConfig>& configs
@@ -358,6 +393,10 @@ std::vector<ReachabilityBenchmarkConfig> expandBenchmarkCampaignConfigSweep(
     }
     if (normalized == "paper") {
         expandPaperSweep(base, configs);
+        return configs;
+    }
+    if (normalized == "manuscript") {
+        expandManuscriptSweep(base, configs);
         return configs;
     }
     if (normalized == "all") {
@@ -574,6 +613,29 @@ ReachabilityBenchmarkConfig benchmarkCampaignConfigFromPreset(
             ReachabilityBaselineId::HBrickFusedLiftCache,
             ReachabilityBaselineId::HBrickSkipLift,
             ReachabilityBaselineId::HBrickSccLabel,
+        };
+        return config;
+    }
+    if (equalsIgnoreCase(preset, "manuscript")) {
+        config.query_count = 8192U;
+        config.warmup_queries = 128U;
+        config.query_timing_chunks = 128U;
+        config.correctness_check_count = 256U;
+        config.max_memory_bytes = 4ULL << 30;
+        config.max_preprocess_seconds = 3600U;
+        config.closure_enable_projected_speedup_early_stop = false;
+        config.brick_tile_size = TileSize{24U, 24U};
+        config.hbrick_group_size = GroupSize{4U, 4U};
+        config.hbrick_max_depth = kHBrickFullDepth;
+        config.isolate_methods = true;
+        config.methods = {
+            ReachabilityBaselineId::HBrickSkipLift,
+            ReachabilityBaselineId::CsrBfs,
+            ReachabilityBaselineId::SccDagSearch,
+            ReachabilityBaselineId::Grail,
+            ReachabilityBaselineId::Oreach,
+            ReachabilityBaselineId::TwoHop,
+            ReachabilityBaselineId::BrickSearch,
         };
         return config;
     }

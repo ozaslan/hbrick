@@ -449,6 +449,64 @@ TEST(BenchmarkCampaign, ConfigSweepExpandsBrickVariants) {
     EXPECT_EQ(hbrick_configs, 12U);
 }
 
+TEST(BenchmarkCampaign, ManuscriptPresetMatchesPublishedProtocol) {
+    const hbrick::ReachabilityBenchmarkConfig config =
+        hbrick::benchmarkCampaignConfigFromPreset("manuscript");
+    EXPECT_EQ(config.query_count, 8192U);
+    EXPECT_EQ(config.warmup_queries, 128U);
+    EXPECT_EQ(config.query_timing_chunks, 128U);
+    EXPECT_EQ(config.brick_tile_size.width, 24U);
+    EXPECT_EQ(config.hbrick_group_size.group_w, 4U);
+    EXPECT_EQ(config.hbrick_max_depth, hbrick::kHBrickFullDepth);
+    EXPECT_TRUE(config.isolate_methods);
+    const auto has = [&](hbrick::ReachabilityBaselineId id) {
+        return std::find(config.methods.begin(), config.methods.end(), id)
+            != config.methods.end();
+    };
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::HBrickSkipLift));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::CsrBfs));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::SccDagSearch));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::Grail));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::Oreach));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::TwoHop));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::BrickSearch));
+
+    std::string error;
+    const std::vector<hbrick::ReachabilityBenchmarkConfig> sweep =
+        hbrick::expandBenchmarkCampaignConfigSweep(config, "manuscript", error);
+    ASSERT_TRUE(error.empty()) << error;
+    // 8 tiles × 3 groups, plus 8 flat BrickSearch tiles.
+    EXPECT_EQ(sweep.size(), 32U);
+
+    uint32_t skip_lift_cells = 0U;
+    uint32_t flat_cells = 0U;
+    bool operating_point_has_baselines = false;
+    for (const hbrick::ReachabilityBenchmarkConfig& variant : sweep) {
+        const bool flat = variant.hbrick_group_size.group_w == 0U;
+        const bool skip =
+            std::find(
+                variant.methods.begin(),
+                variant.methods.end(),
+                hbrick::ReachabilityBaselineId::HBrickSkipLift
+            ) != variant.methods.end();
+        if (flat) {
+            ++flat_cells;
+            EXPECT_EQ(variant.methods.size(), 1U);
+        } else if (skip) {
+            ++skip_lift_cells;
+            if (variant.brick_tile_size.width == 24U
+                && variant.hbrick_group_size.group_w == 4U) {
+                operating_point_has_baselines = variant.methods.size() == 6U;
+            } else {
+                EXPECT_EQ(variant.methods.size(), 1U);
+            }
+        }
+    }
+    EXPECT_EQ(skip_lift_cells, 24U);
+    EXPECT_EQ(flat_cells, 8U);
+    EXPECT_TRUE(operating_point_has_baselines);
+}
+
 TEST(BenchmarkCampaign, PaperPresetMatchesManuscriptProtocol) {
     const hbrick::ReachabilityBenchmarkConfig config =
         hbrick::benchmarkCampaignConfigFromPreset("paper");

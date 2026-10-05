@@ -98,7 +98,28 @@ The map path is compiled into the test programs, so these commands work from the
 
 ## Benchmarks
 
-Run these from the repository root after the build above. The reported H-BRICK operating point is base tile `b = 24` and group size `g = 4`, using the skip-lift query (`HBrickSkipLift`). The commands below use a short query count so a single instance finishes on a workstation. The manuscript timed longer workloads; raise `--query-count` when you want a closer protocol. Map M8 needs several gigabytes of RAM for some baselines and a dense closure.
+Run these from the repository root after the build above. The reported H-BRICK operating point is base tile `b = 24` and group size `g = 4`, using the skip-lift query (`HBrickSkipLift`). The commands below use a short query count so a single instance finishes on a workstation. Map M8 needs several gigabytes of RAM for some baselines.
+
+### Manuscript matrix
+
+`tools/run_manuscript_benchmarks.sh` runs the measurements behind the published tables. It imports every recipe, then writes two CSV files under `campaigns/manuscript/`.
+
+`results.csv` holds the single-pair matrix. `HBrickSkipLift` is timed at every base tile in {4, 8, 16, 24, 32, 48, 64, 96} and every group size in {2, 4, 8}. Flat `BrickSearch` is timed at each of those tile sizes. At tile 24 and group 4 the same file also records `CsrBfs`, `SccDagSearch`, `Grail`, `Oreach`, and `TwoHop`. Each of those jobs times 8192 queries after 128 warmup queries, in chunks of 128. An index that would pass 4 GiB is skipped. A preprocess that runs longer than one hour is stopped.
+
+`batch.csv` holds the many-to-many matrix: batch sizes 4, 16, and 64, two warmup batches and eleven timed repetitions, at tile 24 and group 4, on every recipe.
+
+```bash
+./tools/run_manuscript_benchmarks.sh
+```
+
+The full matrix is thousands of jobs. `--resume` is already on, and extra arguments go to the campaign run, so a machine can take a slice and continue later:
+
+```bash
+./tools/run_manuscript_benchmarks.sh --max-jobs 4
+HBRICK_SKIP_BATCH=1 ./tools/run_manuscript_benchmarks.sh --max-jobs 4
+```
+
+The same single-pair matrix is the campaign preset `manuscript` with config sweep `manuscript`. The short commands below are one recipe at a time.
 
 One method on paper map M6, regime V01 (Boston, 256 by 256, dense orientation):
 

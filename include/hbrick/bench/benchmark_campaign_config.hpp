@@ -52,7 +52,7 @@ struct BenchmarkCampaignRunParameters {
  * @brief Expands @p base into one or more configs for a named sweep.
  * @ingroup hbrick_bench
  *
- * Study sweeps: @c default, @c brick-tile, @c hbrick-group, @c hbrick-variant-bg, @c paper.
+ * Study sweeps: @c default, @c brick-tile, @c hbrick-group, @c hbrick-variant-bg, @c paper, @c manuscript.
  */
 
 [[nodiscard]] std::vector<ReachabilityBenchmarkConfig> expandBenchmarkCampaignConfigSweep(
