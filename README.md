@@ -10,6 +10,72 @@ The hierarchical index partitions the map into tiles, replaces each tile by the 
 
 This repository is only that library. It contains the sources, the tests, the command-line benchmarks, the eight evaluation maps, and the 48 orientation recipes. GRAIL and O'Reach are included under `third_party/` with their own license files.
 
+## Using the library
+
+There is no installed package. Add this repository as a subdirectory and link the targets you call. `hbrick_baselines` brings in the graph, tile, and bit libraries. Map and recipe loading is `hbrick_io`.
+
+```cmake
+add_subdirectory(hbrick)
+
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE hbrick_baselines hbrick_io)
+```
+
+The next two programs share one setup. A recipe names a Moving AI map and the directed orientation. Vertex ids are row-major cell indexes from `MazeLayout::cellIndex`.
+
+Load the Boston street map in regime V01 and ask BFS whether one cell reaches another:
+
+```cpp
+#include "hbrick/graph/bfs.hpp"
+#include "hbrick/graph/directed_grid_graph_builder.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/io/movingai_loader.hpp"
+#include "hbrick/io/recipe.hpp"
+
+const auto recipe = hbrick::tools::loadRecipe(
+    "recipes/M01_V01_ra_target95__street__Boston_0_256.map__random_asymmetric__0000000000000001__feb47d3d.json");
+const auto map_path = std::filesystem::path("datasets/movingai")
+    / recipe->set_name / "maps" / recipe->map_name;
+const hbrick::MovingAiLoadResult loaded = hbrick::loadMovingAiMap(map_path);
+const hbrick::MazeLayout layout = loaded.map.toMazeLayout(recipe->policy);
+
+hbrick::RandomAsymmetricParams orientation;
+orientation.seed = recipe->seed;
+orientation.p_one_way = recipe->p_one_way;
+orientation.p_bidirectional = recipe->p_bidirectional;
+orientation.gradient_angle_degrees = recipe->gradient_angle_degrees;
+orientation.p_against_gradient = recipe->p_against_gradient;
+
+const hbrick::DirectedGridGraph grid =
+    hbrick::DirectedGridGraphBuilder::build(layout, recipe->mode, orientation);
+const hbrick::CsrGraph& graph = grid.csrGraph();
+
+const auto source = static_cast<uint32_t>(layout.cellIndex(hbrick::GridCoord{10, 10}));
+const auto target = static_cast<uint32_t>(layout.cellIndex(hbrick::GridCoord{40, 25}));
+hbrick::GraphSearchScratch scratch(graph.numVertices());
+const hbrick::ReachabilityAnswer bfs_answer =
+    hbrick::Bfs::reachable(graph, source, target, scratch);
+```
+
+Build the hierarchical index at the published operating point, tile side 24 and group size 4, and ask the same question. `preprocess` is the offline build. `query` does not allocate.
+
+```cpp
+#include "hbrick/baselines/hbrick_skip_lift_baseline.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
+
+hbrick::HBrickConfig config;
+config.base_tile_size = hbrick::TileSize{24, 24};
+config.group_size = hbrick::GroupSize{4, 4};
+config.max_depth = hbrick::kHBrickFullDepth;
+
+hbrick::HBrickSkipLiftBaseline index;
+index.preprocess(grid, layout, config);
+const hbrick::ReachabilityAnswer indexed =
+    index.query(source, target);
+```
+
+`indexed` is `hbrick::ReachabilityAnswer::Reachable` or `Unreachable`. `index.status()` is `BaselineStatus::Completed` when the build finished.
+
 ## Maps and recipes
 
 The evaluation uses eight Moving AI grids and six directed orientations on each grid, 48 instances in total. The map files are already unpacked:
@@ -106,7 +172,7 @@ Run these from the repository root after the build above. The reported H-BRICK o
 
 ### Manuscript matrix
 
-`tools/run_manuscript_benchmarks.sh` is the setting that covers the published evaluation. It reads every JSON file in `recipes/` and the map named by that file under `datasets/movingai/`. It writes two CSV files under `campaigns/manuscript/`. The campaign preset and the config sweep are both named `manuscript`. The older preset named `paper` is a different, earlier protocol (tile 16, group 2, method `HBrick`) and is not this matrix.
+`tools/run_manuscript_benchmarks.sh` is the setting that covers the published evaluation. It reads every JSON file in `recipes/` and the map named by that file under `datasets/movingai/`. It writes two CSV files under `campaigns/manuscript/`. The campaign preset and the config sweep are both named `manuscript`.
 
 The script first imports the 48 recipes into a campaign manifest, then runs the single-pair stage, then the batch stage. A finished single-pair row is not repeated: the campaign is started with `--resume`. Extra arguments are forwarded only to that campaign run.
 
@@ -231,18 +297,17 @@ docs/               Optional HTML API reference (Doxygen)
 
 ## Citing this work
 
-If you use this software or these instances in academic work, please cite the manuscript:
+The paper is under review. It is not published. Do not cite it as a journal article, and do not invent a volume, issue, pages, or DOI.
 
-Özaslan, T.; Özaslan, E.A. H-BRICK: Hierarchical Boundary Reachability Index with Compressed Kleene Closure for Directed Grid Graphs. Manuscript submitted to Mathematics, MDPI, 2026.
+Özaslan, T.; Özaslan, E.A. H-BRICK: Hierarchical Boundary Reachability Index with Compressed Kleene Closure for Directed Grid Graphs. Under review at Mathematics (MDPI), 2026.
 
 ```bibtex
-@article{ozaslan2026hbrick,
-  author  = {Özaslan, Tolga and Özaslan, Elif A.},
-  title   = {H-BRICK: Hierarchical Boundary Reachability Index with Compressed {Kleene} Closure for Directed Grid Graphs},
-  journal = {Mathematics},
-  year    = {2026},
-  note    = {Manuscript submitted to Mathematics (MDPI). Software: https://github.com/ozaslan/hbrick}
+@unpublished{ozaslan2026hbrick,
+  author = {Özaslan, Tolga and Özaslan, Elif A.},
+  title  = {H-BRICK: Hierarchical Boundary Reachability Index with Compressed {Kleene} Closure for Directed Grid Graphs},
+  year   = {2026},
+  note   = {Under review at Mathematics (MDPI). Not yet published. Software: https://github.com/ozaslan/hbrick}
 }
 ```
 
-The volume, issue, and DOI are not assigned yet. Replace the note with the published citation when the article appears. The maps should also be credited to Sturtevant, N.R. Benchmarks for Grid-Based Pathfinding. IEEE Transactions on Computational Intelligence and AI in Games, 2012.
+The maps should also be credited to Sturtevant, N.R. Benchmarks for Grid-Based Pathfinding. IEEE Transactions on Computational Intelligence and AI in Games, 2012.
