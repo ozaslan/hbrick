@@ -1,0 +1,59 @@
+/**
+ * @defgroup hbrick_core Core types
+ * @brief Shared enumerations, identifiers, and query descriptors.
+ */
+
+/**
+ * @defgroup hbrick_grid Grid utilities
+ * @brief Maze layouts and coordinate helpers for grid inputs.
+ */
+
+/**
+ * @defgroup hbrick_io Dataset io
+ * @brief Adapters that load external datasets (MovingAI) into maze layouts.
+ */
+
+/**
+ * @defgroup hbrick_bit Bit-parallel primitives
+ * @brief Bit vectors, matrices, and transitive closure algorithms.
+ */
+
+/**
+ * @defgroup hbrick_graph Graph algorithms
+ * @brief CSR storage, traversal, SCC decomposition, and DAG reachability.
+ */
+
+/**
+ * @defgroup hbrick_baselines Reference baselines
+ * @brief Preprocess/query reference implementations for validation and benchmarking.
+ */
+
+/**
+ * @defgroup hbrick_tile Tile indexes
+ * @brief Tile decomposition, flat BRICK port indexing, and H-BRICK hierarchy composition.
+ */
+
+/**
+ * @defgroup hbrick_bench Benchmarking
+ * @brief Timing helpers for micro-benchmarks.
+ */
+
+/**
+ * @defgroup hbrick_viz Visualization
+ * @brief SVG rendering utilities.
+ */
+
+/**
+ * @defgroup hbrick_test_support Test support
+ * @brief Maze generators and BFS oracle helpers (not part of the shipped library API).
+ */
+
+/**
+ * @namespace hbrick
+ * @brief Root namespace for the hbrick graph reachability library.
+ */
+
+/**
+ * @namespace hbrick::test_support
+ * @brief Test-only helpers for maze generation and correctness oracles.
+ */

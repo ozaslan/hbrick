@@ -1,0 +1,14 @@
+{
+  "schema": "hbrick_orientation_recipe_v1",
+  "group": "fair_bench",
+  "label": "M06_V01_ra_target95",
+  "set": "random",
+  "map": "random512-20-0.map",
+  "policy": "ground_only",
+  "mode": "random_asymmetric",
+  "seed": "0x0000000000000001",
+  "p_one_way": 0.39,
+  "p_bidirectional": 0.61,
+  "gradient_angle_degrees": 45,
+  "p_against_gradient": 0.02
+}

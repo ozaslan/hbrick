@@ -1,0 +1,213 @@
+/**
+ * @file reachability_oracle.hpp
+ * @ingroup hbrick_test_support
+ * @brief Correctness oracles comparing baselines against BFS reference answers.
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <vector>
+
+#include "hbrick/baselines/baseline_status.hpp"
+#include "hbrick/core/types.hpp"
+#include "hbrick/graph/csr_graph.hpp"
+#include "hbrick/graph/directed_grid_graph_builder.hpp"
+#include "hbrick/graph/graph_search_scratch.hpp"
+#include "hbrick/graph/random_asymmetric_params.hpp"
+#include "hbrick/graph/scc_decomposition.hpp"
+#include "hbrick/grid/maze_layout.hpp"
+#include "hbrick/tile/group_size.hpp"
+#include "hbrick/tile/hbrick_config.hpp"
+#include "hbrick/tile/tile_size.hpp"
+#include "test_limits.hpp"
+
+namespace hbrick::test_support {
+
+/**
+ * @brief Default H-BRICK config used by shared oracles when a layout is supplied.
+ * @ingroup hbrick_test_support
+ */
+[[nodiscard]] inline HBrickConfig defaultOracleHBrickConfig(
+    const uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+) {
+    HBrickConfig config{};
+    config.base_tile_size = TileSize{4U, 4U};
+    config.group_size = GroupSize{2U, 2U};
+    config.max_depth = kHBrickFullDepth;
+    config.max_memory_bytes = max_memory_bytes;
+    return config;
+}
+
+/**
+ * @brief Reference BFS reachability used as the ground truth in tests.
+ * @ingroup hbrick_test_support
+ */
+[[nodiscard]] ReachabilityAnswer bfsReference(
+    const CsrGraph& graph,
+    uint32_t source,
+    uint32_t target,
+    GraphSearchScratch& scratch
+);
+
+[[nodiscard]] CsrGraph buildGridGraph(
+    const MazeLayout& grid,
+    GridEdgeConversionMode mode,
+    RandomAsymmetricParams params = {}
+);
+
+void expectAllBaselinesMatchBfs(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectBrickSearchMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectBrickClosureMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/** @brief Verifies both flat BRICK baselines against BFS on all ordered pairs. @ingroup hbrick_test_support */
+void expectBrickBaselinesMatchBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    TileSize tile_size,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectBrickBaselinesMatchBfsOnSlice(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    TileSize tile_size,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+/** @brief Verifies @ref HBrickBaseline against BFS on all ordered pairs (sliced when large). @ingroup hbrick_test_support */
+void expectHBrickMatchesBfs(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    HBrickConfig config,
+    const std::string& context,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+void expectHBrickMatchesBfsOnSlice(
+    const MazeLayout& layout,
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    HBrickConfig config,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+[[nodiscard]] bool mutuallyReachableViaBidirectionalBfs(
+    const CsrGraph& graph,
+    uint32_t left,
+    uint32_t right,
+    GraphSearchScratch& left_to_right_scratch,
+    GraphSearchScratch& right_to_left_scratch
+);
+
+void expectSccPartitionMatchesBidirectionalBfs(
+    const CsrGraph& graph,
+    const std::string& context
+);
+
+/**
+ * @brief Returns how many disjoint pair slices cover all V² ordered pairs.
+ * @ingroup hbrick_test_support
+ *
+ * Returns @c 1 when @p num_vertices is at most @ref kFullAllPairsVertexLimit. Otherwise
+ * returns @c ceil(V² / kMaxPairsPerSlice).
+ */
+[[nodiscard]] uint32_t computeReachabilityPairSliceCount(uint32_t num_vertices);
+
+/**
+ * @brief Verifies SCC labels and all baseline reachability slices for @p graph.
+ * @ingroup hbrick_test_support
+ *
+ * Runs SCC partition once, then every deterministic pair slice in one test case.
+ * When @p layout is non-null, also verifies BrickSearch, BrickClosure, and HBrick.
+ * @p hbrick_config may be null to use @ref defaultOracleHBrickConfig.
+ */
+void expectReachabilityOracleAllSlices(
+    const CsrGraph& graph,
+    const std::string& context,
+    GridEdgeConversionMode mode = GridEdgeConversionMode::RandomAsymmetric,
+    uint32_t full_all_pairs_vertex_limit = kFullAllPairsVertexLimit,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max(),
+    const MazeLayout* layout = nullptr,
+    TileSize brick_tile_size = TileSize{4U, 4U},
+    const HBrickConfig* hbrick_config = nullptr
+);
+
+/**
+ * @brief Verifies SCC labels and a fixed number of evenly spaced reachability pairs.
+ * @ingroup hbrick_test_support
+ *
+ * Pair index @c p = source * V + target is sampled at
+ * @c (i * V²) / sample_pair_count for @c i in @c [0, sample_pair_count).
+ *
+ * Always checks CsrBfs, CsrDfs, and SccDagSearch. When V is within
+ * @ref kSampledOracleFullCheckVertexLimit, also checks SCC partition, GRAIL,
+ * and (if @p layout is set) Brick + HBrick. TwoHop, FullClosure, and SccDagClosure
+ * run only when V is within @ref kSampledOracleMaterializedBaselineVertexLimit.
+ * @p hbrick_config may be null to use @ref defaultOracleHBrickConfig.
+ */
+void expectReachabilityOracleSampledPairs(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t sample_pair_count = kIntegrationReachabilitySamplePairCount,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max(),
+    const MazeLayout* layout = nullptr,
+    TileSize brick_tile_size = TileSize{4U, 4U},
+    const HBrickConfig* hbrick_config = nullptr
+);
+
+/**
+ * @brief Counts ordered pairs assigned to @p slice_id when splitting V² pairs into @p slice_count slices.
+ * @ingroup hbrick_test_support
+ *
+ * Pairs are enumerated in row-major order (@c source major, @c target minor). Pair index
+ * @c p = source * V + target is included when @c p % slice_count == slice_id.
+ */
+[[nodiscard]] uint64_t reachabilityPairCountInSlice(
+    uint32_t num_vertices,
+    uint32_t slice_id,
+    uint32_t slice_count
+);
+
+void expectSearchBaselinesMatchBfsOnSlice(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count
+);
+
+void expectAllBaselinesMatchBfsOnSlice(
+    const CsrGraph& graph,
+    const std::string& context,
+    uint32_t slice_id,
+    uint32_t slice_count,
+    uint64_t max_memory_bytes = std::numeric_limits<uint64_t>::max()
+);
+
+}  // namespace hbrick::test_support

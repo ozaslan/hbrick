@@ -1,0 +1,14 @@
+{
+  "schema": "hbrick_orientation_recipe_v1",
+  "group": "fair_bench",
+  "label": "M03_V06_gf_ang045_back05",
+  "set": "maze",
+  "map": "maze512-1-0.map",
+  "policy": "ground_only",
+  "mode": "gradient_flow",
+  "seed": "0x0000000000000001",
+  "p_one_way": 0,
+  "p_bidirectional": 0,
+  "gradient_angle_degrees": 45,
+  "p_against_gradient": 0.05
+}

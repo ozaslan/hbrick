@@ -1,0 +1,398 @@
+#include <gtest/gtest.h>
+
+#include <limits>
+
+#include "hbrick/baselines/closure_matrix_builder.hpp"
+#include "hbrick/baselines/csr_bfs_baseline.hpp"
+#include "hbrick/baselines/csr_dfs_baseline.hpp"
+#include "hbrick/baselines/full_closure_baseline.hpp"
+#include "hbrick/baselines/grail_baseline.hpp"
+#include "hbrick/baselines/oreach_baseline.hpp"
+#include "hbrick/baselines/two_hop_baseline.hpp"
+#include "hbrick/graph/bfs.hpp"
+#include "hbrick/graph/csr_graph_builder.hpp"
+#include "hbrick/graph/directed_grid_graph.hpp"
+#include "hbrick/graph/directed_grid_graph_builder.hpp"
+#include "hbrick/graph/random_asymmetric_params.hpp"
+#include "hbrick/grid/maze_layout.hpp"
+
+namespace {
+
+hbrick::CsrGraph buildDiamondGraph() {
+    hbrick::CsrGraphBuilder builder{4U};
+    builder.addEdge(0U, 1U);
+    builder.addEdge(0U, 2U);
+    builder.addEdge(1U, 3U);
+    builder.addEdge(2U, 3U);
+    return builder.build();
+}
+
+hbrick::ReachabilityAnswer referenceBfs(
+    const hbrick::CsrGraph& graph,
+    const uint32_t source,
+    const uint32_t target,
+    hbrick::GraphSearchScratch& scratch
+) {
+    return hbrick::Bfs::reachable(graph, source, target, scratch);
+}
+
+void expectCsrBaselinesMatchReferenceOnAllPairs(const hbrick::CsrGraph& graph) {
+    hbrick::GraphSearchScratch query_scratch(graph.numVertices());
+    hbrick::GraphSearchScratch preprocess_scratch(graph.numVertices());
+
+    hbrick::CsrBfsBaseline bfs_baseline;
+    hbrick::CsrDfsBaseline dfs_baseline;
+    bfs_baseline.preprocess(graph);
+    dfs_baseline.preprocess(graph);
+
+    hbrick::FullClosureBaseline closure_baseline;
+    closure_baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+
+    hbrick::FullClosureBaseline kleene_closure_baseline{
+        hbrick::FullClosureKernel::SccCompressedKleene
+    };
+    kleene_closure_baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+
+    hbrick::TwoHopBaseline two_hop_baseline;
+    two_hop_baseline.preprocess(graph, preprocess_scratch, std::numeric_limits<uint64_t>::max());
+
+    hbrick::GrailBaseline grail_baseline;
+    grail_baseline.preprocess(
+        graph,
+        hbrick::GrailBaselineParams{},
+        std::numeric_limits<uint64_t>::max()
+    );
+
+    hbrick::OreachBaseline oreach_baseline;
+    oreach_baseline.preprocess(
+        graph,
+        hbrick::OreachBaselineParams{},
+        std::numeric_limits<uint64_t>::max()
+    );
+
+    ASSERT_EQ(bfs_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(dfs_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(closure_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(kleene_closure_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(two_hop_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(grail_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(oreach_baseline.status(), hbrick::BaselineStatus::Completed);
+
+    for (uint32_t source = 0; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0; target < graph.numVertices(); ++target) {
+            const hbrick::ReachabilityAnswer expected = referenceBfs(
+                graph,
+                source,
+                target,
+                query_scratch
+            );
+            const hbrick::ReachabilityAnswer bfs_answer = bfs_baseline.query(
+                source,
+                target,
+                query_scratch
+            );
+            const hbrick::ReachabilityAnswer dfs_answer = dfs_baseline.query(
+                source,
+                target,
+                query_scratch
+            );
+            const hbrick::ReachabilityAnswer closure_answer = closure_baseline.query(
+                source,
+                target
+            );
+            const hbrick::ReachabilityAnswer kleene_closure_answer =
+                kleene_closure_baseline.query(source, target);
+            const hbrick::ReachabilityAnswer two_hop_answer = two_hop_baseline.query(
+                source,
+                target
+            );
+            const hbrick::ReachabilityAnswer grail_answer = grail_baseline.query(
+                source,
+                target,
+                query_scratch
+            );
+            const hbrick::ReachabilityAnswer oreach_answer = oreach_baseline.query(
+                source,
+                target,
+                query_scratch
+            );
+
+            EXPECT_EQ(bfs_answer, expected) << "bfs source=" << source << " target=" << target;
+            EXPECT_EQ(dfs_answer, expected) << "dfs source=" << source << " target=" << target;
+            EXPECT_EQ(closure_answer, expected) << "closure source=" << source << " target=" << target;
+            EXPECT_EQ(kleene_closure_answer, expected)
+                << "kleene closure source=" << source << " target=" << target;
+            EXPECT_EQ(two_hop_answer, expected) << "two-hop source=" << source << " target=" << target;
+            EXPECT_EQ(grail_answer, expected) << "grail source=" << source << " target=" << target;
+            EXPECT_EQ(oreach_answer, expected) << "oreach source=" << source << " target=" << target;
+        }
+    }
+}
+
+}  // namespace
+
+TEST(CsrBaselines, BfsAndDfsAgreeWithDirectSearchOnKnownGraph) {
+    expectCsrBaselinesMatchReferenceOnAllPairs(buildDiamondGraph());
+}
+
+TEST(CsrBaselines, BfsAndDfsAgreeWithDirectSearchOnRandomSmallGraph) {
+    const hbrick::MazeLayout grid(4U, 3U);
+    const hbrick::DirectedGridGraph directed = hbrick::DirectedGridGraphBuilder::build(
+        grid,
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        hbrick::RandomAsymmetricParams{0xFEEDFACEULL, 0.18L, 0.22L}
+    );
+
+    expectCsrBaselinesMatchReferenceOnAllPairs(directed.csrGraph());
+}
+
+TEST(FullClosureBaseline, CompletesOnEmptyGraph) {
+    hbrick::CsrGraphBuilder builder{0U};
+    const hbrick::CsrGraph graph = builder.build();
+
+    hbrick::FullClosureBaseline baseline;
+    baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+}
+
+TEST(FullClosureBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+    const uint64_t estimate = hbrick::ClosureMatrixBuilder::estimateReflexiveAdjacencyBytes(
+        graph.numVertices()
+    );
+
+    hbrick::FullClosureBaseline baseline;
+    baseline.preprocess(graph, estimate - 1U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(baseline.query(0U, 1U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(FullClosureBaseline, ChecksMemoryBeforeAllocation) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+
+    EXPECT_FALSE(hbrick::ClosureMatrixBuilder::canAllocateReflexiveAdjacency(
+        graph.numVertices(),
+        512U
+    ));
+
+    hbrick::FullClosureBaseline baseline;
+    baseline.preprocess(graph, 512U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+}
+
+TEST(FullClosureBaseline, CompletedClosureAgreesWithBfsOnDiamond) {
+    const hbrick::CsrGraph graph = buildDiamondGraph();
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+
+    hbrick::FullClosureBaseline baseline;
+    baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+    EXPECT_EQ(baseline.query(0U, 3U), hbrick::ReachabilityAnswer::Reachable);
+    EXPECT_EQ(baseline.query(3U, 0U), hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(
+        baseline.query(0U, 3U),
+        referenceBfs(graph, 0U, 3U, scratch)
+    );
+}
+
+TEST(FullClosureBaseline, KleeneKernelAgreesWithWarshallKernelOnCyclicGrid) {
+    const hbrick::MazeLayout grid(6U, 5U);
+    const hbrick::DirectedGridGraph directed = hbrick::DirectedGridGraphBuilder::build(
+        grid,
+        hbrick::GridEdgeConversionMode::RandomAsymmetric,
+        hbrick::RandomAsymmetricParams{0x5EED1234ULL, 0.30L, 0.20L}
+    );
+    const hbrick::CsrGraph& graph = directed.csrGraph();
+
+    hbrick::FullClosureBaseline warshall_baseline;
+    warshall_baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+
+    hbrick::FullClosureBaseline kleene_baseline{
+        hbrick::FullClosureKernel::SccCompressedKleene
+    };
+    kleene_baseline.preprocess(graph, std::numeric_limits<uint64_t>::max());
+
+    ASSERT_EQ(warshall_baseline.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_EQ(kleene_baseline.status(), hbrick::BaselineStatus::Completed);
+    EXPECT_EQ(warshall_baseline.kernel(), hbrick::FullClosureKernel::Warshall);
+    EXPECT_EQ(
+        kleene_baseline.kernel(),
+        hbrick::FullClosureKernel::SccCompressedKleene
+    );
+
+    for (uint32_t source = 0U; source < graph.numVertices(); ++source) {
+        for (uint32_t target = 0U; target < graph.numVertices(); ++target) {
+            EXPECT_EQ(
+                kleene_baseline.query(source, target),
+                warshall_baseline.query(source, target)
+            ) << "source=" << source << " target=" << target;
+        }
+    }
+}
+
+TEST(FullClosureBaseline, KleeneKernelFinishesInOneIncrementalStep) {
+    const hbrick::CsrGraph graph = buildDiamondGraph();
+
+    hbrick::FullClosureBaseline baseline{
+        hbrick::FullClosureKernel::SccCompressedKleene
+    };
+    baseline.beginPreprocess(graph, std::numeric_limits<uint64_t>::max());
+    ASSERT_TRUE(baseline.preprocessActive());
+
+    EXPECT_TRUE(baseline.stepPreprocessPivots(1U));
+    EXPECT_FALSE(baseline.preprocessActive());
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+    EXPECT_EQ(
+        baseline.preprocessPivotsCompleted(),
+        baseline.preprocessPivotTotal()
+    );
+    EXPECT_EQ(baseline.query(0U, 3U), hbrick::ReachabilityAnswer::Reachable);
+    EXPECT_EQ(baseline.query(3U, 0U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(FullClosureBaseline, KleeneKernelSkippedByPolicyWhenMemoryEstimateExceeded) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+
+    hbrick::FullClosureBaseline baseline{
+        hbrick::FullClosureKernel::SccCompressedKleene
+    };
+    baseline.preprocess(graph, 512U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(baseline.query(0U, 1U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(CsrBaselines, QueryReturnsUnreachableWhenNotPreprocessed) {
+    hbrick::CsrBfsBaseline bfs_baseline;
+    hbrick::CsrDfsBaseline dfs_baseline;
+    hbrick::TwoHopBaseline two_hop_baseline;
+    hbrick::GrailBaseline grail_baseline;
+    hbrick::GraphSearchScratch scratch(1U);
+
+    EXPECT_EQ(bfs_baseline.status(), hbrick::BaselineStatus::NotRun);
+    EXPECT_EQ(
+        bfs_baseline.query(0U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+    EXPECT_EQ(
+        dfs_baseline.query(0U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+    EXPECT_EQ(
+        two_hop_baseline.query(0U, 0U),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+    EXPECT_EQ(
+        grail_baseline.query(0U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+}
+
+TEST(TwoHopBaseline, SkippedByPolicyWhenMemoryCapExceededDuringBuild) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::TwoHopBaseline baseline;
+    baseline.preprocess(graph, scratch, 16U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_GT(baseline.labelStorageBytes(), 16U);
+    EXPECT_EQ(baseline.query(0U, 1U), hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(TwoHopBaseline, RunsWhenCapIsBelowWorstCaseBound) {
+    hbrick::CsrGraphBuilder builder{256U};
+    const hbrick::CsrGraph graph = builder.build();
+    const uint64_t worst_case =
+        hbrick::TwoHopBaseline::estimateMaxLabelBytes(graph.numVertices());
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    hbrick::TwoHopBaseline baseline;
+    baseline.preprocess(graph, scratch, worst_case - 1U);
+
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+    EXPECT_GT(baseline.labelStorageBytes(), 0U);
+    EXPECT_LT(baseline.labelStorageBytes(), worst_case);
+}
+
+TEST(GrailBaseline, SkippedByPolicyWhenMemoryEstimateExceeded) {
+    hbrick::CsrGraphBuilder builder{65U};
+    const hbrick::CsrGraph graph = builder.build();
+    const hbrick::GrailBaselineParams params;
+    const uint64_t estimate = hbrick::GrailBaseline::estimateLabelBytes(
+        graph.numVertices(),
+        params.num_trees
+    );
+
+    hbrick::GrailBaseline baseline;
+    baseline.preprocess(graph, params, estimate - 1U);
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    EXPECT_EQ(baseline.status(), hbrick::BaselineStatus::SkippedByPolicy);
+    EXPECT_EQ(
+        baseline.query(0U, 1U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+}
+
+TEST(GrailBaseline, SameComponentIsLabelResolvedAndUnreachableIsExact) {
+    hbrick::CsrGraphBuilder builder{3U};
+    builder.addEdge(0U, 1U);
+    builder.addEdge(1U, 0U);
+    builder.addEdge(1U, 2U);
+    const hbrick::CsrGraph graph = builder.build();
+
+    hbrick::GrailBaseline baseline;
+    baseline.preprocess(
+        graph,
+        hbrick::GrailBaselineParams{},
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    const hbrick::GrailQueryOutcome cycle = baseline.queryDetailed(0U, 1U, scratch);
+    EXPECT_EQ(cycle.answer, hbrick::ReachabilityAnswer::Reachable);
+    EXPECT_TRUE(cycle.tree_certified);
+
+    const hbrick::GrailQueryOutcome forward = baseline.queryDetailed(0U, 2U, scratch);
+    EXPECT_EQ(forward.answer, hbrick::ReachabilityAnswer::Reachable);
+
+    const hbrick::GrailQueryOutcome backward = baseline.queryDetailed(2U, 0U, scratch);
+    EXPECT_EQ(backward.answer, hbrick::ReachabilityAnswer::Unreachable);
+}
+
+TEST(GrailBaseline, IntervalContainmentIsNecessaryAndNonContainmentIsSound) {
+    hbrick::CsrGraphBuilder builder{3U};
+    builder.addEdge(0U, 1U);
+    builder.addEdge(1U, 2U);
+    const hbrick::CsrGraph graph = builder.build();
+
+    hbrick::GrailBaseline baseline;
+    baseline.preprocess(
+        graph,
+        hbrick::GrailBaselineParams{3U, 0xDF5ULL},
+        std::numeric_limits<uint64_t>::max()
+    );
+    ASSERT_EQ(baseline.status(), hbrick::BaselineStatus::Completed);
+
+    hbrick::GraphSearchScratch scratch(graph.numVertices());
+    EXPECT_TRUE(baseline.intervalLabelsContain(0U, 2U));
+    EXPECT_TRUE(baseline.intervalLabelsContain(0U, 1U));
+    EXPECT_FALSE(baseline.intervalLabelsContain(2U, 0U));
+    EXPECT_EQ(
+        baseline.query(0U, 2U, scratch),
+        hbrick::ReachabilityAnswer::Reachable
+    );
+    EXPECT_EQ(
+        baseline.query(2U, 0U, scratch),
+        hbrick::ReachabilityAnswer::Unreachable
+    );
+}

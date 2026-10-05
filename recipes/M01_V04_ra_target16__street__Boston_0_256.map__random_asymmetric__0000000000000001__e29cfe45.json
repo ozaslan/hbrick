@@ -1,0 +1,14 @@
+{
+  "schema": "hbrick_orientation_recipe_v1",
+  "group": "fair_bench",
+  "label": "M01_V04_ra_target16",
+  "set": "street",
+  "map": "Boston_0_256.map",
+  "policy": "ground_only",
+  "mode": "random_asymmetric",
+  "seed": "0x0000000000000001",
+  "p_one_way": 0.86,
+  "p_bidirectional": 0.14,
+  "gradient_angle_degrees": 45,
+  "p_against_gradient": 0.02
+}
