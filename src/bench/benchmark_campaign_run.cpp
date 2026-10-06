@@ -201,33 +201,11 @@ using CompletedResultKeys = std::unordered_set<std::string>;
         if (!splitCsvLine(line, fields) || fields.size() < 6U) {
             continue;
         }
-        if (fields[6] != "Completed") {
-            continue;
-        }
         const std::string config_id =
             fields.size() > 35U ? fields[35] : std::string{};
         completed.insert(completedResultKey(fields[3], fields[5], config_id));
     }
     return completed;
-}
-
-[[nodiscard]] bool allMethodsCompletedForConfig(
-    const std::string& map_id,
-    const std::span<const ReachabilityBaselineId> methods,
-    const std::string& config_id,
-    const CompletedResultKeys& completed
-) {
-    for (const ReachabilityBaselineId method : methods) {
-        if (!methodConfigCompleted(
-                map_id,
-                reachabilityBaselineName(method),
-                config_id,
-                completed
-            )) {
-            return false;
-        }
-    }
-    return true;
 }
 
 [[nodiscard]] bool mapMatchesFilter(
@@ -544,29 +522,38 @@ bool runBenchmarkCampaignFromManifest(
 
         for (const ReachabilityBenchmarkConfig& variant : config_variants) {
             const std::string config_id = benchmarkCampaignConfigId(variant);
-            if (options.resume
-                && allMethodsCompletedForConfig(
-                    entry.map.map_id,
-                    variant.methods,
-                    config_id,
-                    completed
-                )) {
-                if (options.logger != nullptr) {
-                    options.logger->infof(
-                        "Skipping %s config %s (all methods completed)",
+            ReachabilityBenchmarkConfig runnable = variant;
+            if (options.resume) {
+                std::vector<ReachabilityBaselineId> pending;
+                pending.reserve(variant.methods.size());
+                for (const ReachabilityBaselineId method : variant.methods) {
+                    if (!methodConfigCompleted(
+                            entry.map.map_id,
+                            reachabilityBaselineName(method),
+                            config_id,
+                            completed)) {
+                        pending.push_back(method);
+                    }
+                }
+                if (pending.empty()) {
+                    if (options.logger != nullptr) {
+                        options.logger->infof(
+                            "Skipping %s config %s (all methods completed)",
+                            entry.map.map_id.c_str(),
+                            config_id.c_str()
+                        );
+                    }
+                    std::fprintf(
+                        stderr,
+                        "HBRICK_CONFIG_DONE\tmap_id=%s\tconfig_id=%s\tstatus=Skipped\t"
+                        "detail=already_completed\n",
                         entry.map.map_id.c_str(),
                         config_id.c_str()
                     );
+                    std::fflush(stderr);
+                    continue;
                 }
-                std::fprintf(
-                    stderr,
-                    "HBRICK_CONFIG_DONE\tmap_id=%s\tconfig_id=%s\tstatus=Skipped\t"
-                    "detail=already_completed\n",
-                    entry.map.map_id.c_str(),
-                    config_id.c_str()
-                );
-                std::fflush(stderr);
-                continue;
+                runnable.methods = std::move(pending);
             }
 
             if (!map_built) {
@@ -596,7 +583,7 @@ bool runBenchmarkCampaignFromManifest(
                 options.logger->infof(
                     "  config %s (%zu methods)",
                     config_id.c_str(),
-                    variant.methods.size()
+                    runnable.methods.size()
                 );
             }
 
@@ -611,7 +598,7 @@ bool runBenchmarkCampaignFromManifest(
                     entry.map,
                     graph,
                     layout,
-                    variant,
+                    runnable,
                     config_error,
                     false,
                     options.logger,

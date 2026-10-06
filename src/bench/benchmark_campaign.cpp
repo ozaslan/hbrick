@@ -912,7 +912,22 @@ void applyBalancedWorkloadMeta(
     }
 }
 
-[[nodiscard]] bool appendTimeoutCampaignRow(
+[[nodiscard]] BenchmarkCampaignQueryWorkload terminalCampaignWorkload(
+    const ReachabilityBenchmarkConfig& config,
+    const std::vector<ReachabilityQueryPair>& frozen,
+    const BenchmarkCampaignQueryWorkload& balanced_meta
+) {
+    BenchmarkCampaignQueryWorkload workload{};
+    workload.pair_seed = config.pair_seed;
+    workload.query_count = static_cast<uint32_t>(frozen.size());
+    workload.warmup_queries = config.warmup_queries;
+    workload.correctness_check_count = config.correctness_check_count;
+    workload.pair_list_hash = hashReachabilityQueryPairs(frozen);
+    applyBalancedWorkloadMeta(workload, balanced_meta);
+    return workload;
+}
+
+[[nodiscard]] bool appendTerminalCampaignRow(
     const BenchmarkCampaignPaths& paths,
     const BenchmarkCampaignMetadata& metadata,
     const BenchmarkCampaignMapContext& map,
@@ -923,6 +938,8 @@ void applyBalancedWorkloadMeta(
     const MazeLayout& layout,
     const std::string& map_class,
     const BenchmarkCampaignMapCharacterization* map_characterization,
+    const BaselineStatus status,
+    const std::string& detail,
     std::string& error_message
 ) {
     ReachabilityBenchmarkReport report{};
@@ -940,8 +957,8 @@ void applyBalancedWorkloadMeta(
 
     BaselineBenchmarkMetrics metrics{};
     metrics.method = method;
-    metrics.status = BaselineStatus::Timeout;
-    metrics.policy_skip_detail = "Preprocess exceeded max_preprocess_seconds";
+    metrics.status = status;
+    metrics.policy_skip_detail = detail;
     report.methods.push_back(metrics);
 
     const std::vector<BenchmarkCampaignResultRow> rows = benchmarkCampaignRowsFromReport(
@@ -1241,24 +1258,21 @@ bool runBenchmarkCampaignGridJob(
             waitPidWithTimeout(pid, config.max_preprocess_seconds, status);
         append_manifest_once = false;
         if (wait_outcome == ChildWaitOutcome::TimedOut) {
-            BenchmarkCampaignQueryWorkload timeout_workload{};
-            timeout_workload.pair_seed = config.pair_seed;
-            timeout_workload.query_count = static_cast<uint32_t>(frozen.size());
-            timeout_workload.warmup_queries = config.warmup_queries;
-            timeout_workload.correctness_check_count = config.correctness_check_count;
-            timeout_workload.pair_list_hash = hashReachabilityQueryPairs(frozen);
-            applyBalancedWorkloadMeta(timeout_workload, balanced_meta);
-            if (!appendTimeoutCampaignRow(
+            const BenchmarkCampaignQueryWorkload terminal_workload =
+                terminalCampaignWorkload(config, frozen, balanced_meta);
+            if (!appendTerminalCampaignRow(
                     paths,
                     metadata,
                     map,
                     child_config,
                     method,
-                    timeout_workload,
+                    terminal_workload,
                     graph,
                     layout,
                     map_class,
                     map_characterization,
+                    BaselineStatus::Timeout,
+                    "Preprocess exceeded max_preprocess_seconds",
                     error_message)) {
                 return false;
             }
@@ -1267,9 +1281,40 @@ bool runBenchmarkCampaignGridJob(
         if (wait_outcome == ChildWaitOutcome::WaitError
             || !WIFEXITED(status)
             || WEXITSTATUS(status) != 0) {
-            error_message = "Isolated method process failed: ";
-            error_message += reachabilityBaselineName(method);
-            return false;
+            std::string detail = "Isolated method process failed";
+            if (wait_outcome != ChildWaitOutcome::WaitError && WIFSIGNALED(status)) {
+                detail += " with signal ";
+                detail += std::to_string(WTERMSIG(status));
+            } else if (wait_outcome != ChildWaitOutcome::WaitError && WIFEXITED(status)) {
+                detail += " with exit status ";
+                detail += std::to_string(WEXITSTATUS(status));
+            }
+            const BenchmarkCampaignQueryWorkload terminal_workload =
+                terminalCampaignWorkload(config, frozen, balanced_meta);
+            if (logger != nullptr) {
+                logger->errorf(
+                    "%s: %s",
+                    reachabilityBaselineName(method),
+                    detail.c_str()
+                );
+            }
+            if (!appendTerminalCampaignRow(
+                    paths,
+                    metadata,
+                    map,
+                    child_config,
+                    method,
+                    terminal_workload,
+                    graph,
+                    layout,
+                    map_class,
+                    map_characterization,
+                    BaselineStatus::Failed,
+                    detail,
+                    error_message)) {
+                return false;
+            }
+            continue;
         }
     }
 
