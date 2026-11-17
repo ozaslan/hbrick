@@ -317,16 +317,22 @@ docs/               Optional HTML API reference (Doxygen)
 
 ## Citing this work
 
-The paper is under review. It is not published. Do not cite it as a journal article, and do not invent a volume, issue, pages, or DOI.
+The preprint is available on arXiv ([arXiv:2611.08119](https://arxiv.org/abs/2611.08119)).
+The journal manuscript is under review at *Mathematics* (MDPI) and is not yet published.
+Please cite the arXiv preprint below rather than an unpublished journal volume, issue, page range, or DOI.
 
-Özaslan, T.; Özaslan, E.A. H-BRICK: Hierarchical Boundary Reachability Index with Compressed Kleene Closure for Directed Grid Graphs. Under review at Mathematics (MDPI), 2026.
+Özaslan, T.; Özaslan, E.A. H-BRICK: Hierarchical Boundary Reachability Index with Compressed Kleene Closure for Directed Grid Graphs. arXiv preprint arXiv:2611.08119, 2026. https://arxiv.org/abs/2611.08119
 
 ```bibtex
-@unpublished{ozaslan2026hbrick,
-  author = {Özaslan, Tolga and Özaslan, Elif A.},
-  title  = {H-BRICK: Hierarchical Boundary Reachability Index with Compressed {Kleene} Closure for Directed Grid Graphs},
-  year   = {2026},
-  note   = {Under review at Mathematics (MDPI). Not yet published. Software: https://github.com/ozaslan/hbrick}
+@misc{ozaslan2026hbrick,
+  author        = {Özaslan, Tolga and Özaslan, Elif A.},
+  title         = {{H-BRICK}: Hierarchical Boundary Reachability Index with Compressed {Kleene} Closure for Directed Grid Graphs},
+  year          = {2026},
+  eprint        = {2611.08119},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.RO},
+  url           = {https://arxiv.org/abs/2611.08119},
+  note          = {Software: https://github.com/ozaslan/hbrick}
 }
 ```
 
