@@ -103,6 +103,8 @@ private:
         uint32_t chain_length = 0U;
         /** @brief Highest ancestor-chain level whose lift and embedding are valid. */
         uint32_t embeddable_limit = 0U;
+        /** @brief Active 64-bit word count of @ref projected at the current ancestor level. */
+        uint32_t active_gamma_words = 0U;
         /** @brief True when the leaf frontier is empty (cannot leave its tile). */
         bool confined = false;
         /** @brief Base-port frontier reachable from this endpoint inside its tile. */

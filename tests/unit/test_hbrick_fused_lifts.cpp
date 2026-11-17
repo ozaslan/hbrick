@@ -487,3 +487,63 @@ TEST(HBrickSkipLiftBaseline, AdaptiveM4rmMatchesRowProductOnPartialBlocks) {
     }
     EXPECT_TRUE(exercised_m4rm);
 }
+
+TEST(HBrickSkipLiftBaseline, StopsAtFirstIntermediateZeroFrontierLevel) {
+    hbrick::MazeLayout layout(64U, 64U, true);
+    for (uint32_t c = 1U; c <= 6U; ++c) {
+        layout.setPassable(hbrick::GridCoord{c, 1U}, false);
+        layout.setPassable(hbrick::GridCoord{c, 6U}, false);
+        layout.setPassable(hbrick::GridCoord{1U, c}, false);
+        layout.setPassable(hbrick::GridCoord{6U, c}, false);
+    }
+    for (uint32_t x = 2U; x <= 5U; ++x) {
+        layout.setPassable(hbrick::GridCoord{x, 3U}, false);
+    }
+
+    const hbrick::DirectedGridGraph graph = hbrick::DirectedGridGraphBuilder::build(
+        layout,
+        hbrick::GridEdgeConversionMode::BidirectionalAll
+    );
+    const auto config = configFor(
+        hbrick::TileSize{4U, 4U},
+        hbrick::GroupSize{2U, 2U},
+        hbrick::kHBrickFullDepth
+    );
+
+    hbrick::HBrickBaseline hbrick;
+    hbrick.preprocess(graph, layout, config);
+    ASSERT_EQ(hbrick.status(), hbrick::BaselineStatus::Completed);
+    ASSERT_GE(hbrick.index().hierarchy().numLevels(), 5U);
+
+    hbrick::HBrickFusedLiftBaseline fused;
+    fused.preprocess(graph, layout, config);
+    ASSERT_EQ(fused.status(), hbrick::BaselineStatus::Completed);
+
+    hbrick::HBrickSkipLiftBaseline skip;
+    skip.preprocess(graph, layout, config);
+    ASSERT_EQ(skip.status(), hbrick::BaselineStatus::Completed);
+
+    const uint32_t s = graph.vertexFromCoord(hbrick::GridCoord{2U, 2U});
+    const uint32_t t_same_l1 = graph.vertexFromCoord(hbrick::GridCoord{5U, 5U});
+    const uint32_t t_outer = graph.vertexFromCoord(hbrick::GridCoord{40U, 40U});
+
+    const hbrick::HBrickQueryOutcome hb_same = hbrick.queryDetailed(s, t_same_l1);
+    const hbrick::HBrickQueryOutcome fl_same = fused.queryDetailed(s, t_same_l1);
+    const hbrick::HBrickQueryOutcome sl_same = skip.queryDetailed(s, t_same_l1);
+    EXPECT_EQ(hb_same.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(fl_same.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(sl_same.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(hb_same.ancestors_checked, 1U);
+    EXPECT_EQ(fl_same.ancestors_checked, 1U);
+    EXPECT_EQ(sl_same.ancestors_checked, 1U);
+
+    const hbrick::HBrickQueryOutcome hb_outer = hbrick.queryDetailed(s, t_outer);
+    const hbrick::HBrickQueryOutcome fl_outer = fused.queryDetailed(s, t_outer);
+    const hbrick::HBrickQueryOutcome sl_outer = skip.queryDetailed(s, t_outer);
+    EXPECT_EQ(hb_outer.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(fl_outer.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(sl_outer.answer, hbrick::ReachabilityAnswer::Unreachable);
+    EXPECT_EQ(hb_outer.ancestors_checked, 0U);
+    EXPECT_EQ(fl_outer.ancestors_checked, 0U);
+    EXPECT_EQ(sl_outer.ancestors_checked, 0U);
+}

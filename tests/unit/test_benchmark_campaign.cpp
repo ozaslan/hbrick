@@ -455,6 +455,12 @@ TEST(BenchmarkCampaign, ManuscriptPresetMatchesPublishedProtocol) {
     EXPECT_EQ(config.query_count, 8192U);
     EXPECT_EQ(config.warmup_queries, 128U);
     EXPECT_EQ(config.query_timing_chunks, 128U);
+    EXPECT_EQ(config.pair_seed, 0xBEEFCAFEULL);
+    EXPECT_EQ(config.correctness_check_count, 8192U);
+    EXPECT_TRUE(config.use_balanced_workload);
+    EXPECT_FALSE(config.require_balanced_workload);
+    EXPECT_EQ(config.max_memory_bytes, 2560ULL << 20);
+    EXPECT_EQ(config.max_preprocess_seconds, 300U);
     EXPECT_EQ(config.brick_tile_size.width, 24U);
     EXPECT_EQ(config.hbrick_group_size.group_w, 4U);
     EXPECT_EQ(config.hbrick_max_depth, hbrick::kHBrickFullDepth);
@@ -464,7 +470,9 @@ TEST(BenchmarkCampaign, ManuscriptPresetMatchesPublishedProtocol) {
             != config.methods.end();
     };
     EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::HBrickSkipLift));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::HBrick));
     EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::CsrBfs));
+    EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::CsrDfs));
     EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::SccDagSearch));
     EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::Grail));
     EXPECT_TRUE(has(hbrick::ReachabilityBaselineId::Oreach));
@@ -496,7 +504,7 @@ TEST(BenchmarkCampaign, ManuscriptPresetMatchesPublishedProtocol) {
             ++skip_lift_cells;
             if (variant.brick_tile_size.width == 24U
                 && variant.hbrick_group_size.group_w == 4U) {
-                operating_point_has_baselines = variant.methods.size() == 6U;
+                operating_point_has_baselines = variant.methods.size() == 8U;
             } else {
                 EXPECT_EQ(variant.methods.size(), 1U);
             }

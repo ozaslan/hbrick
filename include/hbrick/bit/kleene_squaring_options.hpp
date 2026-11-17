@@ -7,8 +7,26 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 namespace hbrick {
+
+/**
+ * @brief Returns the process-wide default Warshall/M4RM crossover dimension (512 unless updated).
+ * @ingroup hbrick_bit
+ *
+ * @return Current process-wide default crossover dimension @c theta_hyb.
+ */
+[[nodiscard]] uint32_t defaultHybridWarshallThreshold() noexcept;
+
+/**
+ * @brief Updates the process-wide default Warshall/M4RM crossover dimension used by newly
+ *        default-constructed @ref KleeneSquaringOptions instances.
+ * @ingroup hbrick_bit
+ *
+ * @param threshold Crossover dimension @c theta_hyb (clamped to at least @c 1).
+ */
+void setDefaultHybridWarshallThreshold(uint32_t threshold) noexcept;
 
 /**
  * @brief Strategy for computing reflexive transitive closure.
@@ -99,10 +117,73 @@ struct KleeneSquaringOptions {
      *
      * Matrices with @c n <= hybrid_warshall_threshold use Warshall-Floyd;
      * matrices with @c n > hybrid_warshall_threshold use M4RM.
-     * Default is 512. Can be overridden via @c HBRICK_CLOSURE_THRESHOLD.
+     * Initialized from @ref defaultHybridWarshallThreshold (512 unless calibrated).
+     * Can also be overridden at runtime via @c HBRICK_CLOSURE_THRESHOLD.
      */
-    uint32_t hybrid_warshall_threshold = 512U;
+    uint32_t hybrid_warshall_threshold = defaultHybridWarshallThreshold();
 };
+
+/**
+ * @brief Configuration for host-specific calibration of @ref KleeneSquaringOptions::hybrid_warshall_threshold.
+ * @ingroup hbrick_bit
+ */
+struct HybridThresholdCalibrationOptions {
+    /** @brief Smallest square relation dimension tested (clamped to >= 16). */
+    uint32_t min_dimension = 64U;
+    /** @brief Largest square relation dimension tested. */
+    uint32_t max_dimension = 1024U;
+    /** @brief Resolution step between consecutive candidate dimensions (e.g. 32 tests 64, 96, 128, ..., 384, ..., 512, ...). */
+    uint32_t dimension_step = 32U;
+    /** @brief Unmeasured warmup runs per kernel at each candidate dimension. */
+    uint32_t warmup_runs = 1U;
+    /** @brief Measured runs per kernel at each candidate dimension (median runtime is recorded). */
+    uint32_t measured_runs = 3U;
+    /** @brief Base execution options controlling serial vs. multi-threaded M4RM dispatch during calibration. */
+    KleeneSquaringOptions base_options{};
+    /** @brief Deterministic PRNG seed for synthetic 2D-lattice test relations. */
+    uint64_t seed = 0x48425249434BULL;
+    /** @brief When @c true, updates @ref setDefaultHybridWarshallThreshold with the calibrated result. */
+    bool apply_as_process_default = false;
+};
+
+/**
+ * @brief Timing measurement at one candidate relation dimension during threshold calibration.
+ * @ingroup hbrick_bit
+ */
+struct HybridThresholdCalibrationSample {
+    /** @brief Square relation dimension @c d evaluated. */
+    uint32_t dimension = 0U;
+    /** @brief Median execution time of 64-way bit-parallel Warshall in nanoseconds. */
+    uint64_t warshall_median_ns = 0U;
+    /** @brief Median execution time of M4RM repeated squaring in nanoseconds. */
+    uint64_t m4rm_median_ns = 0U;
+};
+
+/**
+ * @brief Result of sweeping Warshall versus M4RM across candidate dimensions on the current host.
+ * @ingroup hbrick_bit
+ */
+struct HybridThresholdCalibrationResult {
+    /** @brief Empirically selected crossover dimension @c theta_hyb minimizing normalized runtime regret. */
+    uint32_t recommended_threshold = 512U;
+    /** @brief Per-dimension timing curve across all evaluated candidate dimensions. */
+    std::vector<HybridThresholdCalibrationSample> samples;
+};
+
+/**
+ * @brief Benchmarks 64-way bit-parallel Warshall against M4RM repeated squaring across a fine-grained
+ *        dimension grid and returns the optimal @ref KleeneSquaringOptions::hybrid_warshall_threshold.
+ * @ingroup hbrick_bit
+ *
+ * Cold-path calibration routine intended to be called once on a target machine (e.g. at startup
+ * or deployment) so that the closure backend adapts to host L1/L2 cache capacity and SIMD width.
+ *
+ * @param options Sweep bounds, step resolution, repetition counts, and threading configuration.
+ * @return Calibration result containing @c recommended_threshold and per-dimension median timings.
+ */
+[[nodiscard]] HybridThresholdCalibrationResult calibrateHybridWarshallThreshold(
+    const HybridThresholdCalibrationOptions& options = {}
+);
 
 /**
  * @brief Resolves an effective worker count from @p options.

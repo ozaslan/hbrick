@@ -239,7 +239,9 @@ void expandManuscriptSweep(
             variant.hbrick_max_depth = kHBrickFullDepth;
             variant.methods = {ReachabilityBaselineId::HBrickSkipLift};
             if (tile == 24U && group == 4U) {
+                variant.methods.push_back(ReachabilityBaselineId::HBrick);
                 variant.methods.push_back(ReachabilityBaselineId::CsrBfs);
+                variant.methods.push_back(ReachabilityBaselineId::CsrDfs);
                 variant.methods.push_back(ReachabilityBaselineId::SccDagSearch);
                 variant.methods.push_back(ReachabilityBaselineId::Grail);
                 variant.methods.push_back(ReachabilityBaselineId::Oreach);
@@ -620,9 +622,12 @@ ReachabilityBenchmarkConfig benchmarkCampaignConfigFromPreset(
         config.query_count = 8192U;
         config.warmup_queries = 128U;
         config.query_timing_chunks = 128U;
-        config.correctness_check_count = 256U;
-        config.max_memory_bytes = 4ULL << 30;
-        config.max_preprocess_seconds = 3600U;
+        config.pair_seed = 0xBEEFCAFEULL;
+        config.correctness_check_count = 8192U;
+        config.use_balanced_workload = true;
+        config.require_balanced_workload = false;
+        config.max_memory_bytes = 2560ULL << 20;
+        config.max_preprocess_seconds = 300U;
         config.closure_enable_projected_speedup_early_stop = false;
         config.brick_tile_size = TileSize{24U, 24U};
         config.hbrick_group_size = GroupSize{4U, 4U};
@@ -630,7 +635,9 @@ ReachabilityBenchmarkConfig benchmarkCampaignConfigFromPreset(
         config.isolate_methods = true;
         config.methods = {
             ReachabilityBaselineId::HBrickSkipLift,
+            ReachabilityBaselineId::HBrick,
             ReachabilityBaselineId::CsrBfs,
+            ReachabilityBaselineId::CsrDfs,
             ReachabilityBaselineId::SccDagSearch,
             ReachabilityBaselineId::Grail,
             ReachabilityBaselineId::Oreach,

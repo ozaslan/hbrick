@@ -246,20 +246,27 @@ HBrickQueryOutcome HBrickSkipLiftBaseline::queryDetailed(
                 source_leaf,
                 scratch.sourceChain()[dest_level]
             );
+            if (!scratch.sourceChain()[dest_level].any()) {
+                if (index_.hierarchyQuerySound()) {
+                    return outcome;
+                }
+                break;
+            }
             skip_lifts_.liftTarget(
                 target_tile,
                 dest_level,
                 target_leaf,
                 scratch.targetChain()[dest_level]
             );
+            if (!scratch.targetChain()[dest_level].any()) {
+                if (index_.hierarchyQuerySound()) {
+                    return outcome;
+                }
+                break;
+            }
         }
 
         ++outcome.ancestors_checked;
-
-        if (!scratch.sourceChain()[dest_level].any()
-            || !scratch.targetChain()[dest_level].any()) {
-            continue;
-        }
 
         const SuperTileSummary& parent_summary =
             index_.superSummary(level, source_chain[level].index);

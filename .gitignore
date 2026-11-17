@@ -31,6 +31,8 @@ docs/man/
 docs/rtf/
 
 # Editor and OS temporary files
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 *~
@@ -38,25 +40,3 @@ Thumbs.db
 *.swo
 *.lock
 *.log
-
-# AI coding-tool state and instructions. These stay on the machine
-# that used the tool and are not part of the library.
-.cursor/
-.cursorrules
-.cursorignore
-.cursorindexingignore
-.agents/
-.codex/
-.kilo/
-.claude/
-.aider*
-.continue/
-.windsurf/
-.cline/
-.roo/
-.gemini/
-.copilot/
-AGENTS.md
-CLAUDE.md
-copilot-instructions.md
-.github/copilot-instructions.md

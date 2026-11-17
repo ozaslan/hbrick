@@ -652,3 +652,77 @@ TEST(BooleanClosure, M4RMParallelRandomDenseAndSparseLargeGraphs) {
     }
 }
 
+TEST(BooleanClosure, DefaultHybridThresholdRemains512AndProcessOverrideAppliesToNewOptions) {
+    struct ScopedThresholdReset {
+        uint32_t original = hbrick::defaultHybridWarshallThreshold();
+        ~ScopedThresholdReset() { hbrick::setDefaultHybridWarshallThreshold(original); }
+    } reset_guard;
+
+    EXPECT_EQ(hbrick::defaultHybridWarshallThreshold(), 512U);
+    EXPECT_EQ(hbrick::KleeneSquaringOptions{}.hybrid_warshall_threshold, 512U);
+
+    hbrick::setDefaultHybridWarshallThreshold(384U);
+    EXPECT_EQ(hbrick::defaultHybridWarshallThreshold(), 384U);
+
+    const hbrick::KleeneSquaringOptions inherited{};
+    EXPECT_EQ(inherited.hybrid_warshall_threshold, 384U);
+    EXPECT_EQ(hbrick::resolveClosureAlgorithm(inherited, 384U), hbrick::ClosureAlgorithm::Warshall);
+    EXPECT_EQ(hbrick::resolveClosureAlgorithm(inherited, 385U), hbrick::ClosureAlgorithm::M4RM4Table);
+}
+
+TEST(BooleanClosure, CalibrateHybridWarshallThresholdSweepsFineResolutionGridAndPreservesExactness) {
+    struct ScopedThresholdReset {
+        uint32_t original = hbrick::defaultHybridWarshallThreshold();
+        ~ScopedThresholdReset() { hbrick::setDefaultHybridWarshallThreshold(original); }
+    } reset_guard;
+
+    hbrick::HybridThresholdCalibrationOptions cal_opts{};
+    cal_opts.min_dimension = 64U;
+    cal_opts.max_dimension = 576U;
+    cal_opts.dimension_step = 32U;
+    cal_opts.warmup_runs = 1U;
+    cal_opts.measured_runs = 3U;
+    cal_opts.apply_as_process_default = true;
+
+    const hbrick::HybridThresholdCalibrationResult cal =
+        hbrick::calibrateHybridWarshallThreshold(cal_opts);
+
+    // 64..576 in steps of 32 gives 17 candidate dimensions (including 64, 128, 256, 384, 512).
+    ASSERT_EQ(cal.samples.size(), 17U);
+    for (size_t i = 0U; i < cal.samples.size(); ++i) {
+        EXPECT_EQ(cal.samples[i].dimension, 64U + static_cast<uint32_t>(i) * 32U);
+        EXPECT_GT(cal.samples[i].warshall_median_ns, 0U);
+        EXPECT_GT(cal.samples[i].m4rm_median_ns, 0U);
+    }
+
+    EXPECT_GE(cal.recommended_threshold, 63U);
+    EXPECT_LE(cal.recommended_threshold, 576U);
+    EXPECT_EQ(hbrick::defaultHybridWarshallThreshold(), cal.recommended_threshold);
+
+    // Verify exactness under the calibrated hybrid threshold on a non-multiple-of-64 matrix.
+    const uint32_t n = 400U;
+    hbrick::BitMatrix base(n, n);
+    for (uint32_t u = 0U; u < n; ++u) {
+        base.set(u, u);
+        base.set(u, (u + 1U) % n);
+        if ((u % 11U) == 0U) {
+            base.set(u, (u + 53U) % n);
+        }
+    }
+
+    hbrick::BitMatrix oracle = base;
+    hbrick::BooleanClosure::transitiveClosureWarshallInPlace(oracle);
+
+    hbrick::BitMatrix calibrated_hybrid = base;
+    const hbrick::KleeneSquaringOptions hybrid_opts{};
+    EXPECT_EQ(hybrid_opts.hybrid_warshall_threshold, cal.recommended_threshold);
+    hbrick::BooleanClosure::transitiveClosureKleeneSquaringInPlace(
+        calibrated_hybrid,
+        hbrick::BooleanClosure::kleeneSquaringCountForLargestComponent(n),
+        nullptr,
+        hybrid_opts
+    );
+    EXPECT_TRUE(hbrick::bitMatricesEqual(oracle, calibrated_hybrid));
+}
+
+

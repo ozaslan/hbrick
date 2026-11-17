@@ -339,6 +339,12 @@ HBrickQueryOutcome HBrickFusedLiftCacheBaseline::queryDetailed(
             level - 1U,
             true
         );
+        if (!s_slot.chain[level - 1U].any()) {
+            if (index_.hierarchyQuerySound()) {
+                return outcome;
+            }
+            break;
+        }
         ensureLiftedThrough(
             index_,
             fused_lifts_,
@@ -347,12 +353,14 @@ HBrickQueryOutcome HBrickFusedLiftCacheBaseline::queryDetailed(
             level - 1U,
             false
         );
+        if (!t_slot.chain[level - 1U].any()) {
+            if (index_.hierarchyQuerySound()) {
+                return outcome;
+            }
+            break;
+        }
 
         ++outcome.ancestors_checked;
-
-        if (!s_slot.chain[level - 1U].any() || !t_slot.chain[level - 1U].any()) {
-            continue;
-        }
 
         const SuperTileSummary& parent_summary =
             index_.superSummary(level, source_chain[level].index);

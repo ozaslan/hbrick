@@ -131,6 +131,7 @@ void HBrickBatchScratch::resetEndpoints(
         endpoint.confined = false;
         endpoint.chain_length = 0U;
         endpoint.embeddable_limit = 0U;
+        endpoint.active_gamma_words = 0U;
         endpoint.leaf.clear();
         endpoint.gamma.clear();
         endpoint.projected.clear();
@@ -141,6 +142,7 @@ void HBrickBatchScratch::resetEndpoints(
         endpoint.confined = false;
         endpoint.chain_length = 0U;
         endpoint.embeddable_limit = 0U;
+        endpoint.active_gamma_words = 0U;
         endpoint.leaf.clear();
         endpoint.gamma.clear();
         endpoint.projected.clear();
@@ -458,6 +460,7 @@ bool HBrickSkipLiftBaseline::batchQuery(
         for (uint32_t i = 0U; i < num_sources; ++i) {
             scratch.source_has_level_[i] = 0U;
             HBrickBatchScratch::Endpoint& endpoint = scratch.sources_[i];
+            endpoint.active_gamma_words = 0U;
             if (!endpoint.valid || endpoint.confined || endpoint.chain_length <= level
                 || endpoint.embeddable_limit < level) {
                 continue;
@@ -485,6 +488,7 @@ bool HBrickSkipLiftBaseline::batchQuery(
             if (!lifted->any()) {
                 // An empty frontier cannot meet any target at this or any
                 // higher level, so the embedding and projection are skipped.
+                endpoint.confined = true;
                 continue;
             }
             embedChildPorts(
@@ -497,7 +501,11 @@ bool HBrickSkipLiftBaseline::batchQuery(
                 parent.interface_closure,
                 endpoint.projected
             );
-            scratch.source_has_level_[i] = endpoint.projected.any() ? 1U : 0U;
+            endpoint.active_gamma_words = static_cast<uint32_t>(
+                BitVector::wordCount(parent.interface_closure.numCols())
+            );
+            scratch.source_has_level_[i] =
+                endpoint.projected.intersectsWords(endpoint.projected, endpoint.active_gamma_words) ? 1U : 0U;
             if (stats != nullptr) {
                 ++stats->source_projections;
                 stats->max_level_reached = std::max(stats->max_level_reached, level);
@@ -507,6 +515,7 @@ bool HBrickSkipLiftBaseline::batchQuery(
         for (uint32_t j = 0U; j < num_targets; ++j) {
             scratch.target_has_level_[j] = 0U;
             HBrickBatchScratch::Endpoint& endpoint = scratch.targets_[j];
+            endpoint.active_gamma_words = 0U;
             if (!endpoint.valid || endpoint.confined || endpoint.chain_length <= level
                 || endpoint.embeddable_limit < level) {
                 continue;
@@ -532,6 +541,7 @@ bool HBrickSkipLiftBaseline::batchQuery(
                 }
             }
             if (!lifted->any()) {
+                endpoint.confined = true;
                 continue;
             }
             embedChildPorts(
@@ -539,7 +549,11 @@ bool HBrickSkipLiftBaseline::batchQuery(
                 parent.child_port_to_gamma[embedding],
                 endpoint.gamma
             );
-            scratch.target_has_level_[j] = endpoint.gamma.any() ? 1U : 0U;
+            endpoint.active_gamma_words = static_cast<uint32_t>(
+                BitVector::wordCount(parent.gamma.ports.size())
+            );
+            scratch.target_has_level_[j] =
+                endpoint.gamma.intersectsWords(endpoint.gamma, endpoint.active_gamma_words) ? 1U : 0U;
             if (stats != nullptr && scratch.target_has_level_[j] != 0U) {
                 stats->max_level_reached = std::max(stats->max_level_reached, level);
             }
@@ -566,7 +580,10 @@ bool HBrickSkipLiftBaseline::batchQuery(
                 if (stats != nullptr) {
                     ++stats->pair_tests;
                 }
-                if (source_endpoint.projected.intersects(target_endpoint.gamma)) {
+                if (source_endpoint.projected.intersectsWords(
+                        target_endpoint.gamma,
+                        source_endpoint.active_gamma_words
+                    )) {
                     out_reachable[pair] = 1U;
                     scratch.pair_resolved_[pair] = 1U;
                     --scratch.total_unresolved_;

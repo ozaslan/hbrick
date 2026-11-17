@@ -70,10 +70,14 @@ size_t BitVector::popcount() const noexcept {
 }
 
 bool BitVector::intersects(const BitVector& other) const noexcept {
-    const size_t word_limit = std::min(words_.size(), other.words_.size());
+    return intersectsWords(other, words_.size());
+}
+
+bool BitVector::intersectsWords(const BitVector& other, const size_t max_words) const noexcept {
+    const size_t word_limit = std::min({words_.size(), other.words_.size(), max_words});
     const uint64_t* const a = words_.data();
     const uint64_t* const b = other.words_.data();
-    for (size_t word_index = 0; word_index < word_limit; ++word_index) {
+    for (size_t word_index = 0U; word_index < word_limit; ++word_index) {
         if ((a[word_index] & b[word_index]) != 0U) {
             return true;
         }

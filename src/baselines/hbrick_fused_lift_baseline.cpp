@@ -232,47 +232,51 @@ HBrickQueryOutcome HBrickFusedLiftBaseline::queryDetailed(
         scratch.clearChainLevelsThrough(highest_common_level);
     }
 
-    uint32_t source_propagated = 0U;
-    uint32_t target_propagated = 0U;
+    uint32_t propagated = 0U;
 
     for (uint32_t level = 1U; level < shared_levels; ++level) {
         if (source_chain[level] != target_chain[level]) {
             continue;
         }
 
-        // Fused lift propagation on source side
-        while (source_propagated < level - 1U) {
+        while (propagated < level - 1U) {
             fusedLiftOneStep(
                 index_,
                 fused_lifts_,
                 source_chain,
-                source_propagated,
+                propagated,
                 true,
-                scratch.sourceChain()[source_propagated],
-                scratch.sourceChain()[source_propagated + 1U]
+                scratch.sourceChain()[propagated],
+                scratch.sourceChain()[propagated + 1U]
             );
-            ++source_propagated;
-        }
-
-        while (target_propagated < level - 1U) {
+            if (!scratch.sourceChain()[propagated + 1U].any()) {
+                if (index_.hierarchyQuerySound()) {
+                    return outcome;
+                }
+                break;
+            }
             fusedLiftOneStep(
                 index_,
                 fused_lifts_,
                 target_chain,
-                target_propagated,
+                propagated,
                 false,
-                scratch.targetChain()[target_propagated],
-                scratch.targetChain()[target_propagated + 1U]
+                scratch.targetChain()[propagated],
+                scratch.targetChain()[propagated + 1U]
             );
-            ++target_propagated;
+            if (!scratch.targetChain()[propagated + 1U].any()) {
+                if (index_.hierarchyQuerySound()) {
+                    return outcome;
+                }
+                break;
+            }
+            ++propagated;
+        }
+        if (propagated < level - 1U) {
+            break;
         }
 
         ++outcome.ancestors_checked;
-
-        if (!scratch.sourceChain()[level - 1U].any()
-            || !scratch.targetChain()[level - 1U].any()) {
-            continue;
-        }
 
         const SuperTileSummary& parent_summary =
             index_.superSummary(level, source_chain[level].index);

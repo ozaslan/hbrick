@@ -66,7 +66,7 @@ Map M1 is the exception. `maze512-1-0` is a tree: every corridor is a bridge, so
 
 | Paper id | V01 | V02 | V03 | V04 | V05 | V06 |
 |----------|-----|-----|-----|-----|-----|-----|
-| M1 | one SCC (p_bi 1.00) | SCC count about 20 percent of N (0.80) | about 40 percent (0.60) | about 60 percent (0.40) | about 80 percent (0.20) | DAG, no backflow |
+| M1 | 100% (p_bi 1.00) | 0.019% (0.80; 20% SCC) | 0.008% (0.60; 40% SCC) | 0.004% (0.40; 60% SCC) | 0.003% (0.20; 80% SCC) | 0.004% (0.00; DAG) |
 | M2 | 95.6 percent (0.31) | 62.6 percent (0.18) | 27.8 percent (0.16) | 6.8 percent (0.09) | 3.1 percent (0.06) | 1.0 percent |
 | M3 | 97.0 percent (0.85) | 60.4 percent (0.69) | 45.7 percent (0.66) | 32.1 percent (0.63) | 2.5 percent (0.57) | 0.1 percent |
 | M4 | 94.7 percent (0.61) | 68.2 percent (0.39) | 46.9 percent (0.36) | 35.6 percent (0.35) | 8.7 percent (0.32) | 9.2 percent |
@@ -75,18 +75,19 @@ Map M1 is the exception. `maze512-1-0` is a tree: every corridor is a bridge, so
 | M7 | 92.5 percent (0.33) | 60.2 percent (0.13) | 52.1 percent (0.11) | 15.4 percent (0.07) | 2.7 percent (0.04) | 7.8 percent |
 | M8 | 94.6 percent (0.35) | 71.0 percent (0.11) | 37.0 percent (0.06) | 15.3 percent (0.04) | 3.0 percent (0.02) | 7.6 percent |
 
-For M2 through M8, V01–V05 entries are the measured reachability density, and V06 is the measured density of the 45-degree gradient with backflow 0.05. Parentheses are p_bi.
+For M2 through M8, V01–V05 entries are the measured reachability density, and V06 is the measured density of the 45-degree gradient with backflow 0.05. Parentheses give `p_bi` (and SCC percentage or DAG structure on M1).
 
 ## What the manuscript benchmark runs on these files
 
 `tools/run_manuscript_benchmarks.sh` takes every `*.json` in this directory as one instance. The map is loaded from `datasets/movingai/<set>/maps/<map>`, using the `set` and `map` fields. Nothing in the JSON is rewritten.
 
-For each file the single-pair campaign writes rows to `campaigns/manuscript/results.csv`:
+Using `hbrick_manuscript_bench`, `hbrick_batch_pilot`, and `summarize_manuscript_results.py`, the benchmark driver executes every stage under `campaigns/manuscript/` and summarizes the results into `campaigns/manuscript/MANUSCRIPT_REPORT.md` and `campaigns/manuscript/figure_data/`:
 
-- `HBrickSkipLift` at all 24 combinations of tile side 4, 8, 16, 24, 32, 48, 64, 96 and group size 2, 4, 8. The published operating point is the one cell tile 24, group 4.
-- `BrickSearch` at each of those eight tile sides, with the hierarchy group left unused. That is the flat BRICK ablation.
-- On the operating-point cell only, also `CsrBfs`, `SccDagSearch`, `Grail`, `Oreach`, and `TwoHop`.
+- Graph statistics and calibrated densities (`graph_and_calibration.csv`).
+- `HBrickSkipLift` over all 24 combinations of tile side `b` in `{4, 8, 16, 24, 32, 48, 64, 96}` and group size `g` in `{2, 4, 8}`, plus single-level `Flat BRICK` (`BrickSearch`) at those eight tile sides (`param_sweep_results.csv`).
+- Matched three-pass cyclic ablation of `BrickSearch`, `HBrick`, and `HBrickSkipLift` at `(b=24, g=4)` (`threeway_b24_g4_results.csv`).
+- Full baseline comparison at `(b=24, g=4)` covering `CsrBFS`, `CsrDFS`, `SccDagSearch`, `OReach`, `Grail`, `TwoHop` (with a 2.5 GiB cap and 300 s timeout), `BrickSearch`, `HBrick`, and `HBrickSkipLift` (`lifecycle_results.csv`).
+- Multi-sample alternating-order batch queries at `k in {4, 16, 64}` across 10 independent draws and 11 repetitions (`batch_multisample.csv`), plus equal-pair (`65,536` pairs) batch comparisons at `k in {4, 16, 32, 64}` (`batch_equal_pairs.csv`).
+- Reachable (`R=1`) versus unreachable (`R=0`) latency splits (`polarity_split.csv`), the 160-instance gradient-flow `(theta, p_back)` sweep (`v06_sensitivity.csv`), and Warshall/M4RM closure kernel profiling (`closure_kernel_matrix.csv`, `closure_tile_ablation.csv`).
 
-Each of those rows times 8192 queries after 128 warmup queries. The batch stage then appends `campaigns/manuscript/batch.csv` for the same file: batch sizes 4, 16, and 64, two warmup batches and eleven timed repetitions, at tile 24 and group 4. That stage records batched H-BRICK, scalar H-BRICK on the same pairs, O'Reach, one BFS per source, SCC-DAG search, and SCC-DAG closure.
-
-The full description of the clock protocol, the 4 GiB skip rule, and the break-even formula is in the repository [README](../README.md) under Manuscript matrix.
+Each single-pair evaluation times 8,192 balanced queries after 128 warmup queries in 128-query chunks. The full protocol, stage table, and Hetzner Cloud parity guide are documented in the repository [README](../README.md) under `Reproducing the manuscript results`.

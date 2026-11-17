@@ -352,29 +352,26 @@ HBrickQueryOutcome HBrickBaseline::queryHierarchical(
         scratch.clearChainLevelsThrough(highest_common_level);
     }
 
-    uint32_t source_propagated = 0U;
-    uint32_t target_propagated = 0U;
+    uint32_t propagated = 0U;
 
     for (uint32_t level = 1U; level < shared_levels; ++level) {
         if (source_chain[level] != target_chain[level]) {
             continue;
         }
 
-        while (source_propagated < level - 1U) {
-            propagateSourceExteriorStep(index, source_chain, source_propagated, scratch);
-            ++source_propagated;
-        }
-        while (target_propagated < level - 1U) {
-            propagateTargetExteriorStep(index, target_chain, target_propagated, scratch);
-            ++target_propagated;
+        while (propagated < level - 1U) {
+            propagateSourceExteriorStep(index, source_chain, propagated, scratch);
+            if (!scratch.sourceChain()[propagated + 1U].any()) {
+                return outcome;
+            }
+            propagateTargetExteriorStep(index, target_chain, propagated, scratch);
+            if (!scratch.targetChain()[propagated + 1U].any()) {
+                return outcome;
+            }
+            ++propagated;
         }
 
         ++outcome.ancestors_checked;
-
-        if (!scratch.sourceChain()[level - 1U].any()
-            || !scratch.targetChain()[level - 1U].any()) {
-            continue;
-        }
 
         const SuperTileSummary& parent_summary =
             index.superSummary(level, source_chain[level].index);

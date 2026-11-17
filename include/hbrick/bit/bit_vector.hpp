@@ -99,8 +99,24 @@ public:
      * @ingroup hbrick_bit
      *
      * Vectors may differ in width; bits past the shorter width are treated as zero.
+     *
+     * @param other Vector compared against this one.
+     * @return @c true when any overlapping bit is set in both vectors.
      */
     [[nodiscard]] bool intersects(const BitVector& other) const noexcept;
+
+    /**
+     * @brief Returns whether this vector and @p other share any set bit within the first @p max_words words.
+     * @ingroup hbrick_bit
+     *
+     * Hot-path prefix check used when scratch vectors are pre-sized to a global maximum width
+     * while only a prefix of storage words is active at the current hierarchy level.
+     *
+     * @param other Vector compared against this one.
+     * @param max_words Maximum number of 64-bit storage words to inspect.
+     * @return @c true when any bit in the first @p max_words overlapping words is set in both vectors.
+     */
+    [[nodiscard]] bool intersectsWords(const BitVector& other, size_t max_words) const noexcept;
 
     /**
      * @brief Bitwise ORs @p other into this vector in place.

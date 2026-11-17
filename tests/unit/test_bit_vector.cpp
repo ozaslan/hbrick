@@ -109,3 +109,20 @@ TEST(BitVector, RowOrFromDoesNotPolluteTrailingBits) {
     EXPECT_FALSE(target.intersects(other));
 }
 
+TEST(BitVector, IntersectsWordsStopsAtActiveWordPrefix) {
+    hbrick::BitVector lhs(256U);
+    hbrick::BitVector rhs(256U);
+
+    lhs.set(195U);
+    rhs.set(195U);
+
+    EXPECT_FALSE(lhs.intersectsWords(rhs, 0U));
+    EXPECT_FALSE(lhs.intersectsWords(rhs, 3U));
+    EXPECT_TRUE(lhs.intersectsWords(rhs, 4U));
+    EXPECT_TRUE(lhs.intersectsWords(rhs, 16U));
+
+    lhs.set(60U);
+    rhs.set(60U);
+    EXPECT_TRUE(lhs.intersectsWords(rhs, 1U));
+}
+
