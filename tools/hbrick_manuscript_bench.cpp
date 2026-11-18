@@ -35,6 +35,9 @@
 #include <utility>
 #include <vector>
 #include <unistd.h>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
 
 #include "hbrick/baselines/brick_search_baseline.hpp"
 #include "hbrick/baselines/csr_bfs_baseline.hpp"
@@ -168,6 +171,33 @@ struct DistStats {
         s.sd = std::sqrt(sq / static_cast<double>(vals.size() - 1U));
     }
     return s;
+}
+
+void raiseStackLimitIfNeeded() noexcept {
+#if defined(__unix__) || defined(__APPLE__)
+    struct rlimit rl {};
+    if (getrlimit(RLIMIT_STACK, &rl) != 0) {
+        return;
+    }
+    constexpr rlim_t kMinStackBytes = static_cast<rlim_t>(512ULL * 1024ULL * 1024ULL);
+    if (rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur >= kMinStackBytes) {
+        return;
+    }
+    if (rl.rlim_max == RLIM_INFINITY) {
+        struct rlimit unlim = rl;
+        unlim.rlim_cur = RLIM_INFINITY;
+        if (setrlimit(RLIMIT_STACK, &unlim) == 0) {
+            return;
+        }
+    }
+    const rlim_t target = (rl.rlim_max == RLIM_INFINITY)
+        ? kMinStackBytes
+        : std::min(kMinStackBytes, rl.rlim_max);
+    if (target > rl.rlim_cur) {
+        rl.rlim_cur = target;
+        (void)setrlimit(RLIMIT_STACK, &rl);
+    }
+#endif
 }
 
 [[nodiscard]] uint64_t totalSystemRamBytes() noexcept {
@@ -2827,6 +2857,7 @@ bool parseArgs(const int argc, char** argv, BenchArgs& args) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    raiseStackLimitIfNeeded();
     BenchArgs args;
     if (!parseArgs(argc, argv, args)) {
         return 1;

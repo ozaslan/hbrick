@@ -108,6 +108,9 @@ fi
     free -h 2>/dev/null || true
 } > "$HOST_FILE"
 
+# Vendored third-party baselines (GRAIL recursive Tarjan/DFS) traverse up to ~800k-vertex SCCs.
+ulimit -s unlimited 2>/dev/null || ulimit -s 524288 2>/dev/null || true
+
 PIN_PREFIX=()
 if [[ "${HBRICK_PIN_CPU:-1}" != "0" ]] && command -v taskset >/dev/null 2>&1; then
     PIN_PREFIX=(taskset -c "${HBRICK_CPU_CORE:-0}")
